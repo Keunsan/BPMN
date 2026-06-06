@@ -1,5 +1,5 @@
 # PAMS 개발 계획서 (PLAN.md)
-## Cursor AI + Vibe Coding 방식 개발 가이드
+## Cursor AI + Vibe Coding 방식 개발 가이드 문서
 
 ---
 
