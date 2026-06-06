@@ -1,0 +1,32 @@
+{
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "edit": "수정",
+    "search": "검색",
+    "loading": "로딩 중...",
+    "noData": "데이터가 없습니다."
+  },
+  "app": {
+    "title": "PAMS",
+    "description": "프로세스 아키텍처 관리 시스템",
+    "welcome": "PAMS에 오신 것을 환영합니다"
+  },
+  "menu": {
+    "dashboard": "대시보드",
+    "process": "프로세스 관리",
+    "bpmn": "BPMN 모델링",
+    "metadata": "메타데이터 관리",
+    "data": "데이터 연결",
+    "analysis": "분석",
+    "login": "로그인"
+  },
+  "status": {
+    "DRAFT": "초안",
+    "IN_REVIEW": "검토 중",
+    "APPROVED": "승인됨",
+    "PUBLISHED": "배포됨",
+    "OBSOLETE": "폐기됨"
+  }
+}

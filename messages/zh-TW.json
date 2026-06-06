@@ -1,0 +1,32 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "edit": "編輯",
+    "search": "搜尋",
+    "loading": "載入中...",
+    "noData": "沒有資料。"
+  },
+  "app": {
+    "title": "PAMS",
+    "description": "流程架構管理系統",
+    "welcome": "歡迎使用 PAMS"
+  },
+  "menu": {
+    "dashboard": "儀表板",
+    "process": "流程管理",
+    "bpmn": "BPMN建模",
+    "metadata": "元數據管理",
+    "data": "數據連接",
+    "analysis": "分析",
+    "login": "登入"
+  },
+  "status": {
+    "DRAFT": "草稿",
+    "IN_REVIEW": "審核中",
+    "APPROVED": "已批准",
+    "PUBLISHED": "已發布",
+    "OBSOLETE": "已廢棄"
+  }
+}

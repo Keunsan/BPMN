@@ -1,0 +1,32 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "loading": "Loading...",
+    "noData": "No data available."
+  },
+  "app": {
+    "title": "PAMS",
+    "description": "Process Architecture Management System",
+    "welcome": "Welcome to PAMS"
+  },
+  "menu": {
+    "dashboard": "Dashboard",
+    "process": "Process Management",
+    "bpmn": "BPMN Modeling",
+    "metadata": "Metadata Management",
+    "data": "Data Connection",
+    "analysis": "Analysis",
+    "login": "Login"
+  },
+  "status": {
+    "DRAFT": "Draft",
+    "IN_REVIEW": "In Review",
+    "APPROVED": "Approved",
+    "PUBLISHED": "Published",
+    "OBSOLETE": "Obsolete"
+  }
+}
