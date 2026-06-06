@@ -893,9 +893,9 @@ document, task_document_mapping 테이블 활용
 
 #### Week 9, Day 5 (추가): 중간 리팩토링 ⭐ 신규
 
-**Cursor Prompt: Phase 2 코드 정리**
+**Cursor Prompt: Phase 4 코드 정리**
 ```
-@app @components @lib Phase 2에서 생성된 코드를 점검하고 리팩토링해줘.
+@app @components @lib Phase 4에서 생성된 코드를 점검하고 리팩토링해줘.
 
 점검 항목:
 1. 상태 관리 패턴 통일

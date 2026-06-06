@@ -12,7 +12,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -60,6 +60,17 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
 
   const selectedLink = selectedElementId ? links[selectedElementId] : null;
 
+  const openLinkModal = useCallback(() => {
+    apiRef.current?.dismissInteraction();
+    setLinkModalOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (linkModalOpen) {
+      apiRef.current?.dismissInteraction();
+    }
+  }, [linkModalOpen]);
+
   const handleSave = useCallback(
     async (createNewVersion = false) => {
       const result = await apiRef.current?.save();
@@ -92,6 +103,14 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
       }
       return next;
     });
+
+    if (link) {
+      apiRef.current?.updateElementName(selectedElementId, link.name);
+      setSelectedElementName(link.name);
+    } else {
+      apiRef.current?.updateElementName(selectedElementId, "");
+      setSelectedElementName(null);
+    }
   };
 
   const navigateToProcess = () => {
@@ -154,7 +173,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           variant="outline"
           size="sm"
           disabled={!selectedElementId}
-          onClick={() => setLinkModalOpen(true)}
+          onClick={openLinkModal}
         >
           <Link2 className="mr-1 size-4" />
           {t("linkProcess")}
@@ -181,8 +200,10 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
 
       <div className="min-h-0 flex-1">
         <BpmnEditorInner
+          modelId={model.modelId}
           xml={model.bpmnXml}
           links={links}
+          interactionLocked={linkModalOpen}
           onReady={(api) => {
             apiRef.current = api;
           }}
@@ -210,13 +231,15 @@ const buildLinksFromModel = (
   const map: Record<string, ProcessLinkInfo> = {};
 
   for (const el of model.elements ?? []) {
-    if (el.linkedNodeId && el.linkedProcessCode && el.linkedProcessName) {
-      map[el.elementBpmnId] = {
-        nodeId: el.linkedNodeId,
-        code: el.linkedProcessCode,
-        name: el.linkedProcessName,
-      };
+    if (!el.linkedNodeId) {
+      continue;
     }
+
+    map[el.elementBpmnId] = {
+      nodeId: el.linkedNodeId,
+      code: el.linkedProcessCode ?? String(el.linkedNodeId),
+      name: el.linkedProcessName ?? el.elementName ?? "",
+    };
   }
 
   return map;

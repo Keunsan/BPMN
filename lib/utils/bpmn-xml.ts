@@ -6,6 +6,7 @@ const BPMN_TYPE_MAP: Record<string, BpmnElementType> = {
   "bpmn:EndEvent": "END_EVENT",
   "bpmn:IntermediateThrowEvent": "INTERMEDIATE_EVENT",
   "bpmn:IntermediateCatchEvent": "INTERMEDIATE_EVENT",
+  "bpmn:Task": "USER_TASK",
   "bpmn:UserTask": "USER_TASK",
   "bpmn:ServiceTask": "SERVICE_TASK",
   "bpmn:ManualTask": "MANUAL_TASK",
@@ -20,8 +21,35 @@ const BPMN_TYPE_MAP: Record<string, BpmnElementType> = {
   "bpmn:SubProcess": "SUBPROCESS",
 };
 
+/** XML·moddle 표기 차이(task vs Task)를 흡수한다 */
+const BPMN_TYPE_BY_LOCAL: Record<string, BpmnElementType> = {
+  startevent: "START_EVENT",
+  endevent: "END_EVENT",
+  intermediatethrowevent: "INTERMEDIATE_EVENT",
+  intermediatecatchevent: "INTERMEDIATE_EVENT",
+  task: "USER_TASK",
+  usertask: "USER_TASK",
+  servicetask: "SERVICE_TASK",
+  manualtask: "MANUAL_TASK",
+  scripttask: "SCRIPT_TASK",
+  exclusivegateway: "EXCLUSIVE_GATEWAY",
+  parallelgateway: "PARALLEL_GATEWAY",
+  inclusivegateway: "INCLUSIVE_GATEWAY",
+  participant: "POOL",
+  lane: "LANE",
+  sequenceflow: "SEQUENCE_FLOW",
+  messageflow: "MESSAGE_FLOW",
+  subprocess: "SUBPROCESS",
+};
+
 export const mapBpmnJsType = (type: string): BpmnElementType | null => {
-  return BPMN_TYPE_MAP[type] ?? null;
+  const direct = BPMN_TYPE_MAP[type];
+  if (direct) {
+    return direct;
+  }
+
+  const local = type.replace(/^bpmn:/i, "").toLowerCase();
+  return BPMN_TYPE_BY_LOCAL[local] ?? null;
 };
 
 export type ParsedBpmnElement = {

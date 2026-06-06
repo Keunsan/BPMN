@@ -1,7 +1,5 @@
 import { requireAuth } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/route-handler";
-import {
-  compareBpmnModels,
 import { createBpmnModel, listBpmnModels } from "@/lib/services/bpmn.service";
 
 import type { BpmnFilters, BpmnModelStatus, CreateBpmnDto } from "@/types/bpmn";
@@ -65,3 +63,5 @@ export const POST = withApiHandler(async ({ request }) => {
   const data = await createBpmnModel(body, auth.userId);
 
   return { data, status: 201 };
+
+});

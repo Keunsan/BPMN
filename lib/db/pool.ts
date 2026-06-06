@@ -50,7 +50,12 @@ function bindParams(request: sql.Request, params?: QueryParams): sql.Request {
     if (value === undefined) {
       continue;
     }
-    request.input(key, value);
+    // NVARCHAR 기본 길이(4000) 초과 시 BPMN XML 등이 잘려 좌표 정보가 유실됨
+    if (typeof value === "string" && value.length > 2000) {
+      request.input(key, sql.NVarChar(sql.MAX), value);
+    } else {
+      request.input(key, value);
+    }
   }
 
   return request;

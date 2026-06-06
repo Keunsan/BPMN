@@ -17,7 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -52,6 +52,8 @@ type ProcessTreeProps = {
   selectedId?: number;
   onSelect?: (node: ProcessNodeTree) => void;
   className?: string;
+  /** picker: 모달 등에서 선택만 하고 페이지 이동·편집 UI를 숨김 */
+  variant?: "default" | "picker";
 };
 
 type TreeNodeItemProps = {
@@ -63,6 +65,7 @@ type TreeNodeItemProps = {
   onSelect?: (node: ProcessNodeTree) => void;
   onDelete: (node: ProcessNodeTree) => void;
   filter: string;
+  pickerMode?: boolean;
 };
 
 /** 단일 트리 노드 렌더링 */
@@ -75,6 +78,7 @@ const TreeNodeItem = ({
   onSelect,
   onDelete,
   filter,
+  pickerMode = false,
 }: TreeNodeItemProps) => {
   const t = useTranslations("process");
   const router = useRouter();
@@ -99,7 +103,9 @@ const TreeNodeItem = ({
         )}
         style={{ paddingLeft: `${level * 12 + 4}px` }}
       >
-        <GripVertical className="size-3 shrink-0 cursor-grab text-muted-foreground/50" />
+        {!pickerMode && (
+          <GripVertical className="size-3 shrink-0 cursor-grab text-muted-foreground/50" />
+        )}
 
         {hasChildren ? (
           <button
@@ -130,35 +136,43 @@ const TreeNodeItem = ({
           <span className="truncate">{node.name}</span>
         </button>
 
-        <StatusBadge status={node.status} className="hidden shrink-0 text-[10px] sm:inline-flex" />
+        <StatusBadge
+          status={node.status}
+          className={cn(
+            "shrink-0 text-[10px]",
+            pickerMode ? "inline-flex" : "hidden sm:inline-flex",
+          )}
+        />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex size-6 items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted"
-            aria-label="Actions"
-          >
-            <MoreHorizontal className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push(`/process/${node.nodeId}`)}>
-              {t("viewDetail")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                router.push(`/process/new?parentId=${node.nodeId}`)
-              }
+        {!pickerMode && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex size-6 items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted"
+              aria-label="Actions"
             >
-              {t("addChild")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => onDelete(node)}
-            >
-              <Trash2 className="size-3.5" />
-              {t("delete")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <MoreHorizontal className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push(`/process/${node.nodeId}`)}>
+                {t("viewDetail")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  router.push(`/process/new?parentId=${node.nodeId}`)
+                }
+              >
+                {t("addChild")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => onDelete(node)}
+              >
+                <Trash2 className="size-3.5" />
+                {t("delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {hasChildren && isExpanded && (
@@ -174,6 +188,7 @@ const TreeNodeItem = ({
               onSelect={onSelect}
               onDelete={onDelete}
               filter={filter}
+              pickerMode={pickerMode}
             />
           ))}
         </ul>
@@ -187,15 +202,26 @@ export const ProcessTree = ({
   selectedId,
   onSelect,
   className,
+  variant = "default",
 }: ProcessTreeProps) => {
+  const pickerMode = variant === "picker";
   const t = useTranslations("process");
   const router = useRouter();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<ProcessNodeTree | null>(null);
+  const hasInitializedExpansion = useRef(false);
 
   const { data: tree, isLoading, isError, refetch } = useProcessTree(debouncedSearch);
+
+  /** 최초 로드 시 L1 노드를 펼침 — 토글 시 상위가 접히지 않도록 state에 반영 */
+  useEffect(() => {
+    if (tree?.length && !hasInitializedExpansion.current) {
+      setExpandedIds(new Set(tree.map((n) => n.nodeId)));
+      hasInitializedExpansion.current = true;
+    }
+  }, [tree]);
   const deleteMutation = useDeleteProcess();
   const moveMutation = useMoveProcess();
 
@@ -215,9 +241,11 @@ export const ProcessTree = ({
   const handleSelect = useCallback(
     (node: ProcessNodeTree) => {
       onSelect?.(node);
-      router.push(`/process/${node.nodeId}`);
+      if (!pickerMode) {
+        router.push(`/process/${node.nodeId}`);
+      }
     },
-    [onSelect, router],
+    [onSelect, pickerMode, router],
   );
 
   const handleDragEnd = useCallback(
@@ -232,12 +260,24 @@ export const ProcessTree = ({
     [moveMutation],
   );
 
-  const defaultExpanded = useMemo(() => {
-    if (tree?.length && expandedIds.size === 0) {
-      return new Set(tree.map((n) => n.nodeId));
-    }
-    return expandedIds;
-  }, [tree, expandedIds]);
+  const renderTreeList = () => (
+    <ul className="space-y-0.5 overflow-y-auto">
+      {tree?.map((node) => (
+        <TreeNodeItem
+          key={node.nodeId}
+          node={node}
+          level={0}
+          selectedId={selectedId}
+          expandedIds={expandedIds}
+          onToggle={onToggle}
+          onSelect={handleSelect}
+          onDelete={setDeleteTarget}
+          filter={debouncedSearch}
+          pickerMode={pickerMode}
+        />
+      ))}
+    </ul>
+  );
 
   if (isLoading) return <LoadingSpinner label={t("loading")} />;
   if (isError) {
@@ -262,10 +302,12 @@ export const ProcessTree = ({
           placeholder={t("searchPlaceholder")}
           className="flex-1"
         />
-        <Button size="sm" onClick={() => router.push("/process/new")}>
-          <Plus className="size-4" />
-          {t("new")}
-        </Button>
+        {!pickerMode && (
+          <Button size="sm" onClick={() => router.push("/process/new")}>
+            <Plus className="size-4" />
+            {t("new")}
+          </Button>
+        )}
       </div>
 
       {!tree?.length ? (
@@ -277,23 +319,11 @@ export const ProcessTree = ({
             </Button>
           }
         />
+      ) : pickerMode ? (
+        renderTreeList()
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <ul className="space-y-0.5 overflow-y-auto">
-            {tree.map((node) => (
-              <TreeNodeItem
-                key={node.nodeId}
-                node={node}
-                level={0}
-                selectedId={selectedId}
-                expandedIds={defaultExpanded}
-                onToggle={onToggle}
-                onSelect={handleSelect}
-                onDelete={setDeleteTarget}
-                filter={debouncedSearch}
-              />
-            ))}
-          </ul>
+          {renderTreeList()}
         </DndContext>
       )}
 

@@ -79,6 +79,7 @@ export const ProcessLinkModal = ({
 
         <div className="max-h-80 overflow-y-auto rounded-md border p-2">
           <ProcessTree
+            variant="picker"
             selectedId={selected?.nodeId ?? currentLink?.nodeId}
             onSelect={handleSelect}
           />

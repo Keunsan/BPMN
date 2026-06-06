@@ -128,7 +128,7 @@ const mergeElements = (
     (elements ?? []).map((el) => [el.elementBpmnId, el]),
   );
 
-  return parsed.map((el) => {
+  const merged = parsed.map((el) => {
     const linked = linkMap.get(el.elementBpmnId);
     return {
       elementBpmnId: el.elementBpmnId,
@@ -138,6 +138,21 @@ const mergeElements = (
       properties: linked?.properties ?? null,
     };
   });
+
+  const mergedIds = new Set(merged.map((el) => el.elementBpmnId));
+  for (const el of elements ?? []) {
+    if (!mergedIds.has(el.elementBpmnId)) {
+      merged.push({
+        elementBpmnId: el.elementBpmnId,
+        elementType: el.elementType,
+        elementName: el.elementName ?? null,
+        linkedNodeId: el.linkedNodeId ?? null,
+        properties: el.properties ?? null,
+      });
+    }
+  }
+
+  return merged;
 };
 
 /** BPMN 모델 수정 */

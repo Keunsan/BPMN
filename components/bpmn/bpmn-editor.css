@@ -62,3 +62,11 @@
   height: 100%;
   object-fit: contain;
 }
+
+/* 모달 등 오버레이 열림 시 컨텍스트 패드·팝업이 시야를 가리지 않도록 숨김 */
+.pams-bpmn-root[data-interaction-locked="true"] .djs-context-pad,
+.pams-bpmn-root[data-interaction-locked="true"] .djs-popup,
+.pams-bpmn-root[data-interaction-locked="true"] .djs-popup-backdrop {
+  display: none !important;
+  pointer-events: none !important;
+}

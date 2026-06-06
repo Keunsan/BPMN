@@ -14,6 +14,18 @@ import "@bpmn-io/properties-panel/dist/assets/properties-panel.css";
 import "diagram-js-minimap/assets/diagram-js-minimap.css";
 import "./bpmn-editor.css";
 
+type CanvasViewbox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type DiagramCanvas = {
+  zoom: (mode: string) => void;
+  viewbox: (box?: CanvasViewbox) => CanvasViewbox;
+};
+
 export type BpmnEditorSaveResult = {
   xml: string;
   svg: string;
@@ -30,19 +42,25 @@ export type BpmnEditorHandle = {
   getSelectedElementId: () => string | null;
   getSelectedElementName: () => string | null;
   toggleMinimap: () => void;
+  dismissInteraction: () => void;
+  updateElementName: (elementId: string, name: string) => void;
 };
 
 type BpmnEditorInnerProps = {
+  modelId: number;
   xml: string | null;
   links: Record<string, ProcessLinkInfo>;
+  interactionLocked?: boolean;
   onSelectionChange?: (elementId: string | null, elementName?: string | null) => void;
   onReady?: (api: BpmnEditorHandle) => void;
 };
 
 /** bpmn-js 모델러 본체 */
 export const BpmnEditorInner = ({
+  modelId,
   xml,
   links,
+  interactionLocked = false,
   onSelectionChange,
   onReady,
 }: BpmnEditorInnerProps) => {
@@ -94,10 +112,7 @@ export const BpmnEditorInner = ({
       const initialXml = xml?.trim() ? xml : EMPTY_BPMN_XML;
       try {
         await modeler.importXML(initialXml);
-        const canvas = modeler.get("canvas") as {
-          zoom: (mode: string) => void;
-        };
-        canvas.zoom("fit-viewport");
+        restoreCanvasView(modeler, modelId, initialXml);
         refreshLinkOverlays(modeler, linksRef.current);
       } catch (err) {
         console.error("[BpmnEditor] import failed:", err);
@@ -125,18 +140,21 @@ export const BpmnEditorInner = ({
         onSelectionChange?.(selected.id, selected.businessObject?.name ?? null);
       });
 
-      onReady?.(createEditorApi(modeler, linksRef));
+      onReady?.(createEditorApi(modeler, linksRef, modelId));
     };
 
     void init();
 
     return () => {
       destroyed = true;
+      if (modelerRef.current) {
+        persistCanvasView(modelId, modelerRef.current);
+      }
       modelerRef.current?.destroy();
       modelerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 초기 XML만 로드
-  }, [xml]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- modelId 변경 시에만 재초기화 (저장 후 xml 갱신은 무시)
+  }, [modelId]);
 
   useEffect(() => {
     if (modelerRef.current) {
@@ -144,21 +162,137 @@ export const BpmnEditorInner = ({
     }
   }, [links]);
 
+  useEffect(() => {
+    if (interactionLocked && modelerRef.current) {
+      dismissDiagramInteraction(modelerRef.current);
+    }
+  }, [interactionLocked]);
+
   return (
-    <div className="pams-bpmn-root">
+    <div
+      className="pams-bpmn-root"
+      data-interaction-locked={interactionLocked ? "true" : undefined}
+    >
       <div ref={canvasRef} className="pams-bpmn-canvas" />
       <div ref={propertiesRef} className="pams-bpmn-properties" />
     </div>
   );
 };
 
+const viewboxStorageKey = (modelId: number): string =>
+  `pams-bpmn-viewbox:${modelId}`;
+
+const hasSavedDiagramLayout = (xml: string): boolean =>
+  xml.includes("bpmndi:BPMNShape") && xml.includes("dc:Bounds");
+
+/** 저장된 뷰포트 또는 요소 bounds 기준으로 화면 위치를 복원한다 */
+const restoreCanvasView = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  modelId: number,
+  xml: string,
+): void => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const stored = sessionStorage.getItem(viewboxStorageKey(modelId));
+
+  if (stored) {
+    try {
+      canvas.viewbox(JSON.parse(stored) as CanvasViewbox);
+      return;
+    } catch {
+      sessionStorage.removeItem(viewboxStorageKey(modelId));
+    }
+  }
+
+  if (hasSavedDiagramLayout(xml)) {
+    applyElementBoundsViewbox(modeler);
+    return;
+  }
+
+  canvas.zoom("fit-viewport");
+};
+
+/** 다이어그램 요소 bounds로 뷰포트를 맞춘다 (fit-viewport 대신 좌표 유지) */
+const applyElementBoundsViewbox = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  const elementRegistry = modeler.get("elementRegistry") as {
+    forEach: (
+      callback: (element: {
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+      }) => void,
+    ) => void;
+  };
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  elementRegistry.forEach((element) => {
+    if (
+      element.x === undefined ||
+      element.y === undefined ||
+      element.width === undefined ||
+      element.height === undefined
+    ) {
+      return;
+    }
+
+    minX = Math.min(minX, element.x);
+    minY = Math.min(minY, element.y);
+    maxX = Math.max(maxX, element.x + element.width);
+    maxY = Math.max(maxY, element.y + element.height);
+  });
+
+  if (!Number.isFinite(minX)) {
+    canvas.zoom("fit-viewport");
+    return;
+  }
+
+  const padding = 80;
+  canvas.viewbox({
+    x: minX - padding,
+    y: minY - padding,
+    width: maxX - minX + padding * 2,
+    height: maxY - minY + padding * 2,
+  });
+};
+
+const persistCanvasView = (
+  modelId: number,
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  sessionStorage.setItem(
+    viewboxStorageKey(modelId),
+    JSON.stringify(canvas.viewbox()),
+  );
+};
+
 const createEditorApi = (
   modeler: import("bpmn-js/lib/Modeler").default,
   linksRef: RefObject<Record<string, ProcessLinkInfo>>,
+  modelId: number,
 ): BpmnEditorHandle => ({
   save: async () => {
     const { xml: savedXml } = await modeler.saveXML({ format: true });
     const { svg } = await modeler.saveSVG();
+    persistCanvasView(modelId, modeler);
+
+    if (
+      process.env.NODE_ENV === "development" &&
+      savedXml &&
+      !hasSavedDiagramLayout(savedXml)
+    ) {
+      console.warn(
+        "[BpmnEditor] 저장 XML에 좌표 정보(bpmndi)가 없습니다. Task 위치가 초기화될 수 있습니다.",
+      );
+    }
+
     return {
       xml: savedXml ?? "",
       svg: svg ?? "",
@@ -178,7 +312,7 @@ const createEditorApi = (
     (modeler.get("zoomScroll") as { stepZoom: (d: number) => void }).stepZoom(-1);
   },
   fitViewport: () => {
-    (modeler.get("canvas") as { zoom: (m: string) => void }).zoom("fit-viewport");
+    (modeler.get("canvas") as DiagramCanvas).zoom("fit-viewport");
   },
   getSelectedElementId: () => {
     const selected = (
@@ -200,7 +334,49 @@ const createEditorApi = (
   toggleMinimap: () => {
     (modeler.get("minimap") as { toggle: () => void }).toggle();
   },
+  dismissInteraction: () => {
+    dismissDiagramInteraction(modeler);
+  },
+  updateElementName: (elementId, name) => {
+    updateElementName(modeler, elementId, name);
+  },
 });
+
+/** BPMN 요소 이름을 갱신해 다이어그램·속성 패널에 반영한다 */
+const updateElementName = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  elementId: string,
+  name: string,
+): void => {
+  const elementRegistry = modeler.get("elementRegistry") as {
+    get: (id: string) => { id: string } | undefined;
+  };
+  const modeling = modeler.get("modeling") as {
+    updateProperties: (element: object, props: { name: string }) => void;
+  };
+
+  const element = elementRegistry.get(elementId);
+  if (!element) {
+    return;
+  }
+
+  modeling.updateProperties(element, { name });
+};
+
+/** 컨텍스트 패드·팝업 메뉴 등 다이어그램 부가 UI를 닫는다 (요소 선택은 유지) */
+const dismissDiagramInteraction = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  const closableServices = ["contextPad", "popupMenu"] as const;
+
+  for (const service of closableServices) {
+    try {
+      (modeler.get(service) as { close?: () => void }).close?.();
+    } catch {
+      // 서비스 미존재
+    }
+  }
+};
 
 const isLinkableType = (type: string): boolean =>
   type.includes("Task") || type.includes("SubProcess");
@@ -266,9 +442,10 @@ const extractElements = (
       return;
     }
 
-    const link = links[element.id];
+    const elementBpmnId = element.businessObject?.id ?? element.id;
+    const link = links[element.id] ?? links[elementBpmnId];
     results.push({
-      elementBpmnId: element.businessObject?.id ?? element.id,
+      elementBpmnId,
       elementType: mapped,
       elementName: element.businessObject?.name ?? null,
       linkedNodeId: link?.nodeId ?? null,

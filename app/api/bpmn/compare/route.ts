@@ -19,3 +19,13 @@ export const POST = withApiHandler(async ({ request }) => {
   if (!body.leftModelId || !body.rightModelId) {
 
     throw new ApiError("E001", "leftModelId and rightModelId are required", 400);
+
+  }
+
+
+
+  const data = await compareBpmnModels(body);
+
+  return { data };
+
+});

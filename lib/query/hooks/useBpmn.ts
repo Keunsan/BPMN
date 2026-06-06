@@ -38,6 +38,7 @@ export const useBpmnDetail = (modelId: number) => {
     queryKey: bpmnKeys.detail(modelId),
     queryFn: () => apiGet<BpmnModelDto>(`/api/bpmn/${modelId}`),
     enabled: modelId > 0,
+    refetchOnMount: "always",
   });
 };
 

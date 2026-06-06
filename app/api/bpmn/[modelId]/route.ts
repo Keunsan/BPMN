@@ -2,16 +2,9 @@ import { requireAuth } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/route-handler";
 import {
   deleteBpmnModel,
-  duplicateBpmnModel,
   getBpmnModelDetail,
   getBpmnModelHistory,
   updateBpmnModel,
-  getBpmnModelDetail,
-
-  getBpmnModelHistory,
-
-  updateBpmnModel,
-
 } from "@/lib/services/bpmn.service";
 
 import type { UpdateBpmnDto } from "@/types/bpmn";
@@ -77,3 +70,5 @@ export const DELETE = withApiHandler(async ({ params }) => {
   await deleteBpmnModel(modelId);
 
   return { data: { deleted: true } };
+
+});
