@@ -1,16 +1,13 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { BpmnEditorPage } from "@/components/bpmn/BpmnEditorPage";
 
-type BpmnEditorPageProps = {
+type BpmnEditorRouteProps = {
   params: Promise<{ modelId: string }>;
 };
 
-export default async function BpmnEditorPage({ params }: BpmnEditorPageProps) {
+/** BPMN 에디터 라우트 */
+const BpmnEditorRoute = async ({ params }: BpmnEditorRouteProps) => {
   const { modelId } = await params;
+  return <BpmnEditorPage modelId={Number(modelId)} />;
+};
 
-  return (
-    <div className="p-6">
-      <PlaceholderPage titleKey="menu.bpmn" />
-      <p className="mt-2 text-sm text-muted-foreground">Model: {modelId}</p>
-    </div>
-  );
-}
+export default BpmnEditorRoute;

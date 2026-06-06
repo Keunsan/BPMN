@@ -1,5 +1,8 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { BpmnModelList } from "@/components/bpmn/BpmnModelList";
 
-export default function BpmnListPage() {
-  return <PlaceholderPage titleKey="menu.bpmn" />;
-}
+/** BPMN 모델 목록 */
+const BpmnListPage = () => {
+  return <BpmnModelList />;
+};
+
+export default BpmnListPage;

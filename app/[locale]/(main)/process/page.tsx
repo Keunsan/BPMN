@@ -1,5 +1,12 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { ProcessTree } from "@/components/process/ProcessTree";
 
-export default function ProcessListPage() {
-  return <PlaceholderPage titleKey="menu.process" />;
-}
+/** 전사 프로세스 맵 */
+const ProcessListPage = () => {
+  return (
+    <div className="p-4">
+      <ProcessTree />
+    </div>
+  );
+};
+
+export default ProcessListPage;

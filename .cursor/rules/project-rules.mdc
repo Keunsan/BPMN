@@ -1,0 +1,149 @@
+---
+description: PAMS 프로젝트 개발 규칙 (Next.js 16, TypeScript, UX/오류 처리, 아키텍처)
+alwaysApply: true
+---
+
+# PAMS 프로젝트 개발 규칙
+
+> 상세 요구사항: `docs/PRD.md` · 개발 계획: `docs/PLAN.md` · Next.js 16 변경사항: `node_modules/next/dist/docs/` 및 `AGENTS.md` 참조
+
+## 1. 프로젝트 특성
+
+- **PAMS**(Process Architecture Management System): 전사 프로세스(L1~L4), BPMN, 운영 메타데이터를 통합하는 플랫폼
+- **Next.js 16 App Router** 기반 웹 애플리케이션. 라우팅은 `app/[locale]/` 다국어 구조 사용
+- **사용자 경험 최우선**
+  - 로딩·빈 상태·오류 상태 UI를 반드시 제공한다 (`LoadingSpinner`, `EmptyState`, `ErrorToast` 등 공통 컴포넌트 활용)
+  - 상호작용 지연 최소화: TanStack Query 캐싱, 낙관적 업데이트, Suspense/스켈레ton 적극 활용
+  - 필터·정렬·페이지네이션은 URL 상태(`nuqs`) 우선
+- **오류 처리 철저**
+  - 서버(API Route, Service, DB)와 클라이언트 모두 예외를 포착한다
+  - 사용자 메시지는 **한글(ko) 기본**, `Accept-Language`/locale에 따라 `en`, `zh-TW` 반환 (PRD 섹션 9·10)
+  - API는 `ApiError` + PRD 9.2 에러 코드(E001~E604) 사용, 응답 형식은 `ApiResponse<T>` (PRD 9.1)
+  - 개발 환경(`NODE_ENV=development`)에서는 `traceId`, stack 등 상세 로그를 `console`에 출력한다
+
+## 2. 기술 스택
+
+| 영역 | 기술 | 비고 |
+|------|------|------|
+| 프레임워크 | Next.js 16 (App Router) | Server/Client Component 구분 필수 |
+| 언어 | TypeScript (strict) | `any` 사용 금지, `@/` 절대 경로 |
+| 스타일 | Tailwind CSS | Shadcn/ui 변수·유틸리티 패턴 준수 |
+| UI | Shadcn/ui | `components/ui/` — 직접 수정 최소화 |
+| i18n | next-intl | `messages/{ko,en,zh-TW}.json`, `lib/i18n/` |
+| 서버 상태 | TanStack Query v5 | `lib/query/keys.ts` 키 팩토리 필수 |
+| 클라이언트 상태 | Zustand | UI 상태만 (`lib/store/`) |
+| 폼 | react-hook-form + zod | Shadcn Form 패턴 |
+| DB | MSSQL 2017 | `lib/db/`, 쿼리는 `lib/db/queries/` |
+| 인증 | Supabase Auth | (Phase 0 Day 5 — 홀딩 중) |
+| BPMN | bpmn.js | Layer B |
+| AI | AI SDK | 분석·추천 기능 연동 |
+| 린트 | ESLint (Next/TS) | `npm run lint` 통과 필수 |
+
+## 3. 아키텍처 레이어 (PRD 8.3)
+
+```
+app/api/*          → HTTP 진입점 (인증·응답 형식·페이지네이션)
+lib/services/*     → 비즈니스 로직 (검증, 트랜잭션, ApiError throw)
+lib/db/queries/*   → DB 쿼리만 (MSSQL)
+lib/external/*     → 외부 시스템 API 연동
+lib/api/client.ts  → 클라이언트 fetch 래퍼 (Accept-Language, ApiError 변환)
+components/*       → UI (도메인별 하위 폴더)
+types/*            → 도메인 타입 정의
+```
+
+**금지 사항**
+- API Route에서 직접 복잡한 SQL 작성 → `queries` + `service` 경유
+- `useState`로 서버/API 데이터 관리 → TanStack Query 사용
+- 컴포넌트 내부에 비즈니스 로직 과다 작성 → `lib/services/`로 분리
+
+## 4. 코딩 스타일
+
+### 4.1 컴포넌트·함수
+
+- **함수형 컴포넌트**를 기본으로 사용한다
+- **모든 함수는 화살표 함수**로 작성한다
+
+```tsx
+/** 프로세스 목록을 표시하는 페이지 */
+const ProcessPage = async () => {
+  // ...
+};
+
+export default ProcessPage;
+```
+
+- **예외**: React Error Boundary 등 클래스 컴포넌트가 필수인 경우만 `class` 허용
+- **파일명**: 컴포넌트는 **PascalCase** (`ProcessTree.tsx`, `Header.tsx`)
+- **파일명**: 유틸·훅·서비스는 **kebab-case 또는 camelCase** (`error-handler.ts`, `ui.store.ts`) — 기존 `lib/` 패턴 유지
+
+### 4.2 주석 (한글 필수)
+
+- 함수·컴포넌트 **상단에 한 문장 개요**를 한글로 작성한다
+- JSDoc(`/** ... */`)도 **한글**로 기술한다
+- 비즈니스 규칙·비자명한 로직에만 주석을 추가한다 (과도한 주석 금지)
+
+```typescript
+/**
+ * 프로세스 코드 중복 여부를 검사하고 노드를 생성한다.
+ * @throws {ApiError} E304 — 코드가 이미 존재할 때
+ */
+export const createProcess = async (input: CreateProcessInput): Promise<ProcessNode> => {
+  // ...
+};
+```
+
+### 4.3 TypeScript·ESLint
+
+- `tsconfig.json` strict 모드 준수
+- ESLint 경고·에러 없이 커밋 (`npm run lint`)
+- 타입은 `types/` 도메인 파일에서 import; DB 행 매핑은 `queries` 레이어에서 camelCase 변환
+
+### 4.4 Server / Client Component
+
+- `"use client"`는 상호작용·브라우저 API·훅이 필요한 최소 범위에만 선언
+- DB·Service import는 Server Component 또는 API Route에서만 (`server-only` 준수)
+- Shadcn `@base-ui/react` 컴포넌트: `asChild` 미지원 — `render` prop 또는 `className` 패턴 사용
+
+## 5. 다국어 (i18n)
+
+- 지원 locale: `ko`(기본), `en`, `zh-TW` — `lib/i18n/config.ts`
+- **UI 정적 텍스트**: `messages/*.json` + `useTranslations` / `getTranslations`
+- **비즈니스 데이터**: DB i18n 테이블 (`process_node_i18n`, `task_attribute_i18n` 등)
+- locale 없는 번역은 **ko Fallback**
+- 언어 전환: `lib/i18n/navigation`의 `Link`, `useRouter`, `LanguageSelector` 패턴 사용
+
+## 6. API·에러 처리
+
+- 성공: `{ success: true, data: T, meta? }`
+- 실패: `{ success: false, error: { code, message, timestamp, traceId? } }`
+- 서버: `lib/api/error-handler.ts` — `ApiError`, `createErrorResponse`, `getErrorMessage`
+- 클라이언트: `lib/api/client.ts` — `apiClient` / `apiGet` / `apiPost`; 401 시 `/login` 리다이렉트
+- 에러 코드·메시지: DB `error_code` / `error_code_i18n` + PRD 9.2.2
+
+## 7. UI·UX 체크리스트 (기능 구현 시)
+
+- [ ] 로딩 상태 UI 제공
+- [ ] 데이터 없음(`EmptyState`) UI 제공
+- [ ] 오류 상태 UI + Toast(재시도 가능 시 버튼) 제공
+- [ ] 다국어 라벨·메시지 적용 (`ko`/`en`/`zh-TW`)
+- [ ] TanStack Query 키 팩토리 사용
+- [ ] 비즈니스 로직은 Service 레이어에 위치
+- [ ] `npm run lint` 및 `npm run build` 통과
+
+## 8. 참조 파일 (새 기능 개발 시)
+
+| 용도 | 경로 |
+|------|------|
+| API 클라이언트 | `lib/api/client.ts` |
+| 에러 처리 | `lib/api/error-handler.ts` |
+| 쿼리 키 | `lib/query/keys.ts` |
+| 서비스 템플릿 | `lib/services/process.service.ts` |
+| DB 쿼리 | `lib/db/queries/*.ts` |
+| 레이아웃 | `components/common/MainShell.tsx` |
+| 타입 | `types/*.ts` |
+
+## 9. Git·환경
+
+- `.env.local` 및 비밀값 커밋 금지 (`.env.example`만 참고용 유지)
+- DB 마이그레이션: `scripts/migrations/` — `npm run db:migrate`
+- 사용자가 명시적으로 요청할 때만 git commit / push 수행

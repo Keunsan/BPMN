@@ -5,7 +5,9 @@ import { getMessages, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "@/app/providers";
 import { routing } from "@/lib/i18n/routing";
+import type { Locale } from "@/lib/i18n/config";
 
 import "../globals.css";
 
@@ -46,7 +48,9 @@ export default async function LocaleLayout({
     >
       <body className="min-h-full antialiased">
         <NextIntlClientProvider messages={messages}>
-          {children}
+          <Providers locale={locale as Locale}>
+            {children}
+          </Providers>
           <Toaster />
         </NextIntlClientProvider>
       </body>

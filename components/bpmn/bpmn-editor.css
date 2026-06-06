@@ -1,0 +1,64 @@
+.pams-bpmn-root {
+  display: flex;
+  height: 100%;
+  min-height: 480px;
+  background: hsl(var(--background));
+}
+
+.pams-bpmn-canvas {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.pams-bpmn-canvas .bjs-container,
+.pams-bpmn-canvas .djs-container {
+  height: 100% !important;
+}
+
+.pams-bpmn-properties {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid hsl(var(--border));
+  overflow: auto;
+  background: hsl(var(--background));
+}
+
+.pams-bpmn-link-badge {
+  background: #7c3aed;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+
+.pams-bpmn-viewer .bjs-container,
+.pams-bpmn-viewer .djs-container {
+  height: 100% !important;
+}
+
+.pams-bpmn-diff-added .djs-visual > :nth-child(1) {
+  stroke: #16a34a !important;
+  stroke-width: 3px !important;
+}
+
+.pams-bpmn-diff-removed .djs-visual > :nth-child(1) {
+  stroke: #dc2626 !important;
+  stroke-width: 3px !important;
+  opacity: 0.6;
+}
+
+.pams-bpmn-diff-modified .djs-visual > :nth-child(1) {
+  stroke: #d97706 !important;
+  stroke-width: 3px !important;
+}
+
+.pams-bpmn-thumbnail svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

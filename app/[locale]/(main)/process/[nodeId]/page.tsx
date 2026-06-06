@@ -1,18 +1,13 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { ProcessDetail } from "@/components/process/ProcessDetail";
 
 type ProcessDetailPageProps = {
   params: Promise<{ nodeId: string }>;
 };
 
-export default async function ProcessDetailPage({
-  params,
-}: ProcessDetailPageProps) {
+/** 프로세스 상세 페이지 */
+const ProcessDetailPage = async ({ params }: ProcessDetailPageProps) => {
   const { nodeId } = await params;
+  return <ProcessDetail nodeId={Number(nodeId)} />;
+};
 
-  return (
-    <div className="p-6">
-      <PlaceholderPage titleKey="menu.process" />
-      <p className="mt-2 text-sm text-muted-foreground">ID: {nodeId}</p>
-    </div>
-  );
-}
+export default ProcessDetailPage;

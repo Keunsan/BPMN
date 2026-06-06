@@ -12,7 +12,7 @@ import {
 import { localeLabels, locales, type Locale } from "@/lib/i18n/config";
 import { usePathname, useRouter } from "@/lib/i18n/navigation";
 
-/** 언어 선택 드롭다운 — Phase 1에서 확장 예정 */
+/** 언어 선택 드롭다운 */
 export function LanguageSelector() {
   const locale = useLocale() as Locale;
   const router = useRouter();
