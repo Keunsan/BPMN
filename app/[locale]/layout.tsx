@@ -41,6 +41,25 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
   const messages = await getMessages();
 
+  // #region agent log
+  fetch("http://127.0.0.1:7372/ingest/b5d4eb1c-b11c-4de9-b817-328c9c6effff", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "7d9a43",
+    },
+    body: JSON.stringify({
+      sessionId: "7d9a43",
+      runId: "pre-fix",
+      hypothesisId: "B",
+      location: "app/[locale]/layout.tsx:LocaleLayout",
+      message: "Locale layout render",
+      data: { locale, hasHtmlBodyTags: true },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return (
     <html
       lang={locale}

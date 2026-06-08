@@ -17,11 +17,7 @@
 }
 
 .pams-bpmn-properties {
-  width: 320px;
-  flex-shrink: 0;
-  border-left: 1px solid hsl(var(--border));
-  overflow: auto;
-  background: hsl(var(--background));
+  display: none;
 }
 
 .pams-bpmn-link-badge {

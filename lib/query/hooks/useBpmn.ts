@@ -11,7 +11,9 @@ import type {
   BpmnCompareResult,
   BpmnFilters,
   BpmnModelDto,
+  BpmnTaskProcessLinkDto,
   CreateBpmnDto,
+  LinkOrCreateBpmnTaskDto,
   UpdateBpmnDto,
 } from "@/types/bpmn";
 
@@ -117,6 +119,23 @@ export const useDuplicateBpmn = () => {
     }) =>
       apiPost<BpmnModelDto>(`/api/bpmn/${modelId}/duplicate`, { modelName }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: bpmnKeys.all });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) showErrorToast(error);
+    },
+  });
+};
+
+/** BPMN Task를 L4 프로세스로 자동 생성/연결 */
+export const useLinkOrCreateBpmnTask = (modelId: number) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dto: LinkOrCreateBpmnTaskDto) =>
+      apiPost<BpmnTaskProcessLinkDto>(`/api/bpmn/${modelId}/task-link`, dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: bpmnKeys.detail(modelId) });
       queryClient.invalidateQueries({ queryKey: bpmnKeys.all });
     },
     onError: (error) => {

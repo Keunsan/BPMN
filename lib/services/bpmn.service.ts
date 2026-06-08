@@ -5,13 +5,17 @@ import * as bpmnQueries from "@/lib/db/queries/bpmn";
 import { findProcessById } from "@/lib/db/queries/process";
 import { bumpVersion } from "@/lib/utils/process";
 import { diffBpmnXml, EMPTY_BPMN_XML, parseBpmnElementsFromXml } from "@/lib/utils/bpmn-xml";
+import { upsertTaskAttribute } from "@/lib/services/metadata.service";
+import { createProcess } from "@/lib/services/process.service";
 import type {
+  BpmnTaskProcessLinkDto,
   BpmnCompareRequest,
   BpmnCompareResult,
   BpmnElementLinkDto,
   BpmnFilters,
   BpmnModelDto,
   CreateBpmnDto,
+  LinkOrCreateBpmnTaskDto,
   UpdateBpmnDto,
 } from "@/types/bpmn";
 
@@ -215,6 +219,99 @@ export const updateBpmnModel = async (
   }
 
   return getBpmnModelDetail(modelId);
+};
+
+/** BPMN Task를 L4 프로세스로 자동 생성하거나 기존 연결을 반환한다. */
+export const linkOrCreateBpmnTaskProcess = async (
+  modelId: number,
+  dto: LinkOrCreateBpmnTaskDto,
+  userId?: number,
+): Promise<BpmnTaskProcessLinkDto> => {
+  const model = await bpmnQueries.findBpmnModelById(modelId);
+  if (!model) {
+    throw new ApiError("E303", "BPMN model not found", 404);
+  }
+
+  const modelProcess = await findProcessById(model.nodeId);
+  if (!modelProcess) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  if (modelProcess.level !== "L3") {
+    throw new ApiError(
+      "E405",
+      "BPMN task metadata can be created only under an L3 process",
+      400,
+      undefined,
+      "nodeId",
+    );
+  }
+
+  const existingElement = (await bpmnQueries.listBpmnElements(modelId)).find(
+    (element) => element.elementBpmnId === dto.elementBpmnId,
+  );
+
+  if (existingElement?.linkedNodeId) {
+    const linked = await findProcessById(existingElement.linkedNodeId);
+    if (linked) {
+      return {
+        elementBpmnId: dto.elementBpmnId,
+        nodeId: linked.nodeId,
+        code: linked.code,
+        name: linked.name,
+      };
+    }
+  }
+
+  const taskName = dto.elementName?.trim() || "신규 Task";
+  const process = await createProcess(
+    {
+      parentNodeId: model.nodeId,
+      autoCode: true,
+      name: taskName,
+      description: null,
+      status: "DRAFT",
+      version: "1.0.0",
+      isStandard: true,
+      i18n: {
+        ko: {
+          name: taskName,
+          description: null,
+        },
+      },
+    },
+    "ko",
+    userId,
+  );
+
+  await bpmnQueries.upsertBpmnElementLink(modelId, {
+    elementBpmnId: dto.elementBpmnId,
+    elementType: dto.elementType,
+    elementName: taskName,
+    linkedNodeId: process.nodeId,
+  });
+
+  await upsertTaskAttribute(
+    {
+      nodeId: process.nodeId,
+      definition: taskName,
+      version: "1.0.0",
+      i18n: {
+        ko: {
+          definition: taskName,
+        },
+      },
+    },
+    "ko",
+    userId,
+  );
+
+  return {
+    elementBpmnId: dto.elementBpmnId,
+    nodeId: process.nodeId,
+    code: process.code,
+    name: process.name,
+  };
 };
 
 /** BPMN 모델 복제 */

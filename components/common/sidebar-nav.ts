@@ -32,10 +32,6 @@ export const sidebarNav: SidebarNavItem[] = [
   {
     labelKey: "menu.metadata",
     children: [
-      {
-        labelKey: "menu.taskAttribute",
-        href: "/metadata/task-attribute/1",
-      },
       { labelKey: "menu.raci", href: "/metadata/raci" },
       { labelKey: "menu.systemLink", href: "/metadata/system" },
       { labelKey: "menu.kpiRisk", href: "/metadata/kpi-risk" },

@@ -178,6 +178,28 @@ export interface BpmnElementLinkDto {
 
 }
 
+export interface LinkOrCreateBpmnTaskDto {
+
+  elementBpmnId: string;
+
+  elementType: BpmnElementType;
+
+  elementName?: string | null;
+
+}
+
+export interface BpmnTaskProcessLinkDto {
+
+  elementBpmnId: string;
+
+  nodeId: number;
+
+  code: string;
+
+  name: string;
+
+}
+
 
 
 export type BpmnDiffChangeType = "added" | "removed" | "modified";

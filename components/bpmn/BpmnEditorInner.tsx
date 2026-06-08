@@ -3,7 +3,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 import { EMPTY_BPMN_XML, mapBpmnJsType } from "@/lib/utils/bpmn-xml";
-import type { BpmnElementLinkDto } from "@/types/bpmn";
+import type { BpmnElementLinkDto, BpmnElementType } from "@/types/bpmn";
 
 import type { ProcessLinkInfo } from "./ProcessLinkModal";
 
@@ -24,6 +24,11 @@ type CanvasViewbox = {
 type DiagramCanvas = {
   zoom: (mode: string) => void;
   viewbox: (box?: CanvasViewbox) => CanvasViewbox;
+};
+
+type DiagramMinimap = {
+  open: () => void;
+  toggle: () => void;
 };
 
 export type BpmnEditorSaveResult = {
@@ -51,7 +56,17 @@ type BpmnEditorInnerProps = {
   xml: string | null;
   links: Record<string, ProcessLinkInfo>;
   interactionLocked?: boolean;
-  onSelectionChange?: (elementId: string | null, elementName?: string | null) => void;
+  onSelectionChange?: (
+    elementId: string | null,
+    elementName?: string | null,
+    elementType?: BpmnElementType | null,
+  ) => void;
+  onTaskHoverChange?: (hover: {
+    elementId: string;
+    elementName: string | null;
+    x: number;
+    y: number;
+  } | null) => void;
   onReady?: (api: BpmnEditorHandle) => void;
 };
 
@@ -62,6 +77,7 @@ export const BpmnEditorInner = ({
   links,
   interactionLocked = false,
   onSelectionChange,
+  onTaskHoverChange,
   onReady,
 }: BpmnEditorInnerProps) => {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -86,7 +102,7 @@ export const BpmnEditorInner = ({
         BpmnPropertiesPanelModule,
         BpmnPropertiesProviderModule,
       } = await import("bpmn-js-properties-panel");
-      const minimapModule = (await import("diagram-js-minimap")).default;
+      const { default: minimapModule } = await import("diagram-js-minimap");
 
       if (destroyed || !canvasRef.current || !propertiesRef.current) {
         return;
@@ -113,6 +129,7 @@ export const BpmnEditorInner = ({
       try {
         await modeler.importXML(initialXml);
         restoreCanvasView(modeler, modelId, initialXml);
+        openMinimap(modeler);
         refreshLinkOverlays(modeler, linksRef.current);
       } catch (err) {
         console.error("[BpmnEditor] import failed:", err);
@@ -122,11 +139,17 @@ export const BpmnEditorInner = ({
         on: (
           event: string,
           callback: (e: {
+            element?: {
+              id: string;
+              type: string;
+              businessObject?: { name?: string; $type?: string };
+            };
             newSelection?: Array<{
               id: string;
               type: string;
-              businessObject?: { name?: string };
+              businessObject?: { name?: string; $type?: string };
             }>;
+            originalEvent?: MouseEvent;
           }) => void,
         ) => void;
       };
@@ -137,7 +160,32 @@ export const BpmnEditorInner = ({
           onSelectionChange?.(null, null);
           return;
         }
-        onSelectionChange?.(selected.id, selected.businessObject?.name ?? null);
+        onSelectionChange?.(
+          selected.id,
+          selected.businessObject?.name ?? null,
+          mapBpmnJsType(selected.businessObject?.$type ?? selected.type),
+        );
+      });
+
+      eventBus.on("element.hover", (e) => {
+        const element = e.element;
+        if (!element || !isLinkableType(element.type)) {
+          onTaskHoverChange?.(null);
+          return;
+        }
+
+        onTaskHoverChange?.({
+          elementId: element.id,
+          elementName: element.businessObject?.name ?? null,
+          x: e.originalEvent?.clientX ?? 0,
+          y: e.originalEvent?.clientY ?? 0,
+        });
+      });
+
+      eventBus.on("element.out", (e) => {
+        if (e.element && isLinkableType(e.element.type)) {
+          onTaskHoverChange?.(null);
+        }
       });
 
       onReady?.(createEditorApi(modeler, linksRef, modelId));
@@ -332,7 +380,7 @@ const createEditorApi = (
     return selected?.businessObject?.name ?? null;
   },
   toggleMinimap: () => {
-    (modeler.get("minimap") as { toggle: () => void }).toggle();
+    (modeler.get("minimap") as DiagramMinimap).toggle();
   },
   dismissInteraction: () => {
     dismissDiagramInteraction(modeler);
@@ -375,6 +423,15 @@ const dismissDiagramInteraction = (
     } catch {
       // 서비스 미존재
     }
+  }
+};
+
+/** 화면 밖 Task 존재를 쉽게 파악할 수 있도록 미니맵을 기본 표시한다. */
+const openMinimap = (modeler: import("bpmn-js/lib/Modeler").default): void => {
+  try {
+    (modeler.get("minimap") as DiagramMinimap).open();
+  } catch {
+    // minimap 모듈이 로드되지 않은 경우 편집 동작은 유지한다.
   }
 };
 

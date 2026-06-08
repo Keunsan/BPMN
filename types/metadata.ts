@@ -31,6 +31,27 @@ export type CrudType =
 
 export type DataVolume = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 
+export type TaskAttributeI18nField =
+  | "definition"
+  | "purpose"
+  | "inputDeliverable"
+  | "inputDataDesc"
+  | "inputCondition"
+  | "outputDeliverable"
+  | "outputDataDesc"
+  | "outputCondition"
+  | "issues"
+  | "exceptions"
+  | "remarks";
+
+export type TaskAttributeI18nValue = Partial<
+  Record<TaskAttributeI18nField, string | null>
+>;
+
+export type TaskAttributeI18nMap = Partial<
+  Record<"ko" | "en" | "zh-TW", TaskAttributeI18nValue>
+>;
+
 export interface TaskAttribute {
   attrId: number;
   nodeId: number;
@@ -62,6 +83,44 @@ export interface TaskPredecessor {
   conditionDesc: string | null;
   isMandatory: boolean;
   createdAt: Date;
+}
+
+export interface TaskPredecessorDto extends TaskPredecessor {
+  predecessorCode: string;
+  predecessorName: string;
+  predecessorLevel: "L1" | "L2" | "L3" | "L4";
+}
+
+export interface UpsertTaskPredecessorDto {
+  predecessorNodeId: number;
+  conditionDesc?: string | null;
+  isMandatory?: boolean;
+}
+
+export interface TaskAttributeDto extends TaskAttribute {
+  i18n: TaskAttributeI18nMap;
+  predecessors: TaskPredecessorDto[];
+}
+
+export interface UpsertTaskAttributeDto {
+  nodeId: number;
+  definition?: string | null;
+  purpose?: string | null;
+  inputDeliverable?: string | null;
+  inputDataDesc?: string | null;
+  inputCondition?: string | null;
+  outputDeliverable?: string | null;
+  outputDataDesc?: string | null;
+  outputCondition?: string | null;
+  frequency?: FrequencyType | null;
+  triggerEvent?: string | null;
+  duration?: string | null;
+  issues?: string | null;
+  exceptions?: string | null;
+  remarks?: string | null;
+  version?: string | null;
+  i18n?: TaskAttributeI18nMap;
+  predecessors?: UpsertTaskPredecessorDto[];
 }
 
 export interface TaskDataTableLink {

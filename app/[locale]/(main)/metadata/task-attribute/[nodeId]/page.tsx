@@ -1,18 +1,16 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
 
 type TaskAttributePageProps = {
   params: Promise<{ nodeId: string }>;
 };
 
-export default async function TaskAttributePage({
+/** Task 속성 관리 페이지 */
+const TaskAttributePage = async ({
   params,
-}: TaskAttributePageProps) {
+}: TaskAttributePageProps) => {
   const { nodeId } = await params;
 
-  return (
-    <div className="p-6">
-      <PlaceholderPage titleKey="menu.metadata" />
-      <p className="mt-2 text-sm text-muted-foreground">Node: {nodeId}</p>
-    </div>
-  );
-}
+  return <TaskAttributeForm nodeId={Number(nodeId)} />;
+};
+
+export default TaskAttributePage;

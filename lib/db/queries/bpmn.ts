@@ -276,3 +276,41 @@ export const syncBpmnElements = async (
     }
   });
 };
+
+/** 단일 BPMN 요소와 프로세스 노드 연결을 저장한다. */
+export const upsertBpmnElementLink = async (
+  modelId: number,
+  element: BpmnElementLinkDto,
+): Promise<void> => {
+  await queryOne(
+    `MERGE bpmn_element AS target
+     USING (
+       SELECT @modelId AS model_id, @elementBpmnId AS element_bpmn_id
+     ) AS source
+     ON target.model_id = source.model_id
+       AND target.element_bpmn_id = source.element_bpmn_id
+     WHEN MATCHED THEN
+       UPDATE SET
+         element_type = @elementType,
+         element_name = @elementName,
+         linked_node_id = @linkedNodeId,
+         properties = @properties
+     WHEN NOT MATCHED THEN
+       INSERT (
+         model_id, element_type, element_bpmn_id, element_name,
+         linked_node_id, properties
+       )
+       VALUES (
+         @modelId, @elementType, @elementBpmnId, @elementName,
+         @linkedNodeId, @properties
+       );`,
+    {
+      modelId,
+      elementBpmnId: element.elementBpmnId,
+      elementType: element.elementType,
+      elementName: element.elementName ?? null,
+      linkedNodeId: element.linkedNodeId ?? null,
+      properties: element.properties ? JSON.stringify(element.properties) : null,
+    },
+  );
+};

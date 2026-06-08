@@ -11,43 +11,72 @@ import { localeLabels, locales, type Locale } from "@/lib/i18n/config";
 import type { ProcessI18nMap } from "@/types/process";
 
 export type MultiLangValue = ProcessI18nMap;
+export type MultiLangTextValue = Partial<Record<Locale, string | null>>;
 
-type MultiLangInputProps = {
+type BaseMultiLangInputProps = {
   label: string;
-  value: MultiLangValue;
-  onChange: (value: MultiLangValue) => void;
   required?: boolean;
-  multiline?: boolean;
   error?: string;
+  placeholder?: string;
 };
 
-/** 다국어 탭 입력 컴포넌트 — 한국어 필수 */
+type NameDescriptionInputProps = BaseMultiLangInputProps & {
+  mode?: "name-description";
+  value: MultiLangValue;
+  onChange: (value: MultiLangValue) => void;
+  multiline?: boolean;
+};
+
+type TextInputProps = BaseMultiLangInputProps & {
+  mode: "text";
+  textValue: MultiLangTextValue;
+  onTextChange: (value: MultiLangTextValue) => void;
+  rows?: number;
+};
+
+type MultiLangInputProps = NameDescriptionInputProps | TextInputProps;
+
+/** 다국어 탭 입력 컴포넌트 — 한국어 필수 텍스트를 지원한다. */
 export const MultiLangInput = ({
   label,
-  value,
-  onChange,
   required = false,
-  multiline = false,
   error,
+  placeholder,
+  ...props
 }: MultiLangInputProps) => {
   const t = useTranslations("process");
   const [activeLocale, setActiveLocale] = useState<Locale>("ko");
+  const isTextMode = props.mode === "text";
 
   const updateField = useCallback(
     (locale: Locale, field: "name" | "description", text: string) => {
-      onChange({
-        ...value,
+      if (props.mode === "text") return;
+
+      props.onChange({
+        ...props.value,
         [locale]: {
-          ...value[locale],
-          name: field === "name" ? text : (value[locale]?.name ?? ""),
+          ...props.value[locale],
+          name: field === "name" ? text : (props.value[locale]?.name ?? ""),
           description:
             field === "description"
               ? text
-              : value[locale]?.description,
+              : props.value[locale]?.description,
         },
       });
     },
-    [onChange, value],
+    [props],
+  );
+
+  const updateText = useCallback(
+    (locale: Locale, text: string) => {
+      if (props.mode !== "text") return;
+
+      props.onTextChange({
+        ...props.textValue,
+        [locale]: text,
+      });
+    },
+    [props],
   );
 
   return (
@@ -69,17 +98,24 @@ export const MultiLangInput = ({
 
         {locales.map((locale) => (
           <TabsContent key={locale} value={locale} className="space-y-2">
-            {multiline ? (
+            {isTextMode ? (
+              <Textarea
+                placeholder={placeholder ?? t("descriptionPlaceholder")}
+                value={props.textValue[locale] ?? ""}
+                onChange={(e) => updateText(locale, e.target.value)}
+                rows={props.rows ?? 3}
+              />
+            ) : props.multiline ? (
               <>
                 <Textarea
                   placeholder={t("namePlaceholder")}
-                  value={value[locale]?.name ?? ""}
+                  value={props.value[locale]?.name ?? ""}
                   onChange={(e) => updateField(locale, "name", e.target.value)}
                   rows={2}
                 />
                 <Textarea
                   placeholder={t("descriptionPlaceholder")}
-                  value={value[locale]?.description ?? ""}
+                  value={props.value[locale]?.description ?? ""}
                   onChange={(e) =>
                     updateField(locale, "description", e.target.value)
                   }
@@ -89,7 +125,7 @@ export const MultiLangInput = ({
             ) : (
               <Input
                 placeholder={t("namePlaceholder")}
-                value={value[locale]?.name ?? ""}
+                value={props.value[locale]?.name ?? ""}
                 onChange={(e) => updateField(locale, "name", e.target.value)}
               />
             )}
@@ -98,7 +134,10 @@ export const MultiLangInput = ({
       </Tabs>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {required && !value.ko?.name?.trim() && (
+      {required &&
+        (isTextMode
+          ? !props.textValue.ko?.trim()
+          : !props.value.ko?.name?.trim()) && (
         <p className="text-xs text-muted-foreground">{t("koRequired")}</p>
       )}
     </div>

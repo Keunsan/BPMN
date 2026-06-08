@@ -1,0 +1,337 @@
+import "server-only";
+
+import type { Locale } from "@/lib/i18n/config";
+import type {
+  TaskAttribute,
+  TaskAttributeI18nMap,
+  TaskAttributeI18nValue,
+  TaskPredecessorDto,
+  UpsertTaskAttributeDto,
+  UpsertTaskPredecessorDto,
+} from "@/types/metadata";
+
+import { query, queryOne, transaction, type QueryParams } from "../pool";
+
+/** DB snake_case 행을 TaskAttribute로 변환한다. */
+const mapTaskAttribute = (row: Record<string, unknown>): TaskAttribute => ({
+  attrId: row.attr_id as number,
+  nodeId: row.node_id as number,
+  definition: (row.definition as string | null) ?? null,
+  purpose: (row.purpose as string | null) ?? null,
+  inputDeliverable: (row.input_deliverable as string | null) ?? null,
+  inputDataDesc: (row.input_data_desc as string | null) ?? null,
+  inputCondition: (row.input_condition as string | null) ?? null,
+  outputDeliverable: (row.output_deliverable as string | null) ?? null,
+  outputDataDesc: (row.output_data_desc as string | null) ?? null,
+  outputCondition: (row.output_condition as string | null) ?? null,
+  frequency: (row.frequency as TaskAttribute["frequency"]) ?? null,
+  triggerEvent: (row.trigger_event as string | null) ?? null,
+  duration: (row.duration as string | null) ?? null,
+  issues: (row.issues as string | null) ?? null,
+  exceptions: (row.exceptions as string | null) ?? null,
+  remarks: (row.remarks as string | null) ?? null,
+  version: (row.version as string | null) ?? null,
+  createdBy: (row.created_by as number | null) ?? null,
+  createdAt: new Date(row.created_at as string),
+  updatedBy: (row.updated_by as number | null) ?? null,
+  updatedAt: row.updated_at ? new Date(row.updated_at as string) : null,
+});
+
+/** DB snake_case 행을 선행 프로세스 DTO로 변환한다. */
+const mapTaskPredecessor = (
+  row: Record<string, unknown>,
+): TaskPredecessorDto => ({
+  predecessorId: row.predecessor_id as number,
+  nodeId: row.node_id as number,
+  predecessorNodeId: row.predecessor_node_id as number,
+  conditionDesc: (row.condition_desc as string | null) ?? null,
+  isMandatory: Boolean(row.is_mandatory),
+  createdAt: new Date(row.created_at as string),
+  predecessorCode: row.predecessor_code as string,
+  predecessorName: row.predecessor_name as string,
+  predecessorLevel: row.predecessor_level as TaskPredecessorDto["predecessorLevel"],
+});
+
+/** Task 속성 i18n 행을 locale 맵으로 변환한다. */
+const mapTaskAttributeI18n = (
+  rows: Record<string, unknown>[],
+): TaskAttributeI18nMap => {
+  const map: TaskAttributeI18nMap = {};
+
+  for (const row of rows) {
+    const locale = row.locale as keyof TaskAttributeI18nMap;
+    map[locale] = {
+      definition: (row.definition as string | null) ?? null,
+      purpose: (row.purpose as string | null) ?? null,
+      inputDeliverable: (row.input_deliverable as string | null) ?? null,
+      inputDataDesc: (row.input_data_desc as string | null) ?? null,
+      inputCondition: (row.input_condition as string | null) ?? null,
+      outputDeliverable: (row.output_deliverable as string | null) ?? null,
+      outputDataDesc: (row.output_data_desc as string | null) ?? null,
+      outputCondition: (row.output_condition as string | null) ?? null,
+      issues: (row.issues as string | null) ?? null,
+      exceptions: (row.exceptions as string | null) ?? null,
+      remarks: (row.remarks as string | null) ?? null,
+    };
+  }
+
+  return map;
+};
+
+/** Task 속성을 노드 ID로 조회한다. */
+export const findTaskAttributeByNodeId = async (
+  nodeId: number,
+): Promise<TaskAttribute | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT * FROM task_attribute WHERE node_id = @nodeId`,
+    { nodeId },
+  );
+
+  return row ? mapTaskAttribute(row) : null;
+};
+
+/** Task 속성 i18n 맵을 조회한다. */
+export const findTaskAttributeI18n = async (
+  attrId: number,
+): Promise<TaskAttributeI18nMap> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT *
+     FROM task_attribute_i18n
+     WHERE attr_id = @attrId`,
+    { attrId },
+  );
+
+  return mapTaskAttributeI18n(rows);
+};
+
+/** Task 속성을 생성하거나 수정한다. */
+export const upsertTaskAttribute = async (
+  input: UpsertTaskAttributeDto & {
+    createdBy?: number | null;
+    updatedBy?: number | null;
+  },
+): Promise<TaskAttribute> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `MERGE task_attribute AS target
+     USING (SELECT @nodeId AS node_id) AS source
+     ON target.node_id = source.node_id
+     WHEN MATCHED THEN
+       UPDATE SET
+         definition = @definition,
+         purpose = @purpose,
+         input_deliverable = @inputDeliverable,
+         input_data_desc = @inputDataDesc,
+         input_condition = @inputCondition,
+         output_deliverable = @outputDeliverable,
+         output_data_desc = @outputDataDesc,
+         output_condition = @outputCondition,
+         frequency = @frequency,
+         trigger_event = @triggerEvent,
+         duration = @duration,
+         issues = @issues,
+         exceptions = @exceptions,
+         remarks = @remarks,
+         version = @version,
+         updated_by = @updatedBy,
+         updated_at = GETDATE()
+     WHEN NOT MATCHED THEN
+       INSERT (
+         node_id, definition, purpose, input_deliverable, input_data_desc,
+         input_condition, output_deliverable, output_data_desc, output_condition,
+         frequency, trigger_event, duration, issues, exceptions, remarks,
+         version, created_by
+       )
+       VALUES (
+         @nodeId, @definition, @purpose, @inputDeliverable, @inputDataDesc,
+         @inputCondition, @outputDeliverable, @outputDataDesc, @outputCondition,
+         @frequency, @triggerEvent, @duration, @issues, @exceptions, @remarks,
+         @version, @createdBy
+       )
+     OUTPUT INSERTED.*;`,
+    {
+      nodeId: input.nodeId,
+      definition: input.definition ?? null,
+      purpose: input.purpose ?? null,
+      inputDeliverable: input.inputDeliverable ?? null,
+      inputDataDesc: input.inputDataDesc ?? null,
+      inputCondition: input.inputCondition ?? null,
+      outputDeliverable: input.outputDeliverable ?? null,
+      outputDataDesc: input.outputDataDesc ?? null,
+      outputCondition: input.outputCondition ?? null,
+      frequency: input.frequency ?? null,
+      triggerEvent: input.triggerEvent ?? null,
+      duration: input.duration ?? null,
+      issues: input.issues ?? null,
+      exceptions: input.exceptions ?? null,
+      remarks: input.remarks ?? null,
+      version: input.version ?? "1.0.0",
+      createdBy: input.createdBy ?? null,
+      updatedBy: input.updatedBy ?? null,
+    },
+  );
+
+  if (!row) {
+    throw new Error("Failed to upsert task attribute");
+  }
+
+  return mapTaskAttribute(row);
+};
+
+/** Task 속성 다국어 값을 저장한다. */
+export const upsertTaskAttributeI18n = async (
+  attrId: number,
+  i18n: TaskAttributeI18nMap,
+): Promise<void> => {
+  for (const [locale, value] of Object.entries(i18n)) {
+    if (!value) continue;
+
+    const params: QueryParams = {
+      attrId,
+      locale,
+      definition: value.definition ?? null,
+      purpose: value.purpose ?? null,
+      inputDeliverable: value.inputDeliverable ?? null,
+      inputDataDesc: value.inputDataDesc ?? null,
+      inputCondition: value.inputCondition ?? null,
+      outputDeliverable: value.outputDeliverable ?? null,
+      outputDataDesc: value.outputDataDesc ?? null,
+      outputCondition: value.outputCondition ?? null,
+      issues: value.issues ?? null,
+      exceptions: value.exceptions ?? null,
+      remarks: value.remarks ?? null,
+    };
+
+    await queryOne(
+      `MERGE task_attribute_i18n AS target
+       USING (SELECT @attrId AS attr_id, @locale AS locale) AS source
+       ON target.attr_id = source.attr_id AND target.locale = source.locale
+       WHEN MATCHED THEN
+         UPDATE SET
+           definition = @definition,
+           purpose = @purpose,
+           input_deliverable = @inputDeliverable,
+           input_data_desc = @inputDataDesc,
+           input_condition = @inputCondition,
+           output_deliverable = @outputDeliverable,
+           output_data_desc = @outputDataDesc,
+           output_condition = @outputCondition,
+           issues = @issues,
+           exceptions = @exceptions,
+           remarks = @remarks
+       WHEN NOT MATCHED THEN
+         INSERT (
+           attr_id, locale, definition, purpose, input_deliverable,
+           input_data_desc, input_condition, output_deliverable,
+           output_data_desc, output_condition, issues, exceptions, remarks
+         )
+         VALUES (
+           @attrId, @locale, @definition, @purpose, @inputDeliverable,
+           @inputDataDesc, @inputCondition, @outputDeliverable,
+           @outputDataDesc, @outputCondition, @issues, @exceptions, @remarks
+         );`,
+      params,
+    );
+  }
+};
+
+/** 선행 프로세스 목록을 조회한다. */
+export const listTaskPredecessors = async (
+  nodeId: number,
+  locale: Locale,
+): Promise<TaskPredecessorDto[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       tp.*,
+       pn.code AS predecessor_code,
+       COALESCE(pi_locale.name, pi_ko.name, pn.name) AS predecessor_name,
+       pn.level AS predecessor_level
+     FROM task_predecessor tp
+     INNER JOIN process_node pn ON tp.predecessor_node_id = pn.node_id
+     LEFT JOIN process_node_i18n pi_locale
+       ON pn.node_id = pi_locale.node_id AND pi_locale.locale = @locale
+     LEFT JOIN process_node_i18n pi_ko
+       ON pn.node_id = pi_ko.node_id AND pi_ko.locale = 'ko'
+     WHERE tp.node_id = @nodeId
+     ORDER BY tp.predecessor_id`,
+    { nodeId, locale },
+  );
+
+  return rows.map(mapTaskPredecessor);
+};
+
+/** 선행 프로세스 목록을 현재 선택 값으로 교체한다. */
+export const replaceTaskPredecessors = async (
+  nodeId: number,
+  predecessors: UpsertTaskPredecessorDto[],
+): Promise<void> => {
+  await transaction(async (tx) => {
+    await tx(`DELETE FROM task_predecessor WHERE node_id = @nodeId`, { nodeId });
+
+    for (const predecessor of predecessors) {
+      await tx(
+        `INSERT INTO task_predecessor (
+           node_id, predecessor_node_id, condition_desc, is_mandatory
+         )
+         VALUES (
+           @nodeId, @predecessorNodeId, @conditionDesc, @isMandatory
+         )`,
+        {
+          nodeId,
+          predecessorNodeId: predecessor.predecessorNodeId,
+          conditionDesc: predecessor.conditionDesc ?? null,
+          isMandatory: predecessor.isMandatory ?? true,
+        },
+      );
+    }
+  });
+};
+
+/** 이미 존재하는 선행 경로가 대상 노드까지 이어지는지 검사한다. */
+export const hasPredecessorPath = async (
+  fromNodeId: number,
+  targetNodeId: number,
+): Promise<boolean> => {
+  const row = await queryOne<{ predecessor_node_id: number }>(
+    `WITH dependency_tree (predecessor_node_id, depth) AS (
+       SELECT predecessor_node_id, 1 AS depth
+       FROM task_predecessor
+       WHERE node_id = @fromNodeId
+       UNION ALL
+       SELECT tp.predecessor_node_id, dt.depth + 1
+       FROM task_predecessor tp
+       INNER JOIN dependency_tree dt
+         ON tp.node_id = dt.predecessor_node_id
+       WHERE dt.depth < 100
+     )
+     SELECT TOP 1 predecessor_node_id
+     FROM dependency_tree
+     WHERE predecessor_node_id = @targetNodeId
+     OPTION (MAXRECURSION 100)`,
+    { fromNodeId, targetNodeId },
+  );
+
+  return Boolean(row);
+};
+
+/** locale별 값에서 기본 컬럼 fallback을 생성한다. */
+export const resolveTaskAttributeText = (
+  attribute: TaskAttribute,
+  i18n: TaskAttributeI18nMap,
+  locale: Locale,
+): TaskAttributeI18nValue => {
+  const localized = i18n[locale] ?? i18n.ko ?? {};
+
+  return {
+    definition: localized.definition ?? attribute.definition,
+    purpose: localized.purpose ?? attribute.purpose,
+    inputDeliverable: localized.inputDeliverable ?? attribute.inputDeliverable,
+    inputDataDesc: localized.inputDataDesc ?? attribute.inputDataDesc,
+    inputCondition: localized.inputCondition ?? attribute.inputCondition,
+    outputDeliverable: localized.outputDeliverable ?? attribute.outputDeliverable,
+    outputDataDesc: localized.outputDataDesc ?? attribute.outputDataDesc,
+    outputCondition: localized.outputCondition ?? attribute.outputCondition,
+    issues: localized.issues ?? attribute.issues,
+    exceptions: localized.exceptions ?? attribute.exceptions,
+    remarks: localized.remarks ?? attribute.remarks,
+  };
+};
