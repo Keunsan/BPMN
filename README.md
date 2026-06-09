@@ -174,4 +174,33 @@ headroom 관련
 pc 재부팅 후 터미널에서
   $env:HEADROOM_REQUIRE_RUST_CORE = "false"
   headroom proxy --port 8787
-그리고 셋팅에서 headmroom mcp 서버 온
+그리고 셋팅에서 headmroom mcp 서버 가동
+
+mcp.json - headroom 경로
+(집 노트북)
+{
+  "mcpServers": {
+    "headroom": {
+      "command": "C:\\Users\\dlzms\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\headroom.exe",
+      "args": ["mcp", "serve"],
+      "env": {
+        "HEADROOM_REQUIRE_RUST_CORE": "false",
+        "HEADROOM_PROXY_URL": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}
+
+(회사 서브노트북)
+{
+  "mcpServers": {
+    "headroom": {
+      "command": "C:\\hr\\venv\\Scripts\\headroom.exe",
+      "args": ["mcp", "serve"],
+      "env": {
+        "HEADROOM_REQUIRE_RUST_CORE": "false",
+        "HEADROOM_PROXY_URL": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "headroom": {
-      "command": "C:\\hr\\venv\\Scripts\\headroom.exe",
+      "command": "C:\\Users\\dlzms\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\headroom.exe",
       "args": ["mcp", "serve"],
       "env": {
         "HEADROOM_REQUIRE_RUST_CORE": "false",
