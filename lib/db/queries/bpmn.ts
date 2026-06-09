@@ -70,6 +70,18 @@ export const listBpmnModels = async (
     params.nodeId = filters.nodeId;
   }
 
+  if (filters.linkedNodeId !== undefined) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1
+         FROM bpmn_element linked
+         WHERE linked.model_id = m.model_id
+           AND linked.linked_node_id = @linkedNodeId
+       )`,
+    );
+    params.linkedNodeId = filters.linkedNodeId;
+  }
+
   if (filters.status) {
     conditions.push("m.status = @status");
     params.status = filters.status;

@@ -168,3 +168,10 @@ types/                              # 도메인 타입
 4. **Phase 0 보류** — Supabase Auth 연동 (인증 미들웨어·로그인)
 
 상세 일정·Cursor 프롬프트는 [`docs/PLAN.md`](docs/PLAN.md), 기능 요구사항은 [`docs/PRD.md`](docs/PRD.md)를 참조하세요.
+
+
+headroom 관련
+pc 재부팅 후 터미널에서
+  $env:HEADROOM_REQUIRE_RUST_CORE = "false"
+  headroom proxy --port 8787
+그리고 셋팅에서 headmroom mcp 서버 온

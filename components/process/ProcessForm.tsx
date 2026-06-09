@@ -29,6 +29,7 @@ import {
   useUpdateProcess,
 } from "@/lib/query/hooks/useProcess";
 import { useRouter } from "@/lib/i18n/navigation";
+import { cn } from "@/lib/utils";
 import type { ProcessNodeDto, ProcessStatus } from "@/types/process";
 
 const statusOptions: ProcessStatus[] = [
@@ -43,6 +44,9 @@ type ProcessFormProps = {
   initialData?: ProcessNodeDto;
   mode: "create" | "edit";
   parentId?: number | null;
+  layout?: "page" | "panel";
+  onCancel?: () => void;
+  onSuccess?: (node: ProcessNodeDto) => void;
 };
 
 /** 프로세스 등록/수정 폼 */
@@ -50,6 +54,9 @@ export const ProcessForm = ({
   initialData,
   mode,
   parentId: parentIdProp = null,
+  layout = "page",
+  onCancel,
+  onSuccess,
 }: ProcessFormProps) => {
   const t = useTranslations("process");
   const router = useRouter();
@@ -117,10 +124,20 @@ export const ProcessForm = ({
 
     if (mode === "create") {
       const result = await createMutation.mutateAsync(payload);
-      if (result) router.push(`/process/${result.nodeId}`);
+      if (result) {
+        if (onSuccess) {
+          onSuccess(result);
+        } else {
+          router.push(`/process/${result.nodeId}`);
+        }
+      }
     } else if (initialData) {
-      await updateMutation.mutateAsync({ ...payload, i18n });
-      router.push(`/process/${initialData.nodeId}`);
+      const result = await updateMutation.mutateAsync({ ...payload, i18n });
+      if (onSuccess && result) {
+        onSuccess(result);
+      } else {
+        router.push(`/process/${initialData.nodeId}`);
+      }
     }
   });
 
@@ -129,7 +146,13 @@ export const ProcessForm = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="mx-auto max-w-2xl space-y-6 p-6">
+      <form
+        onSubmit={onSubmit}
+        className={cn(
+          "space-y-6 p-6",
+          layout === "page" && "mx-auto max-w-2xl",
+        )}
+      >
         <h1 className="text-2xl font-semibold">
           {mode === "create" ? t("newProcess") : t("editProcess")}
         </h1>
@@ -247,7 +270,7 @@ export const ProcessForm = ({
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.back()}
+            onClick={() => (onCancel ? onCancel() : router.back())}
           >
             {t("cancel")}
           </Button>

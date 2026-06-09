@@ -6,6 +6,7 @@ import { buildProcessTree, bumpVersion, getNextLevel } from "@/lib/utils/process
 import type {
   CreateProcessDto,
   MoveProcessDto,
+  ProcessDeleteImpact,
   ProcessHistoryDto,
   ProcessI18nMap,
   ProcessNodeDto,
@@ -196,21 +197,43 @@ export const updateProcess = async (
 };
 
 /** 프로세스 삭제 */
-export const deleteProcess = async (nodeId: number): Promise<void> => {
+export const deleteProcess = async (
+  nodeId: number,
+  options: { cascade?: boolean } = {},
+): Promise<void> => {
   const current = await processQueries.findProcessById(nodeId);
   if (!current) {
     throw new ApiError("E302", "Process not found", 404);
   }
 
-  const childCount = await processQueries.countChildProcesses(nodeId);
-  if (childCount > 0) {
+  const impact = await processQueries.getProcessDeleteImpact(nodeId);
+  if (impact.childProcessCount > 0) {
     throw new ApiError("E401", "Cannot delete: child processes exist", 400);
   }
+  if (impact.hasDependencies && !options.cascade) {
+    throw new ApiError(
+      "E409",
+      "Linked data exists. Confirm cascade delete before deleting this process.",
+      409,
+    );
+  }
 
-  const deleted = await processQueries.deleteProcess(nodeId);
+  const deleted = await processQueries.deleteProcess(nodeId, options);
   if (!deleted) {
     throw new ApiError("E502", "Failed to delete process", 500);
   }
+};
+
+/** 프로세스 삭제 전 영향 범위 조회 */
+export const getProcessDeleteImpact = async (
+  nodeId: number,
+): Promise<ProcessDeleteImpact> => {
+  const current = await processQueries.findProcessById(nodeId);
+  if (!current) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  return processQueries.getProcessDeleteImpact(nodeId);
 };
 
 /** 프로세스 이동 */

@@ -346,10 +346,10 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2 border-b px-4 py-1">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <h1 className="truncate text-lg font-semibold">{model.modelName}</h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="shrink-0 text-right text-xs text-muted-foreground">
             {model.processCode} · v{model.version}
           </p>
         </div>

@@ -18,19 +18,24 @@ import type {
 } from "@/types/bpmn";
 
 /** BPMN 모델 목록 */
-export const useBpmnList = (filters: BpmnFilters = {}) => {
+export const useBpmnList = (
+  filters: BpmnFilters = {},
+  options: { enabled?: boolean } = {},
+) => {
   return useQuery({
     queryKey: bpmnKeys.list(filters),
     queryFn: () =>
       apiGet<BpmnModelDto[]>("/api/bpmn", {
         params: {
           nodeId: filters.nodeId,
+          linkedNodeId: filters.linkedNodeId,
           status: filters.status,
           isCurrent: filters.isCurrent,
           search: filters.search,
           sort: filters.sort,
         },
       }),
+    enabled: options.enabled ?? true,
   });
 };
 

@@ -1,0 +1,103 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+
+import { ProcessDetail } from "@/components/process/ProcessDetail";
+import { ProcessForm } from "@/components/process/ProcessForm";
+import { ProcessTree } from "@/components/process/ProcessTree";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import type { ProcessNodeDto, ProcessNodeTree } from "@/types/process";
+
+type ProcessSheetState =
+  | { type: "detail"; node: ProcessNodeTree | ProcessNodeDto }
+  | { type: "create"; parentId: number | null }
+  | { type: "edit"; node: ProcessNodeDto };
+
+/** 프로세스 트리에서 선택한 노드를 오른쪽 상세 패널로 표시한다. */
+export const ProcessListClient = () => {
+  const t = useTranslations("process");
+  const [sheetState, setSheetState] = useState<ProcessSheetState | null>(null);
+  const selectedNode =
+    sheetState?.type === "detail" || sheetState?.type === "edit"
+      ? sheetState.node
+      : null;
+
+  return (
+    <div className="p-4">
+      <ProcessTree
+        selectedId={selectedNode?.nodeId}
+        onSelect={(node) => setSheetState({ type: "detail", node })}
+        onCreate={(parentId = null) => setSheetState({ type: "create", parentId })}
+      />
+
+      <Sheet
+        open={Boolean(sheetState)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSheetState(null);
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-[min(768px,calc(100vw-2rem))] gap-0 p-0 data-[side=right]:w-[min(768px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>
+              {sheetState?.type === "create"
+                ? t("newProcess")
+                : sheetState?.type === "edit"
+                  ? t("editProcess")
+                : selectedNode?.name ?? t("detailSheetTitle")}
+            </SheetTitle>
+            <SheetDescription>
+              {sheetState?.type === "create"
+                ? t("createSheetDesc")
+                : sheetState?.type === "edit"
+                  ? t("editSheetDesc")
+                : t("detailSheetDesc")}
+            </SheetDescription>
+          </SheetHeader>
+          {sheetState?.type === "detail" && selectedNode && (
+            <ProcessDetail
+              nodeId={selectedNode.nodeId}
+              showTree={false}
+              onEdit={(node) => setSheetState({ type: "edit", node })}
+            />
+          )}
+          {sheetState?.type === "create" && (
+            <div className="h-full overflow-y-auto">
+              <ProcessForm
+                mode="create"
+                parentId={sheetState.parentId}
+                layout="panel"
+                onCancel={() => setSheetState(null)}
+                onSuccess={(node) => setSheetState({ type: "detail", node })}
+              />
+            </div>
+          )}
+          {sheetState?.type === "edit" && (
+            <div className="h-full overflow-y-auto">
+              <ProcessForm
+                mode="edit"
+                initialData={sheetState.node}
+                layout="panel"
+                onCancel={() =>
+                  setSheetState({ type: "detail", node: sheetState.node })
+                }
+                onSuccess={(node) => setSheetState({ type: "detail", node })}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};

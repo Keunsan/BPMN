@@ -22,6 +22,12 @@ export const GET = withApiHandler(async ({ request }) => {
 
       : undefined,
 
+    linkedNodeId: searchParams.get("linkedNodeId")
+
+      ? Number(searchParams.get("linkedNodeId"))
+
+      : undefined,
+
     status: (searchParams.get("status") as BpmnModelStatus | null) ?? undefined,
 
     isCurrent:

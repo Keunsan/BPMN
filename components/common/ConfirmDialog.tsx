@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,8 @@ type ConfirmDialogProps = {
   variant?: "default" | "destructive";
   onConfirm: () => void;
   loading?: boolean;
+  confirmDisabled?: boolean;
+  children?: ReactNode;
 };
 
 /** 확인 다이얼로그 */
@@ -35,6 +38,8 @@ export const ConfirmDialog = ({
   variant = "default",
   onConfirm,
   loading,
+  confirmDisabled,
+  children,
 }: ConfirmDialogProps) => {
   const t = useTranslations("common");
 
@@ -45,6 +50,7 @@ export const ConfirmDialog = ({
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button
             variant="outline"
@@ -56,7 +62,7 @@ export const ConfirmDialog = ({
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
           >
             {confirmLabel ?? t("delete")}
           </Button>

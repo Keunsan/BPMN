@@ -35,11 +35,16 @@ import { useDebounce } from "@/hooks/useDebounce";
 import {
   useDeleteProcess,
   useMoveProcess,
+  useProcessDeleteImpact,
   useProcessTree,
 } from "@/lib/query/hooks/useProcess";
 import { useRouter } from "@/lib/i18n/navigation";
 import { cn } from "@/lib/utils";
-import type { ProcessLevel, ProcessNodeTree } from "@/types/process";
+import type {
+  ProcessDeleteImpact,
+  ProcessLevel,
+  ProcessNodeTree,
+} from "@/types/process";
 
 const levelStyles: Record<ProcessLevel, string> = {
   L1: "text-blue-600",
@@ -51,6 +56,7 @@ const levelStyles: Record<ProcessLevel, string> = {
 type ProcessTreeProps = {
   selectedId?: number;
   onSelect?: (node: ProcessNodeTree) => void;
+  onCreate?: (parentId?: number | null) => void;
   className?: string;
   /** picker: 모달 등에서 선택만 하고 페이지 이동·편집 UI를 숨김 */
   variant?: "default" | "picker";
@@ -65,6 +71,7 @@ type TreeNodeItemProps = {
   expandedIds: Set<number>;
   onToggle: (id: number) => void;
   onSelect?: (node: ProcessNodeTree) => void;
+  onCreate?: (parentId?: number | null) => void;
   onDelete: (node: ProcessNodeTree) => void;
   filter: string;
   pickerMode?: boolean;
@@ -78,6 +85,7 @@ const TreeNodeItem = ({
   expandedIds,
   onToggle,
   onSelect,
+  onCreate,
   onDelete,
   filter,
   pickerMode = false,
@@ -100,7 +108,7 @@ const TreeNodeItem = ({
     <li>
       <div
         className={cn(
-          "group flex items-center gap-1 rounded-md py-1 pr-1 text-sm",
+          "group flex items-center gap-1 rounded-md py-1 pr-1 text-sm transition-colors hover:bg-muted",
           isSelected && "bg-accent text-accent-foreground",
         )}
         style={{ paddingLeft: `${level * 12 + 4}px` }}
@@ -160,7 +168,9 @@ const TreeNodeItem = ({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>
-                  router.push(`/process/new?parentId=${node.nodeId}`)
+                  onCreate
+                    ? onCreate(node.nodeId)
+                    : router.push(`/process/new?parentId=${node.nodeId}`)
                 }
               >
                 {t("addChild")}
@@ -188,6 +198,7 @@ const TreeNodeItem = ({
               expandedIds={expandedIds}
               onToggle={onToggle}
               onSelect={onSelect}
+              onCreate={onCreate}
               onDelete={onDelete}
               filter={filter}
               pickerMode={pickerMode}
@@ -203,6 +214,7 @@ const TreeNodeItem = ({
 export const ProcessTree = ({
   selectedId,
   onSelect,
+  onCreate,
   className,
   variant = "default",
   fixSearchOnScroll = false,
@@ -226,6 +238,7 @@ export const ProcessTree = ({
     }
   }, [tree]);
   const deleteMutation = useDeleteProcess();
+  const deleteImpactMutation = useProcessDeleteImpact();
   const moveMutation = useMoveProcess();
 
   const sensors = useSensors(
@@ -244,7 +257,7 @@ export const ProcessTree = ({
   const handleSelect = useCallback(
     (node: ProcessNodeTree) => {
       onSelect?.(node);
-      if (!pickerMode) {
+      if (!pickerMode && !onSelect) {
         router.push(`/process/${node.nodeId}`);
       }
     },
@@ -263,6 +276,97 @@ export const ProcessTree = ({
     [moveMutation],
   );
 
+  const handleRequestDelete = useCallback(
+    (node: ProcessNodeTree) => {
+      setDeleteTarget(node);
+      deleteImpactMutation.reset();
+      deleteImpactMutation.mutate(node.nodeId);
+    },
+    [deleteImpactMutation],
+  );
+
+  const handleDeleteDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setDeleteTarget(null);
+        deleteImpactMutation.reset();
+      }
+    },
+    [deleteImpactMutation],
+  );
+
+  const renderDeleteImpact = (impact?: ProcessDeleteImpact) => {
+    if (deleteImpactMutation.isPending) {
+      return <p className="text-sm text-muted-foreground">{t("deleteImpactLoading")}</p>;
+    }
+
+    if (!impact) {
+      return null;
+    }
+
+    if (impact.childProcessCount > 0) {
+      return (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          {t("deleteBlockedByChildren", { count: impact.childProcessCount })}
+        </div>
+      );
+    }
+
+    if (!impact.hasDependencies) {
+      return (
+        <p className="text-sm text-muted-foreground">{t("deleteNoLinkedData")}</p>
+      );
+    }
+
+    return (
+      <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm">
+        <p className="font-medium text-destructive">{t("deleteImpactWarning")}</p>
+        {impact.bpmnTaskLinks.length > 0 && (
+          <section className="space-y-1">
+            <p className="font-medium">{t("deleteImpactBpmnTasks")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {impact.bpmnTaskLinks.map((link) => (
+                <li key={link.elementId}>
+                  {link.modelName} / {link.elementName ?? link.elementBpmnId}
+                  <span className="ml-1">
+                    ({link.modelProcessCode} {link.modelProcessName})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {impact.ownedBpmnModels.length > 0 && (
+          <section className="space-y-1">
+            <p className="font-medium">{t("deleteImpactOwnedBpmnModels")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {impact.ownedBpmnModels.map((model) => (
+                <li key={model.modelId}>
+                  {model.modelName} v{model.version}
+                  <span className="ml-1">
+                    ({t("deleteImpactElementCount", { count: model.elementCount })})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {impact.metadataCounts.length > 0 && (
+          <section className="space-y-1">
+            <p className="font-medium">{t("deleteImpactMetadata")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {impact.metadataCounts.map((item) => (
+                <li key={item.kind}>
+                  {t(`deleteImpactKinds.${item.kind}`)} {item.count}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    );
+  };
+
   const renderTreeList = () => (
     <ul className="space-y-0.5 overflow-y-auto">
       {tree?.map((node) => (
@@ -274,7 +378,8 @@ export const ProcessTree = ({
           expandedIds={expandedIds}
           onToggle={onToggle}
           onSelect={handleSelect}
-          onDelete={setDeleteTarget}
+          onCreate={onCreate}
+          onDelete={handleRequestDelete}
           filter={debouncedSearch}
           pickerMode={pickerMode}
         />
@@ -305,7 +410,10 @@ export const ProcessTree = ({
         className="flex-1"
       />
       {!pickerMode && (
-        <Button size="sm" onClick={() => router.push("/process/new")}>
+        <Button
+          size="sm"
+          onClick={() => (onCreate ? onCreate(null) : router.push("/process/new"))}
+        >
           <Plus className="size-4" />
           {t("new")}
         </Button>
@@ -317,7 +425,10 @@ export const ProcessTree = ({
     <EmptyState
       title={t("empty")}
       action={
-        <Button size="sm" onClick={() => router.push("/process/new")}>
+        <Button
+          size="sm"
+          onClick={() => (onCreate ? onCreate(null) : router.push("/process/new"))}
+        >
           {t("createFirst")}
         </Button>
       }
@@ -347,19 +458,37 @@ export const ProcessTree = ({
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        onOpenChange={() => setDeleteTarget(null)}
+        onOpenChange={handleDeleteDialogOpenChange}
         title={t("deleteConfirmTitle")}
         description={t("deleteConfirmDesc", { name: deleteTarget?.name ?? "" })}
+        confirmLabel={
+          deleteImpactMutation.data?.hasDependencies
+            ? t("deleteCascadeConfirm")
+            : undefined
+        }
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) {
-            deleteMutation.mutate(deleteTarget.nodeId, {
-              onSuccess: () => setDeleteTarget(null),
-            });
+            deleteMutation.mutate(
+              {
+                nodeId: deleteTarget.nodeId,
+                cascade: deleteImpactMutation.data?.hasDependencies ?? false,
+              },
+              {
+                onSuccess: () => handleDeleteDialogOpenChange(false),
+              },
+            );
           }
         }}
-        loading={deleteMutation.isPending}
-      />
+        loading={deleteMutation.isPending || deleteImpactMutation.isPending}
+        confirmDisabled={
+          !deleteImpactMutation.data ||
+          deleteImpactMutation.data.childProcessCount > 0 ||
+          deleteImpactMutation.isError
+        }
+      >
+        {renderDeleteImpact(deleteImpactMutation.data)}
+      </ConfirmDialog>
     </div>
   );
 };

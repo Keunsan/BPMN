@@ -140,3 +140,49 @@ export interface ProcessHistoryDto {
   createdAt: Date;
   snapshotData: Record<string, unknown> | null;
 }
+
+export type ProcessDeleteImpactKind =
+  | "taskAttribute"
+  | "taskPredecessor"
+  | "taskRoleMapping"
+  | "taskSystemMapping"
+  | "taskInterfaceMapping"
+  | "taskDataTableLink"
+  | "taskKpiMapping"
+  | "taskRiskMapping"
+  | "taskControlMapping"
+  | "taskDocumentMapping";
+
+export interface ProcessDeleteImpactCount {
+  kind: ProcessDeleteImpactKind;
+  count: number;
+}
+
+export interface ProcessDeleteBpmnTaskLink {
+  elementId: number;
+  elementBpmnId: string;
+  elementName: string | null;
+  elementType: string;
+  modelId: number;
+  modelName: string;
+  modelProcessCode: string;
+  modelProcessName: string;
+}
+
+export interface ProcessDeleteBpmnModelImpact {
+  modelId: number;
+  modelName: string;
+  version: string;
+  status: string;
+  elementCount: number;
+}
+
+export interface ProcessDeleteImpact {
+  nodeId: number;
+  childProcessCount: number;
+  bpmnTaskLinks: ProcessDeleteBpmnTaskLink[];
+  ownedBpmnModels: ProcessDeleteBpmnModelImpact[];
+  metadataCounts: ProcessDeleteImpactCount[];
+  hasDependencies: boolean;
+  canCascadeDelete: boolean;
+}

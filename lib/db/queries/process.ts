@@ -3,6 +3,11 @@ import "server-only";
 import type { Locale } from "@/lib/i18n/config";
 import type {
   CreateProcessInput,
+  ProcessDeleteBpmnModelImpact,
+  ProcessDeleteBpmnTaskLink,
+  ProcessDeleteImpact,
+  ProcessDeleteImpactCount,
+  ProcessDeleteImpactKind,
   ProcessI18nMap,
   ProcessNode,
   UpdateProcessInput,
@@ -84,6 +89,136 @@ export const countChildProcesses = async (nodeId: number): Promise<number> => {
     { nodeId },
   );
   return row?.cnt ?? 0;
+};
+
+const deleteImpactCountQueries: Array<{
+  kind: ProcessDeleteImpactKind;
+  sql: string;
+}> = [
+  {
+    kind: "taskAttribute",
+    sql: "SELECT COUNT(*) AS cnt FROM task_attribute WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskPredecessor",
+    sql: `SELECT COUNT(*) AS cnt
+          FROM task_predecessor
+          WHERE node_id = @nodeId OR predecessor_node_id = @nodeId`,
+  },
+  {
+    kind: "taskRoleMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_role_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskSystemMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_system_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskInterfaceMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_interface_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskDataTableLink",
+    sql: "SELECT COUNT(*) AS cnt FROM task_data_table_link WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskKpiMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_kpi_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskRiskMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_risk_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskControlMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_control_mapping WHERE node_id = @nodeId",
+  },
+  {
+    kind: "taskDocumentMapping",
+    sql: "SELECT COUNT(*) AS cnt FROM task_document_mapping WHERE node_id = @nodeId",
+  },
+];
+
+/** 프로세스 삭제 시 함께 정리해야 할 참조 데이터를 조회한다. */
+export const getProcessDeleteImpact = async (
+  nodeId: number,
+): Promise<ProcessDeleteImpact> => {
+  const childProcessCount = await countChildProcesses(nodeId);
+  const bpmnTaskLinkRows = await query<Record<string, unknown>>(
+    `SELECT
+       be.element_id AS elementId,
+       be.element_bpmn_id AS elementBpmnId,
+       be.element_name AS elementName,
+       be.element_type AS elementType,
+       bm.model_id AS modelId,
+       bm.model_name AS modelName,
+       owner.code AS modelProcessCode,
+       owner.name AS modelProcessName
+     FROM bpmn_element be
+     INNER JOIN bpmn_model bm ON bm.model_id = be.model_id
+     INNER JOIN process_node owner ON owner.node_id = bm.node_id
+     WHERE be.linked_node_id = @nodeId
+     ORDER BY bm.model_name, be.element_id`,
+    { nodeId },
+  );
+  const ownedBpmnModelRows = await query<Record<string, unknown>>(
+    `SELECT
+       bm.model_id AS modelId,
+       bm.model_name AS modelName,
+       bm.version,
+       bm.status,
+       COUNT(be.element_id) AS elementCount
+     FROM bpmn_model bm
+     LEFT JOIN bpmn_element be ON be.model_id = bm.model_id
+     WHERE bm.node_id = @nodeId
+     GROUP BY bm.model_id, bm.model_name, bm.version, bm.status
+     ORDER BY bm.model_name, bm.version DESC`,
+    { nodeId },
+  );
+  const bpmnTaskLinks: ProcessDeleteBpmnTaskLink[] = bpmnTaskLinkRows.map(
+    (row) => ({
+      elementId: row.elementId as number,
+      elementBpmnId: row.elementBpmnId as string,
+      elementName: (row.elementName as string | null) ?? null,
+      elementType: row.elementType as string,
+      modelId: row.modelId as number,
+      modelName: row.modelName as string,
+      modelProcessCode: row.modelProcessCode as string,
+      modelProcessName: row.modelProcessName as string,
+    }),
+  );
+  const ownedBpmnModels: ProcessDeleteBpmnModelImpact[] = ownedBpmnModelRows.map(
+    (row) => ({
+      modelId: row.modelId as number,
+      modelName: row.modelName as string,
+      version: row.version as string,
+      status: row.status as string,
+      elementCount: row.elementCount as number,
+    }),
+  );
+
+  const metadataCounts: ProcessDeleteImpactCount[] = [];
+  for (const item of deleteImpactCountQueries) {
+    const row = await queryOne<{ cnt: number }>(item.sql, { nodeId });
+    if ((row?.cnt ?? 0) > 0) {
+      metadataCounts.push({ kind: item.kind, count: row?.cnt ?? 0 });
+    }
+  }
+
+  const hasDependencies =
+    bpmnTaskLinks.length > 0 ||
+    ownedBpmnModels.length > 0 ||
+    metadataCounts.length > 0;
+
+  return {
+    nodeId,
+    childProcessCount,
+    bpmnTaskLinks,
+    ownedBpmnModels,
+    metadataCounts,
+    hasDependencies,
+    canCascadeDelete: childProcessCount === 0,
+  };
 };
 
 /** 상위코드 + 순번 자동 생성 */
@@ -238,13 +373,84 @@ export const updateProcess = async (
   return row ? mapProcessNode(row) : null;
 };
 
-export const deleteProcess = async (nodeId: number): Promise<boolean> => {
-  await query(`DELETE FROM process_node_i18n WHERE node_id = @nodeId`, { nodeId });
-  const result = await queryOne<{ node_id: number }>(
-    `DELETE FROM process_node OUTPUT DELETED.node_id WHERE node_id = @nodeId`,
-    { nodeId },
-  );
-  return Boolean(result);
+/** 프로세스와 직접 종속된 번역/이력 데이터를 함께 삭제한다. */
+export const deleteProcess = async (
+  nodeId: number,
+  options: { cascade?: boolean } = {},
+): Promise<boolean> => {
+  return transaction(async (txRequest) => {
+    if (options.cascade) {
+      await txRequest(`DELETE FROM bpmn_element WHERE linked_node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(
+        `DELETE be
+         FROM bpmn_element be
+         INNER JOIN bpmn_model bm ON bm.model_id = be.model_id
+         WHERE bm.node_id = @nodeId`,
+        { nodeId },
+      );
+      await txRequest(`DELETE FROM bpmn_model WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(
+        `DELETE FROM task_attribute_i18n
+         WHERE attr_id IN (
+           SELECT attr_id FROM task_attribute WHERE node_id = @nodeId
+         )`,
+        { nodeId },
+      );
+      await txRequest(
+        `DELETE FROM task_predecessor
+         WHERE node_id = @nodeId OR predecessor_node_id = @nodeId`,
+        { nodeId },
+      );
+      await txRequest(`DELETE FROM task_role_mapping WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(`DELETE FROM task_system_mapping WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(
+        `DELETE FROM task_interface_mapping WHERE node_id = @nodeId`,
+        { nodeId },
+      );
+      await txRequest(
+        `DELETE FROM task_data_table_link WHERE node_id = @nodeId`,
+        { nodeId },
+      );
+      await txRequest(`DELETE FROM task_kpi_mapping WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(`DELETE FROM task_risk_mapping WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(`DELETE FROM task_control_mapping WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+      await txRequest(
+        `DELETE FROM task_document_mapping WHERE node_id = @nodeId`,
+        { nodeId },
+      );
+      await txRequest(`DELETE FROM task_attribute WHERE node_id = @nodeId`, {
+        nodeId,
+      });
+    }
+
+    await txRequest(`DELETE FROM process_node_i18n WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(`DELETE FROM process_node_history WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+
+    const result = await txRequest(
+      `DELETE FROM process_node OUTPUT DELETED.node_id WHERE node_id = @nodeId`,
+      { nodeId },
+    );
+    const deletedRows = result.recordset as Array<{ node_id: number }> | undefined;
+    return Boolean(deletedRows?.[0]);
+  });
 };
 
 export const listProcessNodes = async (

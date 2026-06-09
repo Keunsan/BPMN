@@ -9,6 +9,7 @@ import { processKeys } from "@/lib/query/keys";
 import type {
   CreateProcessDto,
   MoveProcessDto,
+  ProcessDeleteImpact,
   ProcessHistoryDto,
   ProcessNodeDto,
   ProcessNodeTree,
@@ -80,11 +81,30 @@ export const useUpdateProcess = (nodeId: number) => {
 export const useDeleteProcess = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (nodeId: number) =>
-      apiDelete<{ deleted: boolean }>(`/api/process/${nodeId}`),
+    mutationFn: ({
+      nodeId,
+      cascade = false,
+    }: {
+      nodeId: number;
+      cascade?: boolean;
+    }) =>
+      apiDelete<{ deleted: boolean }>(`/api/process/${nodeId}`, {
+        params: { cascade },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: processKeys.all });
     },
+    onError: (error) => {
+      if (error instanceof ApiError) showErrorToast(error);
+    },
+  });
+};
+
+/** 프로세스 삭제 영향 범위 조회 mutation */
+export const useProcessDeleteImpact = () => {
+  return useMutation({
+    mutationFn: (nodeId: number) =>
+      apiGet<ProcessDeleteImpact>(`/api/process/${nodeId}/delete-impact`),
     onError: (error) => {
       if (error instanceof ApiError) showErrorToast(error);
     },

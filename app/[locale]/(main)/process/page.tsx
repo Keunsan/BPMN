@@ -1,12 +1,8 @@
-import { ProcessTree } from "@/components/process/ProcessTree";
+import { ProcessListClient } from "./ProcessListClient";
 
 /** 전사 프로세스 맵 */
 const ProcessListPage = () => {
-  return (
-    <div className="p-4">
-      <ProcessTree />
-    </div>
-  );
+  return <ProcessListClient />;
 };
 
 export default ProcessListPage;

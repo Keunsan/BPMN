@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "headroom": {
+      "command": "C:\\hr\\venv\\Scripts\\headroom.exe",
+      "args": ["mcp", "serve"],
+      "env": {
+        "HEADROOM_REQUIRE_RUST_CORE": "false",
+        "HEADROOM_PROXY_URL": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}

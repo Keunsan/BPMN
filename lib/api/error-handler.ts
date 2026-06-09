@@ -83,6 +83,11 @@ const defaultErrorMessages: Record<string, Record<Locale, string>> = {
     en: "Cannot directly modify Published status.",
     "zh-TW": "無法直接修改已發布狀態。",
   },
+  E409: {
+    ko: "연결된 데이터가 있어 삭제 전 확인이 필요합니다.",
+    en: "Linked data exists. Please confirm before deleting.",
+    "zh-TW": "存在關聯資料，刪除前需要確認。",
+  },
   E501: {
     ko: "시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
     en: "System error occurred. Please try again later.",

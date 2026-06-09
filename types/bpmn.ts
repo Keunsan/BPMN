@@ -98,6 +98,8 @@ export interface BpmnFilters {
 
   nodeId?: number;
 
+  linkedNodeId?: number;
+
   status?: BpmnModelStatus;
 
   isCurrent?: boolean;
