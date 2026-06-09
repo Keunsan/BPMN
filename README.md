@@ -174,6 +174,10 @@ headroom 관련
 pc 재부팅 후 터미널에서
   $env:HEADROOM_REQUIRE_RUST_CORE = "false"
   headroom proxy --port 8787
+
+한줄로 $env:HEADROOM_REQUIRE_RUST_CORE='false'; headroom proxy --port 8787
+상태확인 Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing
+
 그리고 셋팅에서 headmroom mcp 서버 가동
 
 mcp.json - headroom 경로
@@ -204,3 +208,19 @@ mcp.json - headroom 경로
     }
   }
 }
+
+
+# 어떤 프로세스가 8787 포트를 쓰는지 확인
+Get-NetTCPConnection -LocalPort 8787 -ErrorAction SilentlyContinue |
+  Select-Object OwningProcess
+# PID 확인 후 종료 (예: PID가 12345일 때)
+Stop-Process -Id 12345 -Force
+
+---- 한줄로
+Get-NetTCPConnection -LocalPort 8787 |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+
+
+
+---- 종료확인
+Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing
