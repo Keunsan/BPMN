@@ -13,10 +13,11 @@ import {
   Undo2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import type { PredecessorSelection } from "@/components/metadata/PredecessorSelect";
 import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,6 +93,18 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
 
   const selectedLink = selectedElementId ? links[selectedElementId] : null;
+  const autoPredecessor = useMemo(
+    () =>
+      selectedElementId && selectedLink
+        ? getSingleLinkedPredecessor(
+            model.bpmnXml,
+            selectedElementId,
+            selectedLink.nodeId,
+            links,
+          )
+        : null,
+    [links, model.bpmnXml, selectedElementId, selectedLink],
+  );
 
   const openLinkModal = useCallback(() => {
     apiRef.current?.dismissInteraction();
@@ -103,6 +116,36 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
       apiRef.current?.dismissInteraction();
     }
   }, [linkModalOpen]);
+
+  useEffect(() => {
+    if (!metadataOpen || !selectedElementId) {
+      return;
+    }
+
+    const revealSelectedTask = () => {
+      const sheet = document.querySelector<HTMLElement>(
+        "[data-pams-task-metadata-sheet='true']",
+      );
+      const overlayLeft = sheet?.getBoundingClientRect().left;
+
+      if (overlayLeft === undefined) {
+        return;
+      }
+
+      apiRef.current?.revealElementLeftOfOverlay(
+        selectedElementId,
+        overlayLeft,
+      );
+    };
+
+    const frameId = requestAnimationFrame(revealSelectedTask);
+    const timeoutId = window.setTimeout(revealSelectedTask, 220);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [metadataOpen, selectedElementId]);
 
   const handleSave = useCallback(
     async (createNewVersion = false) => {
@@ -337,7 +380,10 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
       </Dialog>
 
       <Sheet open={metadataOpen} onOpenChange={setMetadataOpen}>
-        <SheetContent className="w-[min(1920px,96vw)] overflow-y-auto sm:max-w-none">
+        <SheetContent
+          data-pams-task-metadata-sheet="true"
+          className="!w-[min(768px,96vw)] !max-w-none overflow-y-auto sm:!max-w-none"
+        >
           <SheetHeader>
             <SheetTitle>{t("taskMetadata")}</SheetTitle>
             <SheetDescription>
@@ -361,7 +407,10 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
                 </p>
                 <p className="text-muted-foreground">{t("linkedTaskDesc")}</p>
               </div>
-              <TaskAttributeForm nodeId={selectedLink.nodeId} />
+              <TaskAttributeForm
+                nodeId={selectedLink.nodeId}
+                autoPredecessor={autoPredecessor}
+              />
             </div>
           ) : (
             <div className="space-y-4 px-4">
@@ -412,4 +461,58 @@ const buildLinksFromModel = (
   }
 
   return map;
+};
+
+/** BPMN XML에서 선택 Task로 직접 들어오는 연결된 선행 Task가 하나인지 계산한다. */
+const getSingleLinkedPredecessor = (
+  bpmnXml: string | null,
+  selectedElementId: string,
+  selectedNodeId: number,
+  links: Record<string, ProcessLinkInfo>,
+): PredecessorSelection | null => {
+  if (!bpmnXml?.trim()) {
+    return null;
+  }
+
+  const sourceIds = new Set<string>();
+  const sequenceFlowPattern = /<bpmn:sequenceFlow\b[^>]*\/?>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = sequenceFlowPattern.exec(bpmnXml)) !== null) {
+    const tag = match[0];
+    const targetRef = getXmlAttribute(tag, "targetRef");
+    if (targetRef !== selectedElementId) {
+      continue;
+    }
+
+    const sourceRef = getXmlAttribute(tag, "sourceRef");
+    if (sourceRef) {
+      sourceIds.add(sourceRef);
+    }
+  }
+
+  if (sourceIds.size !== 1) {
+    return null;
+  }
+
+  const [sourceId] = Array.from(sourceIds);
+  const predecessor = links[sourceId];
+  if (!predecessor || predecessor.nodeId === selectedNodeId) {
+    return null;
+  }
+
+  return {
+    predecessorNodeId: predecessor.nodeId,
+    predecessorCode: predecessor.code,
+    predecessorName: predecessor.name,
+    predecessorLevel: "L4",
+    conditionDesc: null,
+    isMandatory: true,
+  };
+};
+
+/** XML 태그 문자열에서 속성 값을 읽는다. */
+const getXmlAttribute = (tag: string, name: string): string | null => {
+  const match = tag.match(new RegExp(`\\b${name}=(["'])(.*?)\\1`));
+  return match?.[2] ?? null;
 };

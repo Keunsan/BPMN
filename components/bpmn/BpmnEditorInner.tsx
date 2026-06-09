@@ -24,6 +24,7 @@ type CanvasViewbox = {
 type DiagramCanvas = {
   zoom: (mode: string) => void;
   viewbox: (box?: CanvasViewbox) => CanvasViewbox;
+  getContainer: () => HTMLElement;
 };
 
 type DiagramMinimap = {
@@ -44,6 +45,7 @@ export type BpmnEditorHandle = {
   zoomIn: () => void;
   zoomOut: () => void;
   fitViewport: () => void;
+  revealElementLeftOfOverlay: (elementId: string, overlayLeft: number) => void;
   getSelectedElementId: () => string | null;
   getSelectedElementName: () => string | null;
   toggleMinimap: () => void;
@@ -362,6 +364,9 @@ const createEditorApi = (
   fitViewport: () => {
     (modeler.get("canvas") as DiagramCanvas).zoom("fit-viewport");
   },
+  revealElementLeftOfOverlay: (elementId, overlayLeft) => {
+    revealElementLeftOfOverlay(modeler, elementId, overlayLeft);
+  },
   getSelectedElementId: () => {
     const selected = (
       modeler.get("selection") as { get: () => Array<{ id: string; type: string }> }
@@ -389,6 +394,80 @@ const createEditorApi = (
     updateElementName(modeler, elementId, name);
   },
 });
+
+/** 우측 Sheet 또는 화면 경계가 선택 요소를 가리면 보이는 영역 안으로 뷰포트를 이동한다. */
+const revealElementLeftOfOverlay = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  elementId: string,
+  overlayLeft: number,
+): void => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const containerRect = canvas.getContainer().getBoundingClientRect();
+
+  const elementRegistry = modeler.get("elementRegistry") as {
+    get: (
+      id: string,
+    ) =>
+      | { x?: number; y?: number; width?: number; height?: number }
+      | undefined;
+  };
+  const element = elementRegistry.get(elementId);
+
+  if (
+    !element ||
+    element.x === undefined ||
+    element.y === undefined ||
+    element.width === undefined ||
+    element.height === undefined ||
+    containerRect.width <= 0 ||
+    containerRect.height <= 0
+  ) {
+    return;
+  }
+
+  const viewbox = canvas.viewbox();
+  const scaleX = containerRect.width / viewbox.width;
+  const scaleY = containerRect.height / viewbox.height;
+  const elementWidth = element.width * scaleX;
+  const elementHeight = element.height * scaleY;
+  const margin = overlayLeft - containerRect.left >= elementWidth + 16 ? 16 : 0;
+  const availableRight = overlayLeft - margin;
+  const verticalMargin = containerRect.height >= elementHeight + 32 ? 16 : 0;
+  const availableTop = containerRect.top + verticalMargin;
+  const availableBottom = containerRect.bottom - verticalMargin;
+  let nextX = viewbox.x;
+  let nextY = viewbox.y;
+
+  if (availableRight > containerRect.left) {
+    const elementRight =
+      containerRect.left + (element.x + element.width - viewbox.x) * scaleX;
+
+    if (elementRight > availableRight) {
+      nextX += (elementRight - availableRight) / scaleX;
+    }
+  }
+
+  const elementTop = containerRect.top + (element.y - viewbox.y) * scaleY;
+  const elementBottom =
+    containerRect.top + (element.y + element.height - viewbox.y) * scaleY;
+
+  if (elementTop < availableTop) {
+    nextY -= (availableTop - elementTop) / scaleY;
+  } else if (elementBottom > availableBottom) {
+    nextY += (elementBottom - availableBottom) / scaleY;
+  }
+
+  if (nextX === viewbox.x && nextY === viewbox.y) {
+    return;
+  }
+
+  canvas.viewbox({
+    x: nextX,
+    y: nextY,
+    width: viewbox.width,
+    height: viewbox.height,
+  });
+};
 
 /** BPMN 요소 이름을 갱신해 다이어그램·속성 패널에 반영한다 */
 const updateElementName = (

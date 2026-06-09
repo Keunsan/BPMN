@@ -23,7 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -84,6 +83,7 @@ type SectionId =
 
 type TaskAttributeFormProps = {
   nodeId: number;
+  autoPredecessor?: PredecessorSelection | null;
 };
 
 type SectionCardProps = {
@@ -106,6 +106,7 @@ type TaskAttributeEditorProps = {
   nodeId: number;
   process: ProcessNodeDto;
   attribute: TaskAttributeDto | null;
+  autoPredecessor?: PredecessorSelection | null;
 };
 
 const emptyI18n = (): TaskAttributeI18nMap => ({
@@ -151,15 +152,20 @@ const buildInitialScalar = (
 /** 조회된 선행 프로세스를 편집 가능한 선택 모델로 변환한다. */
 const buildInitialPredecessors = (
   attribute: TaskAttributeDto | null,
+  autoPredecessor?: PredecessorSelection | null,
 ): PredecessorSelection[] =>
-  attribute?.predecessors.map((item) => ({
-    predecessorNodeId: item.predecessorNodeId,
-    predecessorCode: item.predecessorCode,
-    predecessorName: item.predecessorName,
-    predecessorLevel: item.predecessorLevel,
-    conditionDesc: item.conditionDesc,
-    isMandatory: item.isMandatory,
-  })) ?? [];
+  attribute?.predecessors.length
+    ? attribute.predecessors.map((item) => ({
+        predecessorNodeId: item.predecessorNodeId,
+        predecessorCode: item.predecessorCode,
+        predecessorName: item.predecessorName,
+        predecessorLevel: item.predecessorLevel,
+        conditionDesc: item.conditionDesc,
+        isMandatory: item.isMandatory,
+      }))
+    : autoPredecessor
+      ? [autoPredecessor]
+      : [];
 
 /** 접기/펼치기를 지원하는 Task 속성 섹션 카드다. */
 const SectionCard = ({
@@ -195,7 +201,10 @@ const SectionCard = ({
 };
 
 /** Task 속성 입력 폼 — 다국어 텍스트와 선행 프로세스를 저장한다. */
-export const TaskAttributeForm = ({ nodeId }: TaskAttributeFormProps) => {
+export const TaskAttributeForm = ({
+  nodeId,
+  autoPredecessor,
+}: TaskAttributeFormProps) => {
   const t = useTranslations("metadata");
   const {
     data: process,
@@ -224,6 +233,7 @@ export const TaskAttributeForm = ({ nodeId }: TaskAttributeFormProps) => {
       nodeId={nodeId}
       process={process}
       attribute={attribute ?? null}
+      autoPredecessor={autoPredecessor}
     />
   );
 };
@@ -233,19 +243,22 @@ const TaskAttributeEditor = ({
   nodeId,
   process,
   attribute,
+  autoPredecessor,
 }: TaskAttributeEditorProps) => {
   const t = useTranslations("metadata");
   const createMutation = useCreateTaskAttribute();
   const updateMutation = useUpdateTaskAttribute(nodeId);
   const hydratedRef = useRef(true);
-  const [dirty, setDirty] = useState(false);
+  const shouldSaveAutoPredecessor =
+    Boolean(autoPredecessor) && (attribute?.predecessors.length ?? 0) === 0;
+  const [dirty, setDirty] = useState(shouldSaveAutoPredecessor);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [i18n, setI18n] = useState<TaskAttributeI18nMap>(() =>
     buildInitialI18n(attribute),
   );
   const [predecessors, setPredecessors] = useState<PredecessorSelection[]>(() =>
-    buildInitialPredecessors(attribute),
+    buildInitialPredecessors(attribute, autoPredecessor),
   );
   const [scalar, setScalar] = useState<ScalarState>(() =>
     buildInitialScalar(attribute),
@@ -426,14 +439,6 @@ const TaskAttributeEditor = ({
           error={definitionError ?? undefined}
           placeholder={t("definitionPlaceholder")}
         />
-        <MultiLangInput
-          mode="text"
-          label={t("purpose")}
-          textValue={getTextValue("purpose")}
-          onTextChange={(value) => updateTextField("purpose", value)}
-          rows={3}
-          placeholder={t("purposePlaceholder")}
-        />
       </SectionCard>
 
       <SectionCard
@@ -447,20 +452,6 @@ const TaskAttributeEditor = ({
           label={t("inputDeliverable")}
           textValue={getTextValue("inputDeliverable")}
           onTextChange={(value) => updateTextField("inputDeliverable", value)}
-          rows={3}
-        />
-        <MultiLangInput
-          mode="text"
-          label={t("inputDataDesc")}
-          textValue={getTextValue("inputDataDesc")}
-          onTextChange={(value) => updateTextField("inputDataDesc", value)}
-          rows={3}
-        />
-        <MultiLangInput
-          mode="text"
-          label={t("inputCondition")}
-          textValue={getTextValue("inputCondition")}
-          onTextChange={(value) => updateTextField("inputCondition", value)}
           rows={3}
         />
       </SectionCard>
@@ -489,20 +480,6 @@ const TaskAttributeEditor = ({
           label={t("outputDeliverable")}
           textValue={getTextValue("outputDeliverable")}
           onTextChange={(value) => updateTextField("outputDeliverable", value)}
-          rows={3}
-        />
-        <MultiLangInput
-          mode="text"
-          label={t("outputDataDesc")}
-          textValue={getTextValue("outputDataDesc")}
-          onTextChange={(value) => updateTextField("outputDataDesc", value)}
-          rows={3}
-        />
-        <MultiLangInput
-          mode="text"
-          label={t("outputCondition")}
-          textValue={getTextValue("outputCondition")}
-          onTextChange={(value) => updateTextField("outputCondition", value)}
           rows={3}
         />
       </SectionCard>
@@ -544,22 +521,6 @@ const TaskAttributeEditor = ({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>{t("triggerEvent")}</Label>
-            <Input
-              value={scalar.triggerEvent}
-              onChange={(event) =>
-                updateScalar({ triggerEvent: event.target.value })
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{t("duration")}</Label>
-            <Input
-              value={scalar.duration}
-              onChange={(event) => updateScalar({ duration: event.target.value })}
-            />
-          </div>
         </div>
       </SectionCard>
 
@@ -579,20 +540,6 @@ const TaskAttributeEditor = ({
         open={openSections.has("remarks")}
         onToggle={toggleSection}
       >
-        <MultiLangInput
-          mode="text"
-          label={t("issues")}
-          textValue={getTextValue("issues")}
-          onTextChange={(value) => updateTextField("issues", value)}
-          rows={3}
-        />
-        <MultiLangInput
-          mode="text"
-          label={t("exceptions")}
-          textValue={getTextValue("exceptions")}
-          onTextChange={(value) => updateTextField("exceptions", value)}
-          rows={3}
-        />
         <MultiLangInput
           mode="text"
           label={t("remarks")}
