@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { GuardedLink } from "@/components/common/GuardedLink";
 import { sidebarNavIcons } from "@/components/common/sidebar-nav-icons";
@@ -137,6 +137,12 @@ export function Sidebar() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
+  const hydrateSidebarCollapsed = useUIStore((s) => s.hydrateSidebarCollapsed);
+
+  useEffect(() => {
+    hydrateSidebarCollapsed();
+  }, [hydrateSidebarCollapsed]);
+
   const { width, isResizing, handleResizePointerDown } = useHorizontalPanelResize(
     {
       storageKey: APP_SIDEBAR_WIDTH_KEY,

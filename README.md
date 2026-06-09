@@ -175,8 +175,8 @@ pc 재부팅 후 터미널에서
   $env:HEADROOM_REQUIRE_RUST_CORE = "false"
   headroom proxy --port 8787
 
-(한줄로-집노트북) $env:HEADROOM_REQUIRE_RUST_CORE='false'; headroom proxy --port 8787
-(한줄로-회사 서브노트북) $env:HEADROOM_REQUIRE_RUST_CORE='false'; & "C:\hr\venv\Scripts\headroom.exe" proxy --port 8787
+집노트북 $env:HEADROOM_REQUIRE_RUST_CORE='false'; headroom proxy --port 8787
+
 
 상태확인 Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing
 

@@ -128,6 +128,8 @@ export interface UpsertTaskAttributeDto {
 export interface TaskAttributeListFilters {
   search?: string;
   level?: "L3" | "L4";
+  nodeId?: number;
+  bpmnModelId?: number;
 }
 
 export interface TaskAttributeListItem {
@@ -141,7 +143,19 @@ export interface TaskAttributeListItem {
   parentName: string | null;
   definition: string | null;
   purpose: string | null;
+  inputDeliverable: string | null;
+  inputDataDesc: string | null;
+  inputCondition: string | null;
+  outputDeliverable: string | null;
+  outputDataDesc: string | null;
+  outputCondition: string | null;
   frequency: FrequencyType | null;
+  triggerEvent: string | null;
+  duration: string | null;
+  issues: string | null;
+  exceptions: string | null;
+  remarks: string | null;
+  version: string | null;
   bpmnModelId: number | null;
   bpmnModelName: string | null;
   bpmnElementName: string | null;

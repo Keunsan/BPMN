@@ -8,7 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -319,6 +319,18 @@ const CreateBpmnDialog = ({
   const [nodeId, setNodeId] = useState<number | null>(null);
 
   const l3Nodes = useMemo(() => flattenL3Nodes(tree ?? []), [tree]);
+  const selectedNode = useMemo(
+    () =>
+      l3Nodes.find((node) => String(node.nodeId) === String(nodeId)) ?? null,
+    [l3Nodes, nodeId],
+  );
+
+  useEffect(() => {
+    if (open) {
+      setModelName("");
+      setNodeId(null);
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -339,11 +351,28 @@ const CreateBpmnDialog = ({
           <div className="space-y-2">
             <Label>{t("linkedProcess")}</Label>
             <Select
-              value={nodeId ? String(nodeId) : ""}
-              onValueChange={(v) => v && setNodeId(Number(v))}
+              value={nodeId === null ? undefined : String(nodeId)}
+              onValueChange={(v) => {
+                if (!v) {
+                  return;
+                }
+
+                const nextNode =
+                  l3Nodes.find((node) => String(node.nodeId) === v) ?? null;
+                setNodeId(Number(v));
+                if (nextNode) {
+                  setModelName(nextNode.name);
+                }
+              }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder={t("selectProcess")} />
+              <SelectTrigger className="w-full">
+                {selectedNode ? (
+                  <span data-slot="select-value" className="flex flex-1 text-left">
+                    {selectedNode.code} — {selectedNode.name}
+                  </span>
+                ) : (
+                  <SelectValue placeholder={t("selectProcess")} />
+                )}
               </SelectTrigger>
               <SelectContent>
                 {l3Nodes.map((node) => (

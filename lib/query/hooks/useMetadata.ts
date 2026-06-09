@@ -14,13 +14,22 @@ import type {
 } from "@/types/metadata";
 
 /** Task 속성 목록 조회 훅 */
-export const useTaskAttributeList = (filters: TaskAttributeListFilters = {}) => {
+export const useTaskAttributeList = (
+  filters: TaskAttributeListFilters = {},
+  options: { enabled?: boolean } = {},
+) => {
   const params = new URLSearchParams();
   if (filters.search) {
     params.set("search", filters.search);
   }
   if (filters.level) {
     params.set("level", filters.level);
+  }
+  if (filters.nodeId) {
+    params.set("nodeId", String(filters.nodeId));
+  }
+  if (filters.bpmnModelId) {
+    params.set("bpmnModelId", String(filters.bpmnModelId));
   }
 
   const queryString = params.toString();
@@ -31,6 +40,7 @@ export const useTaskAttributeList = (filters: TaskAttributeListFilters = {}) => 
       apiGet<TaskAttributeListItem[]>(
         `/api/metadata/task-attribute${queryString ? `?${queryString}` : ""}`,
       ),
+    enabled: options.enabled ?? true,
   });
 };
 

@@ -9,6 +9,16 @@ import type {
   UpsertTaskAttributeDto,
 } from "@/types/metadata";
 
+/** 숫자 쿼리 파라미터를 필터 값으로 변환한다. */
+const parsePositiveNumber = (value: string | null): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+};
+
 /** GET /api/metadata/task-attribute — Task 속성 목록 */
 export const GET = withApiHandler(async ({ request, locale }) => {
   const { searchParams } = new URL(request.url);
@@ -18,6 +28,8 @@ export const GET = withApiHandler(async ({ request, locale }) => {
       searchParams.get("level") === "L3" || searchParams.get("level") === "L4"
         ? searchParams.get("level")
         : undefined,
+    nodeId: parsePositiveNumber(searchParams.get("nodeId")),
+    bpmnModelId: parsePositiveNumber(searchParams.get("bpmnModelId")),
   };
 
   const data = await listTaskAttributes(locale, filters);

@@ -19,12 +19,14 @@ interface UIState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  /** localStorage에서 사이드바 접힘 상태를 복원한다 (클라이언트 마운트 후 1회). */
+  hydrateSidebarCollapsed: () => void;
   setCurrentLocale: (locale: Locale) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
-  sidebarCollapsed: readSidebarCollapsed(),
+  sidebarCollapsed: false,
   currentLocale: defaultLocale,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -33,6 +35,9 @@ export const useUIStore = create<UIState>((set) => ({
       window.localStorage.setItem(APP_SIDEBAR_COLLAPSED_KEY, String(collapsed));
     }
     set({ sidebarCollapsed: collapsed });
+  },
+  hydrateSidebarCollapsed: () => {
+    set({ sidebarCollapsed: readSidebarCollapsed() });
   },
   setCurrentLocale: (locale) => set({ currentLocale: locale }),
 }));

@@ -95,7 +95,19 @@ const mapTaskAttributeListItem = (
   parentName: (row.parent_name as string | null) ?? null,
   definition: (row.definition as string | null) ?? null,
   purpose: (row.purpose as string | null) ?? null,
+  inputDeliverable: (row.input_deliverable as string | null) ?? null,
+  inputDataDesc: (row.input_data_desc as string | null) ?? null,
+  inputCondition: (row.input_condition as string | null) ?? null,
+  outputDeliverable: (row.output_deliverable as string | null) ?? null,
+  outputDataDesc: (row.output_data_desc as string | null) ?? null,
+  outputCondition: (row.output_condition as string | null) ?? null,
   frequency: (row.frequency as TaskAttributeListItem["frequency"]) ?? null,
+  triggerEvent: (row.trigger_event as string | null) ?? null,
+  duration: (row.duration as string | null) ?? null,
+  issues: (row.issues as string | null) ?? null,
+  exceptions: (row.exceptions as string | null) ?? null,
+  remarks: (row.remarks as string | null) ?? null,
+  version: (row.version as string | null) ?? null,
   bpmnModelId: (row.bpmn_model_id as number | null) ?? null,
   bpmnModelName: (row.bpmn_model_name as string | null) ?? null,
   bpmnElementName: (row.bpmn_element_name as string | null) ?? null,
@@ -108,11 +120,38 @@ export const listTaskAttributes = async (
   filters: TaskAttributeListFilters = {},
 ): Promise<TaskAttributeListItem[]> => {
   const conditions = ["1=1"];
-  const params: Record<string, string> = { locale };
+  const params: QueryParams = { locale };
+  const bpmnModelFilterSql = filters.bpmnModelId
+    ? "AND bm.model_id = @bpmnModelId"
+    : "";
+  const bpmnModelCurrentSql = filters.bpmnModelId
+    ? "AND (bm.is_current = 1 OR bm.model_id = @bpmnModelId)"
+    : "AND bm.is_current = 1";
 
   if (filters.level) {
     conditions.push("pn.level = @level");
     params.level = filters.level;
+  }
+
+  if (filters.nodeId) {
+    conditions.push("pn.node_id = @nodeId");
+    params.nodeId = filters.nodeId;
+  }
+
+  // nodeId가 있으면 해당 Task 속성은 BPMN 연결 여부와 무관하게 표시한다.
+  if (filters.bpmnModelId && !filters.nodeId) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1
+         FROM bpmn_element be_filter
+         INNER JOIN bpmn_model bm_filter ON be_filter.model_id = bm_filter.model_id
+         WHERE be_filter.linked_node_id = pn.node_id
+           AND bm_filter.model_id = @bpmnModelId
+       )`,
+    );
+    params.bpmnModelId = filters.bpmnModelId;
+  } else if (filters.bpmnModelId) {
+    params.bpmnModelId = filters.bpmnModelId;
   }
 
   if (filters.search?.trim()) {
@@ -122,6 +161,17 @@ export const listTaskAttributes = async (
         OR COALESCE(pni_locale.name, pni_ko.name, pn.name) LIKE @search
         OR COALESCE(tai_locale.definition, tai_ko.definition, ta.definition) LIKE @search
         OR COALESCE(tai_locale.purpose, tai_ko.purpose, ta.purpose) LIKE @search
+        OR COALESCE(tai_locale.input_deliverable, tai_ko.input_deliverable, ta.input_deliverable) LIKE @search
+        OR COALESCE(tai_locale.input_data_desc, tai_ko.input_data_desc, ta.input_data_desc) LIKE @search
+        OR COALESCE(tai_locale.input_condition, tai_ko.input_condition, ta.input_condition) LIKE @search
+        OR COALESCE(tai_locale.output_deliverable, tai_ko.output_deliverable, ta.output_deliverable) LIKE @search
+        OR COALESCE(tai_locale.output_data_desc, tai_ko.output_data_desc, ta.output_data_desc) LIKE @search
+        OR COALESCE(tai_locale.output_condition, tai_ko.output_condition, ta.output_condition) LIKE @search
+        OR ta.trigger_event LIKE @search
+        OR ta.duration LIKE @search
+        OR COALESCE(tai_locale.issues, tai_ko.issues, ta.issues) LIKE @search
+        OR COALESCE(tai_locale.exceptions, tai_ko.exceptions, ta.exceptions) LIKE @search
+        OR COALESCE(tai_locale.remarks, tai_ko.remarks, ta.remarks) LIKE @search
         OR parent.code LIKE @search
         OR bpmn.model_name LIKE @search
         OR bpmn.element_name LIKE @search
@@ -136,7 +186,19 @@ export const listTaskAttributes = async (
        ta.node_id,
        COALESCE(tai_locale.definition, tai_ko.definition, ta.definition) AS definition,
        COALESCE(tai_locale.purpose, tai_ko.purpose, ta.purpose) AS purpose,
+       COALESCE(tai_locale.input_deliverable, tai_ko.input_deliverable, ta.input_deliverable) AS input_deliverable,
+       COALESCE(tai_locale.input_data_desc, tai_ko.input_data_desc, ta.input_data_desc) AS input_data_desc,
+       COALESCE(tai_locale.input_condition, tai_ko.input_condition, ta.input_condition) AS input_condition,
+       COALESCE(tai_locale.output_deliverable, tai_ko.output_deliverable, ta.output_deliverable) AS output_deliverable,
+       COALESCE(tai_locale.output_data_desc, tai_ko.output_data_desc, ta.output_data_desc) AS output_data_desc,
+       COALESCE(tai_locale.output_condition, tai_ko.output_condition, ta.output_condition) AS output_condition,
        ta.frequency,
+       ta.trigger_event,
+       ta.duration,
+       COALESCE(tai_locale.issues, tai_ko.issues, ta.issues) AS issues,
+       COALESCE(tai_locale.exceptions, tai_ko.exceptions, ta.exceptions) AS exceptions,
+       COALESCE(tai_locale.remarks, tai_ko.remarks, ta.remarks) AS remarks,
+       ta.version,
        ta.updated_at,
        pn.code AS process_code,
        pn.level AS process_level,
@@ -168,9 +230,10 @@ export const listTaskAttributes = async (
          bm.model_name,
          be.element_name
        FROM bpmn_element be
-       INNER JOIN bpmn_model bm ON be.model_id = bm.model_id AND bm.is_current = 1
+       INNER JOIN bpmn_model bm ON be.model_id = bm.model_id ${bpmnModelCurrentSql}
        WHERE be.linked_node_id = pn.node_id
-       ORDER BY bm.updated_at DESC, bm.model_id DESC
+        ${bpmnModelFilterSql}
+       ORDER BY bm.is_current DESC, bm.updated_at DESC, bm.model_id DESC
      ) bpmn
      WHERE ${conditions.join(" AND ")}
      ORDER BY COALESCE(ta.updated_at, ta.created_at) DESC, pn.code`,

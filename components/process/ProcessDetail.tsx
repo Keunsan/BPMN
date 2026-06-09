@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBpmnList } from "@/lib/query/hooks/useBpmn";
+import { useTaskAttributeList } from "@/lib/query/hooks/useMetadata";
 import {
   useProcessDetail,
   useProcessHistory,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/query/hooks/useProcess";
 import { useRouter } from "@/lib/i18n/navigation";
 import type { BpmnModelDto } from "@/types/bpmn";
+import type { TaskAttributeListItem } from "@/types/metadata";
 import type { ProcessHistoryDto, ProcessNodeDto } from "@/types/process";
 
 import { ProcessTree } from "./ProcessTree";
@@ -29,6 +31,43 @@ type ProcessDetailProps = {
   onEdit?: (node: ProcessNodeDto) => void;
 };
 
+type TaskMetadataDetailKey = keyof Pick<
+  TaskAttributeListItem,
+  | "definition"
+  | "purpose"
+  | "inputDeliverable"
+  | "inputDataDesc"
+  | "inputCondition"
+  | "outputDeliverable"
+  | "outputDataDesc"
+  | "outputCondition"
+  | "frequency"
+  | "triggerEvent"
+  | "duration"
+  | "issues"
+  | "exceptions"
+  | "remarks"
+  | "version"
+>;
+
+const taskMetadataDetailKeys: TaskMetadataDetailKey[] = [
+  "definition",
+  "purpose",
+  "inputDeliverable",
+  "inputDataDesc",
+  "inputCondition",
+  "outputDeliverable",
+  "outputDataDesc",
+  "outputCondition",
+  "frequency",
+  "triggerEvent",
+  "duration",
+  "issues",
+  "exceptions",
+  "remarks",
+  "version",
+];
+
 /** 프로세스 상세 — 트리 + 탭 패널 */
 export const ProcessDetail = ({
   nodeId,
@@ -36,6 +75,7 @@ export const ProcessDetail = ({
   onEdit,
 }: ProcessDetailProps) => {
   const t = useTranslations("process");
+  const mt = useTranslations("metadata");
   const router = useRouter();
   const { data: node, isLoading } = useProcessDetail(nodeId);
   const { data: history } = useProcessHistory(nodeId);
@@ -50,6 +90,16 @@ export const ProcessDetail = ({
   const [compareVersions, setCompareVersions] = useState<[string, string] | null>(
     null,
   );
+
+  const taskMetadataFilters = useMemo(
+    () => (node ? { nodeId } : {}),
+    [node, nodeId],
+  );
+
+  const { data: taskMetadataItems, isLoading: isTaskMetadataLoading } =
+    useTaskAttributeList(taskMetadataFilters, {
+      enabled: Boolean(node),
+    });
 
   const historyColumns: DataTableColumn<ProcessHistoryDto>[] = [
     { key: "version", header: t("version"), cell: (r) => r.version },
@@ -118,6 +168,20 @@ export const ProcessDetail = ({
     },
   ];
 
+  const getTaskMetadataLabel = (key: TaskMetadataDetailKey) =>
+    key === "version" ? t("version") : mt(key);
+
+  const renderTaskMetadataValue = (
+    item: TaskAttributeListItem,
+    key: TaskMetadataDetailKey,
+  ) => {
+    if (key === "frequency") {
+      return item.frequency ? mt(`frequencyOptions.${item.frequency}`) : "-";
+    }
+
+    return item[key] || "-";
+  };
+
   if (isLoading) return <LoadingSpinner label={t("loading")} />;
   if (!node) return <EmptyState title={t("notFound")} />;
 
@@ -175,6 +239,7 @@ export const ProcessDetail = ({
           <TabsList>
             <TabsTrigger value="info">{t("tabInfo")}</TabsTrigger>
             <TabsTrigger value="bpmn">{t("tabBpmnModels")}</TabsTrigger>
+            <TabsTrigger value="taskMetadata">{t("tabTaskMetadata")}</TabsTrigger>
             <TabsTrigger value="history">{t("tabHistory")}</TabsTrigger>
             <TabsTrigger value="compare">{t("tabCompare")}</TabsTrigger>
           </TabsList>
@@ -212,6 +277,67 @@ export const ProcessDetail = ({
             ) : (
               <EmptyState title={t("bpmnModelEmpty")} />
             )}
+          </TabsContent>
+
+          <TabsContent value="taskMetadata">
+            <div className="space-y-4">
+              {isTaskMetadataLoading ? (
+                <LoadingSpinner label={mt("loading")} />
+              ) : taskMetadataItems?.length ? (
+                <div className="space-y-4">
+                  {taskMetadataItems.map((item) => (
+                    <Card key={item.attrId}>
+                      <CardHeader className="flex flex-row items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="font-mono text-sm text-muted-foreground">
+                            {item.processCode}
+                          </p>
+                          <CardTitle className="text-base">
+                            {item.processName}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {item.bpmnModelName ?? "-"}
+                            {item.bpmnElementName
+                              ? ` · ${item.bpmnElementName}`
+                              : ""}
+                          </p>
+                        </div>
+                        <StatusBadge status={item.processStatus} />
+                      </CardHeader>
+                      <CardContent>
+                        <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                          {taskMetadataDetailKeys.map((key) => (
+                            <div key={key} className="space-y-1">
+                              <dt className="text-muted-foreground">
+                                {getTaskMetadataLabel(key)}
+                              </dt>
+                              <dd className="whitespace-pre-wrap break-words">
+                                {renderTaskMetadataValue(item, key)}
+                              </dd>
+                            </div>
+                          ))}
+                          <div className="space-y-1">
+                            <dt className="text-muted-foreground">
+                              {mt("listUpdatedAt")}
+                            </dt>
+                            <dd>
+                              {item.updatedAt
+                                ? new Date(item.updatedAt).toLocaleString()
+                                : "-"}
+                            </dd>
+                          </div>
+                        </dl>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title={t("taskMetadataEmpty")}
+                  description={t("taskMetadataEmptyDesc")}
+                />
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="history">
