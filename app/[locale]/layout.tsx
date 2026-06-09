@@ -65,7 +65,7 @@ export default async function LocaleLayout({
       lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
-      <body className="min-h-full antialiased">
+      <body className="h-full min-h-0 antialiased">
         <NextIntlClientProvider messages={messages}>
           <Providers locale={locale as Locale}>
             {children}

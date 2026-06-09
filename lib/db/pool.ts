@@ -50,12 +50,9 @@ function bindParams(request: sql.Request, params?: QueryParams): sql.Request {
     if (value === undefined) {
       continue;
     }
-    // NVARCHAR 기본 길이(4000) 초과 시 BPMN XML 등이 잘려 좌표 정보가 유실됨
-    if (typeof value === "string" && value.length > 2000) {
-      request.input(key, sql.NVarChar(sql.MAX), value);
-    } else {
-      request.input(key, value);
-    }
+    // 2-arg form — length 미지정 시 NVARCHAR(MAX)로 처리 (BPMN XML·SVG 등)
+    // sql.NVarChar(sql.MAX)는 Next.js 번들 환경에서 type.validate 오류 유발
+    request.input(key, value);
   }
 
   return request;

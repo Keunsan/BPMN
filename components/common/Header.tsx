@@ -9,6 +9,7 @@ import {
 import { useTranslations } from "next-intl";
 
 import { LanguageSelector } from "@/components/common/LanguageSelector";
+import { GuardedLink } from "@/components/common/GuardedLink";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,12 +20,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Link, useRouter } from "@/lib/i18n/navigation";
+import { useGuardedRouter } from "@/hooks/useGuardedRouter";
 import { useUIStore } from "@/lib/store/ui.store";
 
 export function Header() {
   const t = useTranslations();
-  const router = useRouter();
+  const router = useGuardedRouter();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   return (
@@ -38,10 +39,10 @@ export function Header() {
         <Menu className="size-4" />
       </Button>
 
-      <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+      <GuardedLink href="/dashboard" className="flex items-center gap-2 font-semibold">
         <LayoutDashboard className="size-5 text-primary" />
         <span className="hidden sm:inline">{t("app.title")}</span>
-      </Link>
+      </GuardedLink>
 
       <div className="relative mx-auto hidden max-w-md flex-1 md:block">
         <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />

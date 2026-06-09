@@ -21,9 +21,13 @@ export const bpmnKeys = {
   detail: (id: number) => [...bpmnKeys.details(), id] as const,
 };
 
+import type { TaskAttributeListFilters } from "@/types/metadata";
+
 export const metadataKeys = {
   all: ["metadata"] as const,
   taskAttributes: () => [...metadataKeys.all, "task-attribute"] as const,
+  taskAttributeList: (filters: TaskAttributeListFilters) =>
+    [...metadataKeys.taskAttributes(), "list", filters] as const,
   taskAttribute: (nodeId: number) =>
     [...metadataKeys.taskAttributes(), nodeId] as const,
   raci: (nodeId?: number) => [...metadataKeys.all, "raci", nodeId ?? "all"] as const,

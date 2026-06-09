@@ -1,3 +1,5 @@
+import type { ProcessStatus } from "@/types/process";
+
 export type FrequencyType =
   | "AD_HOC"
   | "DAILY"
@@ -121,6 +123,29 @@ export interface UpsertTaskAttributeDto {
   version?: string | null;
   i18n?: TaskAttributeI18nMap;
   predecessors?: UpsertTaskPredecessorDto[];
+}
+
+export interface TaskAttributeListFilters {
+  search?: string;
+  level?: "L3" | "L4";
+}
+
+export interface TaskAttributeListItem {
+  attrId: number;
+  nodeId: number;
+  processCode: string;
+  processName: string;
+  processLevel: "L3" | "L4";
+  processStatus: ProcessStatus;
+  parentCode: string | null;
+  parentName: string | null;
+  definition: string | null;
+  purpose: string | null;
+  frequency: FrequencyType | null;
+  bpmnModelId: number | null;
+  bpmnModelName: string | null;
+  bpmnElementName: string | null;
+  updatedAt: Date | null;
 }
 
 export interface TaskDataTableLink {

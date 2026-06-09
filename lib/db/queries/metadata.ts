@@ -5,10 +5,13 @@ import type {
   TaskAttribute,
   TaskAttributeI18nMap,
   TaskAttributeI18nValue,
+  TaskAttributeListFilters,
+  TaskAttributeListItem,
   TaskPredecessorDto,
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
+import type { ProcessStatus } from "@/types/process";
 
 import { query, queryOne, transaction, type QueryParams } from "../pool";
 
@@ -76,6 +79,105 @@ const mapTaskAttributeI18n = (
   }
 
   return map;
+};
+
+/** Task 속성 목록 행을 DTO로 변환한다. */
+const mapTaskAttributeListItem = (
+  row: Record<string, unknown>,
+): TaskAttributeListItem => ({
+  attrId: row.attr_id as number,
+  nodeId: row.node_id as number,
+  processCode: row.process_code as string,
+  processName: row.process_name as string,
+  processLevel: row.process_level as TaskAttributeListItem["processLevel"],
+  processStatus: row.process_status as ProcessStatus,
+  parentCode: (row.parent_code as string | null) ?? null,
+  parentName: (row.parent_name as string | null) ?? null,
+  definition: (row.definition as string | null) ?? null,
+  purpose: (row.purpose as string | null) ?? null,
+  frequency: (row.frequency as TaskAttributeListItem["frequency"]) ?? null,
+  bpmnModelId: (row.bpmn_model_id as number | null) ?? null,
+  bpmnModelName: (row.bpmn_model_name as string | null) ?? null,
+  bpmnElementName: (row.bpmn_element_name as string | null) ?? null,
+  updatedAt: row.updated_at ? new Date(row.updated_at as string) : null,
+});
+
+/** Task 속성 목록을 조회한다. */
+export const listTaskAttributes = async (
+  locale: Locale,
+  filters: TaskAttributeListFilters = {},
+): Promise<TaskAttributeListItem[]> => {
+  const conditions = ["1=1"];
+  const params: Record<string, string> = { locale };
+
+  if (filters.level) {
+    conditions.push("pn.level = @level");
+    params.level = filters.level;
+  }
+
+  if (filters.search?.trim()) {
+    conditions.push(
+      `(
+        pn.code LIKE @search
+        OR COALESCE(pni_locale.name, pni_ko.name, pn.name) LIKE @search
+        OR COALESCE(tai_locale.definition, tai_ko.definition, ta.definition) LIKE @search
+        OR COALESCE(tai_locale.purpose, tai_ko.purpose, ta.purpose) LIKE @search
+        OR parent.code LIKE @search
+        OR bpmn.model_name LIKE @search
+        OR bpmn.element_name LIKE @search
+      )`,
+    );
+    params.search = `%${filters.search.trim()}%`;
+  }
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       ta.attr_id,
+       ta.node_id,
+       COALESCE(tai_locale.definition, tai_ko.definition, ta.definition) AS definition,
+       COALESCE(tai_locale.purpose, tai_ko.purpose, ta.purpose) AS purpose,
+       ta.frequency,
+       ta.updated_at,
+       pn.code AS process_code,
+       pn.level AS process_level,
+       pn.status AS process_status,
+       COALESCE(pni_locale.name, pni_ko.name, pn.name) AS process_name,
+       parent.code AS parent_code,
+       COALESCE(parent_i18n.name, parent_i18n_ko.name, parent.name) AS parent_name,
+       bpmn.model_id AS bpmn_model_id,
+       bpmn.model_name AS bpmn_model_name,
+       bpmn.element_name AS bpmn_element_name
+     FROM task_attribute ta
+     INNER JOIN process_node pn ON ta.node_id = pn.node_id
+     LEFT JOIN task_attribute_i18n tai_locale
+       ON ta.attr_id = tai_locale.attr_id AND tai_locale.locale = @locale
+     LEFT JOIN task_attribute_i18n tai_ko
+       ON ta.attr_id = tai_ko.attr_id AND tai_ko.locale = 'ko'
+     LEFT JOIN process_node_i18n pni_locale
+       ON pn.node_id = pni_locale.node_id AND pni_locale.locale = @locale
+     LEFT JOIN process_node_i18n pni_ko
+       ON pn.node_id = pni_ko.node_id AND pni_ko.locale = 'ko'
+     LEFT JOIN process_node parent ON pn.parent_node_id = parent.node_id
+     LEFT JOIN process_node_i18n parent_i18n
+       ON parent.node_id = parent_i18n.node_id AND parent_i18n.locale = @locale
+     LEFT JOIN process_node_i18n parent_i18n_ko
+       ON parent.node_id = parent_i18n_ko.node_id AND parent_i18n_ko.locale = 'ko'
+     OUTER APPLY (
+       SELECT TOP 1
+         bm.model_id,
+         bm.model_name,
+         be.element_name
+       FROM bpmn_element be
+       INNER JOIN bpmn_model bm ON be.model_id = bm.model_id AND bm.is_current = 1
+       WHERE be.linked_node_id = pn.node_id
+       ORDER BY bm.updated_at DESC, bm.model_id DESC
+     ) bpmn
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY COALESCE(ta.updated_at, ta.created_at) DESC, pn.code`,
+    params,
+  );
+
+  return rows.map(mapTaskAttributeListItem);
 };
 
 /** Task 속성을 노드 ID로 조회한다. */

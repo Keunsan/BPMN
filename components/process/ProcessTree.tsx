@@ -54,6 +54,8 @@ type ProcessTreeProps = {
   className?: string;
   /** picker: 모달 등에서 선택만 하고 페이지 이동·편집 UI를 숨김 */
   variant?: "default" | "picker";
+  /** true면 검색은 고정하고 트리 목록만 스크롤 */
+  fixSearchOnScroll?: boolean;
 };
 
 type TreeNodeItemProps = {
@@ -203,6 +205,7 @@ export const ProcessTree = ({
   onSelect,
   className,
   variant = "default",
+  fixSearchOnScroll = false,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
   const t = useTranslations("process");
@@ -293,38 +296,53 @@ export const ProcessTree = ({
     );
   }
 
-  return (
-    <div className={cn("flex flex-col gap-3", className)}>
-      <div className="flex items-center gap-2">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder={t("searchPlaceholder")}
-          className="flex-1"
-        />
-        {!pickerMode && (
-          <Button size="sm" onClick={() => router.push("/process/new")}>
-            <Plus className="size-4" />
-            {t("new")}
-          </Button>
-        )}
-      </div>
+  const searchRow = (
+    <div className="flex shrink-0 items-center gap-2">
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder={t("searchPlaceholder")}
+        className="flex-1"
+      />
+      {!pickerMode && (
+        <Button size="sm" onClick={() => router.push("/process/new")}>
+          <Plus className="size-4" />
+          {t("new")}
+        </Button>
+      )}
+    </div>
+  );
 
-      {!tree?.length ? (
-        <EmptyState
-          title={t("empty")}
-          action={
-            <Button size="sm" onClick={() => router.push("/process/new")}>
-              {t("createFirst")}
-            </Button>
-          }
-        />
-      ) : pickerMode ? (
-        renderTreeList()
+  const treeBody = !tree?.length ? (
+    <EmptyState
+      title={t("empty")}
+      action={
+        <Button size="sm" onClick={() => router.push("/process/new")}>
+          {t("createFirst")}
+        </Button>
+      }
+    />
+  ) : pickerMode ? (
+    renderTreeList()
+  ) : (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      {renderTreeList()}
+    </DndContext>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        fixSearchOnScroll && "min-h-0 flex-1 overflow-hidden",
+        className,
+      )}
+    >
+      {searchRow}
+      {fixSearchOnScroll ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">{treeBody}</div>
       ) : (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          {renderTreeList()}
-        </DndContext>
+        treeBody
       )}
 
       <ConfirmDialog

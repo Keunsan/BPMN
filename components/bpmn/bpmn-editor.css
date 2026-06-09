@@ -32,6 +32,12 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
 }
 
+.pams-bpmn-drop-target .djs-visual > :nth-child(1) {
+  stroke: #7c3aed !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 6px rgb(124 58 237 / 45%));
+}
+
 .pams-bpmn-viewer .bjs-container,
 .pams-bpmn-viewer .djs-container {
   height: 100% !important;
@@ -65,4 +71,52 @@
 .pams-bpmn-root[data-interaction-locked="true"] .djs-popup-backdrop {
   display: none !important;
   pointer-events: none !important;
+}
+
+/* BPMN palette — 단일 열·최소 폭 */
+.pams-bpmn-root .djs-palette,
+.pams-bpmn-root .djs-palette.two-column {
+  width: 36px !important;
+  left: 6px !important;
+  top: 6px !important;
+  border-radius: 6px;
+}
+
+.pams-bpmn-root .djs-palette.two-column .djs-palette-entries {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  width: 36px !important;
+}
+
+.pams-bpmn-root .djs-palette .entry {
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  margin: 1px 0 !important;
+}
+
+.pams-bpmn-root .djs-palette .entry:before {
+  font-size: 17px !important;
+}
+
+.pams-bpmn-root .djs-palette .separator {
+  margin: 2px 2px !important;
+  width: 24px !important;
+}
+
+/* 미니맵 — 닫기 토글 숨김, 크기 축소 */
+.pams-bpmn-root .djs-minimap {
+  top: 8px;
+  right: 8px;
+  border-radius: 4px;
+}
+
+.pams-bpmn-root .djs-minimap .toggle {
+  display: none !important;
+}
+
+.pams-bpmn-root .djs-minimap.open .map {
+  width: 140px !important;
+  height: 84px !important;
 }

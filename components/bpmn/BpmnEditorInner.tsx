@@ -3,6 +3,10 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 import { EMPTY_BPMN_XML, mapBpmnJsType } from "@/lib/utils/bpmn-xml";
+import {
+  consumeProcessLinkDrag,
+  isProcessLinkDragEvent,
+} from "@/lib/constants/process-link";
 import type { BpmnElementLinkDto, BpmnElementType } from "@/types/bpmn";
 
 import type { ProcessLinkInfo } from "./ProcessLinkModal";
@@ -69,7 +73,9 @@ type BpmnEditorInnerProps = {
     x: number;
     y: number;
   } | null) => void;
+  onProcessLinkDrop?: (elementId: string, link: ProcessLinkInfo) => void;
   onReady?: (api: BpmnEditorHandle) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 /** bpmn-js 모델러 본체 */
@@ -80,12 +86,25 @@ export const BpmnEditorInner = ({
   interactionLocked = false,
   onSelectionChange,
   onTaskHoverChange,
+  onProcessLinkDrop,
   onReady,
+  onDirtyChange,
 }: BpmnEditorInnerProps) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const propertiesRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<import("bpmn-js/lib/Modeler").default | null>(null);
   const linksRef = useRef(links);
+  const onProcessLinkDropRef = useRef(onProcessLinkDrop);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  const dropHighlightRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    onProcessLinkDropRef.current = onProcessLinkDrop;
+  }, [onProcessLinkDrop]);
 
   useEffect(() => {
     linksRef.current = links;
@@ -120,9 +139,6 @@ export const BpmnEditorInner = ({
           BpmnPropertiesProviderModule,
           minimapModule,
         ],
-        keyboard: {
-          bindTo: document,
-        },
       });
 
       modelerRef.current = modeler;
@@ -190,13 +206,104 @@ export const BpmnEditorInner = ({
         }
       });
 
+      eventBus.on("commandStack.changed", () => {
+        const stack = modeler.get("commandStack") as { canUndo: () => boolean };
+        onDirtyChangeRef.current?.(stack.canUndo());
+      });
+      onDirtyChangeRef.current?.(false);
+
+      const canvasContainer = (
+        modeler.get("canvas") as DiagramCanvas
+      ).getContainer();
+      const dropTargets = Array.from(
+        new Set(
+          [canvasContainer, canvasRef.current].filter(
+            (node): node is HTMLElement => node instanceof HTMLElement,
+          ),
+        ),
+      );
+
+      const handleDragEnterOrOver = (event: DragEvent) => {
+        if (!isProcessLinkDragEvent(event.dataTransfer)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "copy";
+        }
+        const elementId = resolveLinkableElementAtPoint(
+          modeler,
+          event.clientX,
+          event.clientY,
+        );
+        setDropHighlight(modeler, elementId, dropHighlightRef);
+      };
+
+      const handleDragLeave = (event: DragEvent) => {
+        if (!isProcessLinkDragEvent(event.dataTransfer)) {
+          return;
+        }
+        if (
+          event.relatedTarget instanceof Node &&
+          dropTargets.some((target) => target.contains(event.relatedTarget as Node))
+        ) {
+          return;
+        }
+        setDropHighlight(modeler, null, dropHighlightRef);
+      };
+
+      const handleDrop = (event: DragEvent) => {
+        if (!isProcessLinkDragEvent(event.dataTransfer)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const link = event.dataTransfer
+          ? consumeProcessLinkDrag(event.dataTransfer)
+          : null;
+        const elementId = resolveLinkableElementAtPoint(
+          modeler,
+          event.clientX,
+          event.clientY,
+        );
+        setDropHighlight(modeler, null, dropHighlightRef);
+        if (link && elementId) {
+          onProcessLinkDropRef.current?.(elementId, link);
+        }
+      };
+
+      const listenerOptions: AddEventListenerOptions = { capture: true };
+
+      for (const target of dropTargets) {
+        target.addEventListener("dragenter", handleDragEnterOrOver, listenerOptions);
+        target.addEventListener("dragover", handleDragEnterOrOver, listenerOptions);
+        target.addEventListener("dragleave", handleDragLeave, listenerOptions);
+        target.addEventListener("drop", handleDrop, listenerOptions);
+      }
+
       onReady?.(createEditorApi(modeler, linksRef, modelId));
+
+      return () => {
+        for (const target of dropTargets) {
+          target.removeEventListener("dragenter", handleDragEnterOrOver, listenerOptions);
+          target.removeEventListener("dragover", handleDragEnterOrOver, listenerOptions);
+          target.removeEventListener("dragleave", handleDragLeave, listenerOptions);
+          target.removeEventListener("drop", handleDrop, listenerOptions);
+        }
+        setDropHighlight(modeler, null, dropHighlightRef);
+      };
     };
 
-    void init();
+    let cleanupDropHandlers: (() => void) | undefined;
+
+    void init().then((cleanup) => {
+      cleanupDropHandlers = cleanup;
+    });
 
     return () => {
       destroyed = true;
+      cleanupDropHandlers?.();
       if (modelerRef.current) {
         persistCanvasView(modelId, modelerRef.current);
       }
@@ -213,9 +320,16 @@ export const BpmnEditorInner = ({
   }, [links]);
 
   useEffect(() => {
-    if (interactionLocked && modelerRef.current) {
-      dismissDiagramInteraction(modelerRef.current);
+    if (!modelerRef.current) {
+      return;
     }
+
+    if (interactionLocked) {
+      dismissDiagramInteraction(modelerRef.current);
+      return;
+    }
+
+    restoreDiagramContextPad(modelerRef.current);
   }, [interactionLocked]);
 
   return (
@@ -261,10 +375,17 @@ const restoreCanvasView = (
   canvas.zoom("fit-viewport");
 };
 
-/** 다이어그램 요소 bounds로 뷰포트를 맞춘다 (fit-viewport 대신 좌표 유지) */
-const applyElementBoundsViewbox = (
+type DiagramBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+/** 다이어그램에 배치된 요소들의 전체 bounds를 계산한다 */
+const getDiagramElementBounds = (
   modeler: import("bpmn-js/lib/Modeler").default,
-): void => {
+): DiagramBounds | null => {
   const elementRegistry = modeler.get("elementRegistry") as {
     forEach: (
       callback: (element: {
@@ -275,7 +396,6 @@ const applyElementBoundsViewbox = (
       }) => void,
     ) => void;
   };
-  const canvas = modeler.get("canvas") as DiagramCanvas;
 
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -299,16 +419,85 @@ const applyElementBoundsViewbox = (
   });
 
   if (!Number.isFinite(minX)) {
+    return null;
+  }
+
+  return { minX, minY, maxX, maxY };
+};
+
+/** 다이어그램 요소 bounds로 뷰포트를 맞춘다 (fit-viewport 대신 좌표 유지) */
+const applyElementBoundsViewbox = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const bounds = getDiagramElementBounds(modeler);
+
+  if (!bounds) {
     canvas.zoom("fit-viewport");
     return;
   }
 
   const padding = 80;
   canvas.viewbox({
-    x: minX - padding,
-    y: minY - padding,
-    width: maxX - minX + padding * 2,
-    height: maxY - minY + padding * 2,
+    x: bounds.minX - padding,
+    y: bounds.minY - padding,
+    width: bounds.maxX - bounds.minX + padding * 2,
+    height: bounds.maxY - bounds.minY + padding * 2,
+  });
+};
+
+/** 좌측 BPMN palette가 차지하는 영역의 오른쪽 inset(px)을 반환한다 */
+const getPaletteRightInset = (container: HTMLElement): number => {
+  const palette = container.querySelector<HTMLElement>(".djs-palette");
+  if (!palette) {
+    return 0;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const paletteRect = palette.getBoundingClientRect();
+
+  return Math.max(0, paletteRect.right - containerRect.left);
+};
+
+/** palette 오른쪽 가용 영역 기준으로 다이어그램 전체를 화면에 맞춘다 */
+const fitViewportClearOfPalette = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const container = canvas.getContainer();
+  const containerRect = container.getBoundingClientRect();
+  const bounds = getDiagramElementBounds(modeler);
+
+  if (!bounds || containerRect.width <= 0 || containerRect.height <= 0) {
+    canvas.zoom("fit-viewport");
+    return;
+  }
+
+  const pixelPadding = 16;
+  const diagramPadding = 40;
+  const paletteRight = getPaletteRightInset(container);
+  const availLeft = paletteRight + pixelPadding;
+  const availTop = pixelPadding;
+  const availW = containerRect.width - availLeft - pixelPadding;
+  const availH = containerRect.height - pixelPadding * 2;
+
+  if (availW <= 0 || availH <= 0) {
+    canvas.zoom("fit-viewport");
+    return;
+  }
+
+  const { minX, minY, maxX, maxY } = bounds;
+  const contentW = maxX - minX + diagramPadding * 2;
+  const contentH = maxY - minY + diagramPadding * 2;
+  const contentCenterY = (minY + maxY) / 2;
+  const scale = Math.min(availW / contentW, availH / contentH);
+  const availCenterY = availTop + availH / 2;
+
+  canvas.viewbox({
+    x: minX - diagramPadding - availLeft / scale,
+    y: contentCenterY - availCenterY / scale,
+    width: containerRect.width / scale,
+    height: containerRect.height / scale,
   });
 };
 
@@ -362,7 +551,7 @@ const createEditorApi = (
     (modeler.get("zoomScroll") as { stepZoom: (d: number) => void }).stepZoom(-1);
   },
   fitViewport: () => {
-    (modeler.get("canvas") as DiagramCanvas).zoom("fit-viewport");
+    fitViewportClearOfPalette(modeler);
   },
   revealElementLeftOfOverlay: (elementId, overlayLeft) => {
     revealElementLeftOfOverlay(modeler, elementId, overlayLeft);
@@ -505,6 +694,44 @@ const dismissDiagramInteraction = (
   }
 };
 
+/** 오버레이 잠금 해제 후 선택 요소의 컨텍스트 패드를 다시 연다 */
+const restoreDiagramContextPad = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+): void => {
+  try {
+    const selected = (
+      modeler.get("selection") as {
+        get: () => Array<{ id: string }>;
+      }
+    ).get()[0];
+
+    if (!selected) {
+      return;
+    }
+
+    const element = (
+      modeler.get("elementRegistry") as {
+        get: (id: string) => object | undefined;
+      }
+    ).get(selected.id);
+
+    if (!element) {
+      return;
+    }
+
+    const contextPad = modeler.get("contextPad") as {
+      open: (target: object) => void;
+      isOpen: (target?: object) => boolean;
+    };
+
+    if (!contextPad.isOpen(element)) {
+      contextPad.open(element);
+    }
+  } catch {
+    // 서비스 미존재
+  }
+};
+
 /** 화면 밖 Task 존재를 쉽게 파악할 수 있도록 미니맵을 기본 표시한다. */
 const openMinimap = (modeler: import("bpmn-js/lib/Modeler").default): void => {
   try {
@@ -516,6 +743,110 @@ const openMinimap = (modeler: import("bpmn-js/lib/Modeler").default): void => {
 
 const isLinkableType = (type: string): boolean =>
   type.includes("Task") || type.includes("SubProcess");
+
+/** 화면 좌표 아래 linkable BPMN 요소 id를 반환한다 (드래그 중 elementFromPoint 오류 방지) */
+const resolveLinkableElementAtPoint = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  clientX: number,
+  clientY: number,
+): string | null => {
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const container = canvas.getContainer();
+  const rect = container.getBoundingClientRect();
+
+  if (
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom
+  ) {
+    return null;
+  }
+
+  const viewbox = canvas.viewbox();
+  const scaleX = rect.width / viewbox.width;
+  const scaleY = rect.height / viewbox.height;
+
+  if (scaleX <= 0 || scaleY <= 0) {
+    return null;
+  }
+
+  const canvasX = viewbox.x + (clientX - rect.left) / scaleX;
+  const canvasY = viewbox.y + (clientY - rect.top) / scaleY;
+
+  const elementRegistry = modeler.get("elementRegistry") as {
+    forEach: (
+      callback: (element: {
+        id: string;
+        type: string;
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+      }) => void,
+    ) => void;
+  };
+
+  let matchId: string | null = null;
+  let smallestArea = Number.POSITIVE_INFINITY;
+
+  elementRegistry.forEach((element) => {
+    if (
+      !isLinkableType(element.type) ||
+      element.x === undefined ||
+      element.y === undefined ||
+      element.width === undefined ||
+      element.height === undefined
+    ) {
+      return;
+    }
+
+    const withinX =
+      canvasX >= element.x && canvasX <= element.x + element.width;
+    const withinY =
+      canvasY >= element.y && canvasY <= element.y + element.height;
+
+    if (!withinX || !withinY) {
+      return;
+    }
+
+    const area = element.width * element.height;
+    if (area < smallestArea) {
+      smallestArea = area;
+      matchId = element.id;
+    }
+  });
+
+  return matchId;
+};
+
+/** 드롭 가능 Task에 하이라이트 클래스를 적용한다 */
+const setDropHighlight = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  elementId: string | null,
+  highlightRef: RefObject<string | null>,
+): void => {
+  if (highlightRef.current === elementId) {
+    return;
+  }
+
+  const canvas = modeler.get("canvas") as DiagramCanvas;
+  const container = canvas.getContainer();
+
+  if (highlightRef.current) {
+    container
+      .querySelector(`[data-element-id="${highlightRef.current}"]`)
+      ?.classList.remove("pams-bpmn-drop-target");
+  }
+
+  highlightRef.current = elementId;
+
+  if (elementId) {
+    container
+      .querySelector(`[data-element-id="${elementId}"]`)
+      ?.classList.add("pams-bpmn-drop-target");
+  }
+};
 
 const refreshLinkOverlays = (
   modeler: import("bpmn-js/lib/Modeler").default,

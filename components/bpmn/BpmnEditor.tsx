@@ -36,6 +36,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useLinkOrCreateBpmnTask } from "@/lib/query/hooks/useBpmn";
+import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
+import { cn } from "@/lib/utils";
 import type {
   BpmnElementLinkDto,
   BpmnElementType,
@@ -44,6 +46,7 @@ import type {
 
 import type { BpmnEditorHandle } from "./BpmnEditorInner";
 import { ProcessLinkModal, type ProcessLinkInfo } from "./ProcessLinkModal";
+import { ProcessLinkSidebar } from "./ProcessLinkSidebar";
 
 const BpmnEditorInner = dynamic(
   () => import("./BpmnEditorInner").then((m) => m.BpmnEditorInner),
@@ -90,7 +93,78 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [taskHover, setTaskHover] = useState<TaskHoverState | null>(null);
+  const [diagramDirty, setDiagramDirty] = useState(false);
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
+  const [savedLinksJson, setSavedLinksJson] = useState(() =>
+    JSON.stringify(buildLinksFromModel(model)),
+  );
+  const setBlocking = useNavigationGuardStore((s) => s.setBlocking);
+  const setSaveBeforeLeave = useNavigationGuardStore((s) => s.setSaveBeforeLeave);
+  const clearGuard = useNavigationGuardStore((s) => s.clearGuard);
+
+  const linksDirty = JSON.stringify(links) !== savedLinksJson;
+  const isDirty = diagramDirty || linksDirty;
+  const [linkSidebarWidth, setLinkSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 288;
+    }
+    const saved = window.localStorage.getItem("pams-bpmn-link-sidebar-width");
+    const parsed = saved ? Number(saved) : 288;
+    return Number.isFinite(parsed)
+      ? Math.min(480, Math.max(220, parsed))
+      : 288;
+  });
+  const linkSidebarWidthRef = useRef(linkSidebarWidth);
+  const sidebarResizeRef = useRef<{ startX: number; startW: number } | null>(
+    null,
+  );
+  const [isResizingLinkSidebar, setIsResizingLinkSidebar] = useState(false);
+  const [linkSidebarOpen, setLinkSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    linkSidebarWidthRef.current = linkSidebarWidth;
+  }, [linkSidebarWidth]);
+
+  useEffect(() => {
+    if (!isResizingLinkSidebar) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!sidebarResizeRef.current) {
+        return;
+      }
+      const delta = event.clientX - sidebarResizeRef.current.startX;
+      const next = Math.min(
+        480,
+        Math.max(220, sidebarResizeRef.current.startW + delta),
+      );
+      setLinkSidebarWidth(next);
+    };
+
+    const handlePointerUp = () => {
+      sidebarResizeRef.current = null;
+      setIsResizingLinkSidebar(false);
+      window.localStorage.setItem(
+        "pams-bpmn-link-sidebar-width",
+        String(linkSidebarWidthRef.current),
+      );
+      document.body.style.removeProperty("user-select");
+      document.body.style.removeProperty("cursor");
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.style.removeProperty("user-select");
+      document.body.style.removeProperty("cursor");
+    };
+  }, [isResizingLinkSidebar]);
 
   const selectedLink = selectedElementId ? links[selectedElementId] : null;
   const autoPredecessor = useMemo(
@@ -116,6 +190,12 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
       apiRef.current?.dismissInteraction();
     }
   }, [linkModalOpen]);
+
+  useEffect(() => {
+    if (metadataOpen) {
+      apiRef.current?.dismissInteraction();
+    }
+  }, [metadataOpen]);
 
   useEffect(() => {
     if (!metadataOpen || !selectedElementId) {
@@ -148,45 +228,97 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   }, [metadataOpen, selectedElementId]);
 
   const handleSave = useCallback(
-    async (createNewVersion = false) => {
+    async (createNewVersion = false): Promise<boolean> => {
       const result = await apiRef.current?.save();
       if (!result) {
-        return;
+        return false;
       }
 
-      await onSave({
-        bpmnXml: result.xml,
-        svgContent: result.svg,
-        elements: result.elements,
-        createNewVersion,
-      });
-      toast.success(t("saved"));
+      try {
+        await onSave({
+          bpmnXml: result.xml,
+          svgContent: result.svg,
+          elements: result.elements,
+          createNewVersion,
+        });
+        setSavedLinksJson(JSON.stringify(links));
+        setDiagramDirty(false);
+        toast.success(t("saved"));
+        return true;
+      } catch {
+        return false;
+      }
     },
-    [onSave, t],
+    [links, onSave, t],
+  );
+
+  useEffect(() => {
+    setBlocking(isDirty);
+  }, [isDirty, setBlocking]);
+
+  useEffect(() => {
+    setSaveBeforeLeave(async () => handleSave(false));
+  }, [handleSave, setSaveBeforeLeave]);
+
+  useEffect(() => {
+    return () => {
+      clearGuard();
+    };
+  }, [clearGuard]);
+
+  const linkElementToProcess = useCallback(
+    (elementId: string, link: ProcessLinkInfo | null) => {
+      setLinks((prev) => {
+        const next = { ...prev };
+        if (link) {
+          next[elementId] = link;
+        } else {
+          delete next[elementId];
+        }
+        return next;
+      });
+
+      if (link) {
+        apiRef.current?.updateElementName(elementId, link.name);
+        if (elementId === selectedElementId) {
+          setSelectedElementName(link.name);
+        }
+        toast.success(t("linkSuccess"));
+      } else {
+        apiRef.current?.updateElementName(elementId, "");
+        if (elementId === selectedElementId) {
+          setSelectedElementName(null);
+        }
+      }
+    },
+    [selectedElementId, t],
   );
 
   const handleLinkConfirm = (link: ProcessLinkInfo | null) => {
     if (!selectedElementId) {
       return;
     }
+    linkElementToProcess(selectedElementId, link);
+  };
 
-    setLinks((prev) => {
-      const next = { ...prev };
-      if (link) {
-        next[selectedElementId] = link;
-      } else {
-        delete next[selectedElementId];
-      }
-      return next;
-    });
-
-    if (link) {
-      apiRef.current?.updateElementName(selectedElementId, link.name);
+  const handleProcessLinkDrop = useCallback(
+    (elementId: string, link: ProcessLinkInfo) => {
+      linkElementToProcess(elementId, link);
+      setSelectedElementId(elementId);
       setSelectedElementName(link.name);
-    } else {
-      apiRef.current?.updateElementName(selectedElementId, "");
-      setSelectedElementName(null);
-    }
+    },
+    [linkElementToProcess],
+  );
+
+  const handleSidebarResizePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+    sidebarResizeRef.current = {
+      startX: event.clientX,
+      startW: linkSidebarWidthRef.current,
+    };
+    setIsResizingLinkSidebar(true);
   };
 
   const handleCreateTaskMetadata = async () => {
@@ -213,7 +345,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-semibold">{model.modelName}</h1>
@@ -274,15 +406,6 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           variant="outline"
           size="sm"
           disabled={!selectedElementId}
-          onClick={openLinkModal}
-        >
-          <Link2 className="mr-1 size-4" />
-          {t("linkProcess")}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!selectedElementId}
           onClick={() => setMetadataOpen(true)}
         >
           <ClipboardList className="mr-1 size-4" />
@@ -298,22 +421,55 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1">
-        <BpmnEditorInner
-          modelId={model.modelId}
-          xml={model.bpmnXml}
+      <div className="flex min-h-0 flex-1">
+        <ProcessLinkSidebar
+          parentNodeId={model.nodeId}
+          parentCode={model.processCode}
+          parentName={model.processName}
           links={links}
-          interactionLocked={linkModalOpen}
-          onReady={(api) => {
-            apiRef.current = api;
-          }}
-          onSelectionChange={(id, name, type) => {
-            setSelectedElementId(id);
-            setSelectedElementName(name ?? null);
-            setSelectedElementType(type ?? null);
-          }}
-          onTaskHoverChange={setTaskHover}
+          selectedElementId={selectedElementId}
+          selectedElementName={selectedElementName}
+          onLinkToSelected={(link) => handleLinkConfirm(link)}
+          open={linkSidebarOpen}
+          onOpenChange={setLinkSidebarOpen}
+          width={linkSidebarWidth}
         />
+        {linkSidebarOpen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("linkPanelResize")}
+          aria-valuenow={linkSidebarWidth}
+          aria-valuemin={220}
+          aria-valuemax={480}
+          className={cn(
+            "relative z-20 flex w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center border-r bg-muted/40 transition-colors hover:bg-primary/15 active:bg-primary/25",
+            isResizingLinkSidebar && "bg-primary/25",
+          )}
+          onPointerDown={handleSidebarResizePointerDown}
+        >
+          <div className="pointer-events-none h-10 w-0.5 rounded-full bg-border" />
+        </div>
+        )}
+        <div className="min-h-0 min-w-0 flex-1">
+          <BpmnEditorInner
+            modelId={model.modelId}
+            xml={model.bpmnXml}
+            links={links}
+            interactionLocked={linkModalOpen || metadataOpen}
+            onReady={(api) => {
+              apiRef.current = api;
+            }}
+            onSelectionChange={(id, name, type) => {
+              setSelectedElementId(id);
+              setSelectedElementName(name ?? null);
+              setSelectedElementType(type ?? null);
+            }}
+            onTaskHoverChange={setTaskHover}
+            onProcessLinkDrop={handleProcessLinkDrop}
+            onDirtyChange={setDiagramDirty}
+          />
+        </div>
       </div>
 
       {taskHover && (

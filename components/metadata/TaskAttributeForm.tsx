@@ -84,6 +84,7 @@ type SectionId =
 type TaskAttributeFormProps = {
   nodeId: number;
   autoPredecessor?: PredecessorSelection | null;
+  variant?: "page" | "sheet";
 };
 
 type SectionCardProps = {
@@ -107,6 +108,7 @@ type TaskAttributeEditorProps = {
   process: ProcessNodeDto;
   attribute: TaskAttributeDto | null;
   autoPredecessor?: PredecessorSelection | null;
+  variant: "page" | "sheet";
 };
 
 const emptyI18n = (): TaskAttributeI18nMap => ({
@@ -204,6 +206,7 @@ const SectionCard = ({
 export const TaskAttributeForm = ({
   nodeId,
   autoPredecessor,
+  variant = "page",
 }: TaskAttributeFormProps) => {
   const t = useTranslations("metadata");
   const {
@@ -220,11 +223,21 @@ export const TaskAttributeForm = ({
   const isLoading = processLoading || attributeLoading;
 
   if (isLoading) {
-    return <LoadingSpinner label={t("loading")} />;
+    return (
+      <LoadingSpinner
+        label={t("loading")}
+        className={variant === "sheet" ? "min-h-[480px]" : undefined}
+      />
+    );
   }
 
   if (processError || attributeError || !process) {
-    return <EmptyState title={t("loadError")} />;
+    return (
+      <EmptyState
+        title={t("loadError")}
+        className={variant === "sheet" ? "min-h-[480px]" : undefined}
+      />
+    );
   }
 
   return (
@@ -234,6 +247,7 @@ export const TaskAttributeForm = ({
       process={process}
       attribute={attribute ?? null}
       autoPredecessor={autoPredecessor}
+      variant={variant}
     />
   );
 };
@@ -244,6 +258,7 @@ const TaskAttributeEditor = ({
   process,
   attribute,
   autoPredecessor,
+  variant,
 }: TaskAttributeEditorProps) => {
   const t = useTranslations("metadata");
   const createMutation = useCreateTaskAttribute();
@@ -385,23 +400,41 @@ const TaskAttributeEditor = ({
   }, [dirty, payload, save]);
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSheet = variant === "sheet";
 
   return (
     <form
-      className="mx-auto max-w-5xl space-y-4 p-6"
+      className={cn(
+        "space-y-4",
+        isSheet ? "w-full px-0 py-0" : "mx-auto max-w-5xl p-6",
+      )}
       onSubmit={(event) => {
         event.preventDefault();
         void save(true);
       }}
     >
-      <div className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">{t("breadcrumb")}</p>
-          <h1 className="text-2xl font-semibold">
-            {process.code} {process.displayName ?? process.name}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
+      <div
+        className={cn(
+          "flex gap-3 border-b pb-4",
+          isSheet
+            ? "sticky top-0 z-10 flex-row items-center justify-between bg-popover py-3"
+            : "flex-col sm:flex-row sm:items-center sm:justify-between",
+        )}
+      >
+        {!isSheet && (
+          <div>
+            <p className="text-sm text-muted-foreground">{t("breadcrumb")}</p>
+            <h1 className="text-2xl font-semibold">
+              {process.code} {process.displayName ?? process.name}
+            </h1>
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex items-center gap-3",
+            isSheet && "ml-auto w-full justify-end",
+          )}
+        >
           <span
             className={cn(
               "text-xs text-muted-foreground",
@@ -416,7 +449,7 @@ const TaskAttributeEditor = ({
                   ? t("autoSaved")
                   : t("saved")}
           </span>
-          <Button type="submit" disabled={isSaving}>
+          <Button type="submit" disabled={isSaving} size={isSheet ? "sm" : "default"}>
             <Save className="size-4" />
             {t("save")}
           </Button>

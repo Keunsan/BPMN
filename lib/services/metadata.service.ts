@@ -5,6 +5,8 @@ import type { Locale } from "@/lib/i18n/config";
 import type {
   TaskAttributeDto,
   TaskAttributeI18nMap,
+  TaskAttributeListFilters,
+  TaskAttributeListItem,
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
@@ -122,6 +124,14 @@ const validatePredecessors = async (
   }
 
   return normalized;
+};
+
+/** Task 속성 목록을 조회한다. */
+export const listTaskAttributes = async (
+  locale: Locale,
+  filters: TaskAttributeListFilters = {},
+): Promise<TaskAttributeListItem[]> => {
+  return metadataQueries.listTaskAttributes(locale, filters);
 };
 
 /** Task 속성 상세를 조회한다. */
