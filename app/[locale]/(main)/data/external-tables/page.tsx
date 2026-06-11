@@ -1,5 +1,9 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { ExternalTableBrowser } from "@/components/data/ExternalTableBrowser";
 
 export default function ExternalTablesPage() {
-  return <PlaceholderPage titleKey="menu.data" />;
+  return (
+    <div className="p-4">
+      <ExternalTableBrowser />
+    </div>
+  );
 }

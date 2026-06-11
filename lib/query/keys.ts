@@ -1,6 +1,11 @@
 import type { BpmnFilters } from "@/types/bpmn";
+import type {
+  CommonCodeGroupListFilters,
+  CommonCodeItemListFilters,
+} from "@/types/common-code";
 import type { ExternalTableQuery } from "@/types/external";
 import type { ProcessFilters } from "@/types/process";
+import type { SystemListFilters } from "@/types/system";
 
 /** 도메인별 쿼리 키 팩토리 — PRD 8.1.1 */
 export const processKeys = {
@@ -33,6 +38,8 @@ export const metadataKeys = {
   raci: (nodeId?: number) => [...metadataKeys.all, "raci", nodeId ?? "all"] as const,
   systems: (nodeId?: number) =>
     [...metadataKeys.all, "system", nodeId ?? "all"] as const,
+  dataTables: (nodeId?: number) =>
+    [...metadataKeys.all, "data-table", nodeId ?? "all"] as const,
 };
 
 export const externalKeys = {
@@ -43,9 +50,33 @@ export const externalKeys = {
     [...externalKeys.all, "columns", { systemId, tableName, schemaName }] as const,
 };
 
+export const systemKeys = {
+  all: ["system"] as const,
+  lists: () => [...systemKeys.all, "list"] as const,
+  list: (filters: SystemListFilters) => [...systemKeys.lists(), filters] as const,
+  detail: (systemId: number) => [...systemKeys.all, "detail", systemId] as const,
+  modules: (systemId: number) => [...systemKeys.all, "modules", systemId] as const,
+  screens: (moduleId: number) => [...systemKeys.all, "screens", moduleId] as const,
+  hierarchy: () => [...systemKeys.all, "hierarchy"] as const,
+};
+
 export const analysisKeys = {
   all: ["analysis"] as const,
   search: (query: string) => [...analysisKeys.all, "search", query] as const,
   impact: (params: Record<string, unknown>) =>
     [...analysisKeys.all, "impact", params] as const,
+};
+
+export const commonCodeKeys = {
+  all: ["common-code"] as const,
+  groups: () => [...commonCodeKeys.all, "groups"] as const,
+  groupList: (filters: CommonCodeGroupListFilters) =>
+    [...commonCodeKeys.groups(), "list", filters] as const,
+  group: (groupId: number) => [...commonCodeKeys.groups(), groupId] as const,
+  items: (groupId: number) => [...commonCodeKeys.all, "items", groupId] as const,
+  itemList: (groupId: number, filters: CommonCodeItemListFilters) =>
+    [...commonCodeKeys.items(groupId), "list", filters] as const,
+  item: (codeId: number) => [...commonCodeKeys.all, "item", codeId] as const,
+  lookup: (groupCode: string) =>
+    [...commonCodeKeys.all, "lookup", groupCode] as const,
 };

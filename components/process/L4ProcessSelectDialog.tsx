@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { ProcessTree } from "@/components/process/ProcessTree";
 import { Button } from "@/components/ui/button";
@@ -56,11 +56,12 @@ export const L4ProcessSelectDialog = ({
     selectedProcess ?? currentProcess ?? null,
   );
 
-  useEffect(() => {
-    if (open) {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
       setSelected(selectedProcess ?? currentProcess ?? null);
     }
-  }, [currentProcess, open, selectedProcess]);
+    onOpenChange(nextOpen);
+  };
 
   const handleSelect = (node: ProcessNodeTree) => {
     if (node.level !== "L4") {
@@ -85,7 +86,7 @@ export const L4ProcessSelectDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

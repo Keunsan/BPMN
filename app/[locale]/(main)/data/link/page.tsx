@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { DataTableLink } from "@/components/data/DataTableLink";
 
 export default function DataLinkPage() {
-  return <PlaceholderPage titleKey="menu.data" />;
+  return <DataTableLink />;
 }

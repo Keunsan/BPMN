@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { SystemMasterManagement } from "@/components/admin/SystemMasterManagement";
 
 export default function AdminSystemsPage() {
-  return <PlaceholderPage titleKey="menu.systemMaster" />;
+  return <SystemMasterManagement />;
 }

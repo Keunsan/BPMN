@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 
 import { LanguageSelector } from "@/components/common/LanguageSelector";
 import { GuardedLink } from "@/components/common/GuardedLink";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -56,6 +57,7 @@ export function Header() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
         <LanguageSelector />
 
         <DropdownMenu>

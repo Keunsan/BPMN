@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
 
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
@@ -29,9 +30,11 @@ export function Providers({ locale, children }: ProvidersProps) {
   const queryClient = getQueryClient();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <LocaleSync locale={locale} />
-      <ErrorBoundary>{children}</ErrorBoundary>
-    </QueryClientProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
+      <QueryClientProvider client={queryClient}>
+        <LocaleSync locale={locale} />
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

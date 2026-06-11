@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { TaskSystemMapping } from "@/components/metadata/TaskSystemMapping";
 
-export default function SystemMetadataPage() {
-  return <PlaceholderPage titleKey="menu.metadata" />;
+export default function MetadataSystemPage() {
+  return <TaskSystemMapping />;
 }

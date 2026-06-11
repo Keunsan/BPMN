@@ -22,12 +22,10 @@ const parsePositiveNumber = (value: string | null): number | undefined => {
 /** GET /api/metadata/task-attribute — Task 속성 목록 */
 export const GET = withApiHandler(async ({ request, locale }) => {
   const { searchParams } = new URL(request.url);
+  const levelParam = searchParams.get("level");
   const filters: TaskAttributeListFilters = {
     search: searchParams.get("search") ?? undefined,
-    level:
-      searchParams.get("level") === "L3" || searchParams.get("level") === "L4"
-        ? searchParams.get("level")
-        : undefined,
+    level: levelParam === "L3" || levelParam === "L4" ? levelParam : undefined,
     nodeId: parsePositiveNumber(searchParams.get("nodeId")),
     bpmnModelId: parsePositiveNumber(searchParams.get("bpmnModelId")),
   };

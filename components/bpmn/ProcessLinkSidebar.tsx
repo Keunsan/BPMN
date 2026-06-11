@@ -199,7 +199,7 @@ export const ProcessLinkSidebar = ({
             {filteredProcesses.map((node) => {
               const linkedCount = linkedCountByNodeId.get(node.nodeId) ?? 0;
               const isLinkedToSelection =
-                Boolean(selectedElementId) &&
+                selectedElementId !== null &&
                 links[selectedElementId]?.nodeId === node.nodeId;
 
               return (

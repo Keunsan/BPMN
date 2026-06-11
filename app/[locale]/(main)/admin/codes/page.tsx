@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { CommonCodeManagement } from "@/components/admin/CommonCodeManagement";
 
 export default function AdminCodesPage() {
-  return <PlaceholderPage titleKey="menu.codeManagement" />;
+  return <CommonCodeManagement />;
 }

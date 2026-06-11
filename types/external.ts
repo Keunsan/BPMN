@@ -19,7 +19,7 @@ export interface ExternalColumn {
   description: string | null;
 }
 
-export type ApiAuthType = "NONE" | "BASIC" | "OAUTH" | "API_KEY";
+import type { ApiAuthType } from "@/types/system";
 
 export interface SystemApiConfig {
   tableApiUrl: string | null;

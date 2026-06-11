@@ -8,7 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -325,15 +325,16 @@ const CreateBpmnDialog = ({
     [l3Nodes, nodeId],
   );
 
-  useEffect(() => {
-    if (open) {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
       setModelName("");
       setNodeId(null);
     }
-  }, [open]);
+    onOpenChange(nextOpen);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("newModel")}</DialogTitle>

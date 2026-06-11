@@ -31,7 +31,10 @@ export const GuardedLink = ({ href, onClick, ...props }: GuardedLinkProps) => {
       return;
     }
 
-    const targetPath = getPathname({ href, locale });
+    const targetPath =
+      typeof href === "string"
+        ? getPathname({ href, locale })
+        : (href.pathname ?? "");
     if (targetPath === pathname) {
       return;
     }

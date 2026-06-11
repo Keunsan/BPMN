@@ -2,7 +2,7 @@
   display: flex;
   height: 100%;
   min-height: 480px;
-  background: hsl(var(--background));
+  background: var(--background);
 }
 
 .pams-bpmn-canvas {
@@ -14,6 +14,78 @@
 .pams-bpmn-canvas .bjs-container,
 .pams-bpmn-canvas .djs-container {
   height: 100% !important;
+}
+
+/* diagram-js UI — 다크모드 토큰 재정의 (palette, context-pad, popup) */
+.dark .pams-bpmn-canvas .djs-parent {
+  --canvas-fill-color: oklch(0.18 0 0);
+
+  --context-pad-entry-background-color: oklch(0.28 0 0);
+  --context-pad-entry-hover-background-color: oklch(0.35 0 0);
+
+  --palette-entry-color: oklch(0.88 0 0);
+  --palette-entry-hover-color: oklch(0.72 0.12 250);
+  --palette-entry-selected-color: oklch(0.75 0.14 250);
+  --palette-background-color: oklch(0.24 0 0);
+  --palette-border-color: oklch(0.38 0 0);
+  --palette-separator-color: oklch(0.38 0 0);
+  --palette-toggle-hover-background-color: oklch(0.32 0 0);
+
+  --popup-background-color: oklch(0.24 0 0);
+  --popup-entry-title-color: oklch(0.82 0 0);
+  --popup-description-color: oklch(0.65 0 0);
+  --popup-entry-hover-color: oklch(0.32 0 0);
+  --popup-search-border-color: oklch(0.38 0 0);
+  --popup-header-group-divider-color: oklch(0.38 0 0);
+  --popup-no-results-color: oklch(0.58 0 0);
+  --popup-disabled-color: oklch(0.48 0 0);
+
+  --shape-connect-allowed-fill-color: oklch(0.3 0 0);
+  --shape-drop-allowed-fill-color: oklch(0.3 0 0);
+}
+
+.dark .pams-bpmn-canvas .djs-container {
+  background: var(--canvas-fill-color);
+}
+
+/* context-pad는 color 미지정 → body 전경색 상속으로 아이콘이 안 보임 */
+.dark .pams-bpmn-root .djs-context-pad .entry {
+  color: oklch(0.88 0 0);
+  box-shadow: 0 0 2px 1px oklch(0.22 0 0);
+}
+
+.dark .pams-bpmn-root .djs-popup {
+  color: oklch(0.88 0 0);
+}
+
+/* 다크모드에서 BPMN shape와 연결선이 배경에 묻히지 않도록 보정 */
+.dark .pams-bpmn-canvas .djs-shape .djs-visual > rect:not(.djs-hit),
+.dark .pams-bpmn-canvas .djs-shape .djs-visual > circle,
+.dark .pams-bpmn-canvas .djs-shape .djs-visual > ellipse,
+.dark .pams-bpmn-canvas .djs-shape .djs-visual > polygon {
+  fill: oklch(0.34 0 0) !important;
+  stroke: oklch(0.82 0 0) !important;
+}
+
+.dark .pams-bpmn-canvas .djs-shape .djs-visual > path:not(.djs-hit),
+.dark .pams-bpmn-canvas .djs-connection .djs-visual > path {
+  stroke: oklch(0.86 0 0) !important;
+}
+
+.dark .pams-bpmn-canvas .djs-connection .djs-visual > path {
+  marker-end: inherit;
+  marker-start: inherit;
+}
+
+.dark .pams-bpmn-canvas .djs-visual text,
+.dark .pams-bpmn-canvas .djs-label text {
+  fill: oklch(0.92 0 0) !important;
+}
+
+.dark .pams-bpmn-canvas marker path,
+.dark .pams-bpmn-canvas marker polygon {
+  fill: oklch(0.86 0 0) !important;
+  stroke: oklch(0.86 0 0) !important;
 }
 
 .pams-bpmn-properties {

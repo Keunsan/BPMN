@@ -55,7 +55,6 @@ export default async function LocaleLayout({
       location: "app/[locale]/layout.tsx:LocaleLayout",
       message: "Locale layout render",
       data: { locale, hasHtmlBodyTags: true },
-      timestamp: Date.now(),
     }),
   }).catch(() => {});
   // #endregion
@@ -64,6 +63,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      suppressHydrationWarning
     >
       <body className="h-full min-h-0 antialiased">
         <NextIntlClientProvider messages={messages}>
