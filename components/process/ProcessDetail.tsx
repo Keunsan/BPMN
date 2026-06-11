@@ -273,6 +273,7 @@ export const ProcessDetail = ({
                 columns={bpmnModelColumns}
                 data={bpmnModels}
                 rowKey={(model) => model.modelId}
+                storageKey="pams-process-bpmn-models-grid"
               />
             ) : (
               <EmptyState title={t("bpmnModelEmpty")} />
@@ -345,6 +346,7 @@ export const ProcessDetail = ({
               columns={historyColumns}
               data={history ?? []}
               rowKey={(r) => r.historyId}
+              storageKey="pams-process-history-grid"
               onRowClick={(r) => {
                 const versions = history?.map((h) => h.version) ?? [];
                 const other = versions.find((v) => v !== r.version);

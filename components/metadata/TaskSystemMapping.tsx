@@ -4,11 +4,20 @@ import { Link2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
+import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import {
+  FilterField,
+  FilterPanel,
+  ListPageBody,
+  ListPageLayout,
+  PageActions,
+  PageContent,
+  PageHeader,
+} from "@/components/common/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -24,7 +33,9 @@ import {
   useTaskSystemMappings,
 } from "@/lib/query/hooks/useSystems";
 import { useProcessTree } from "@/lib/query/hooks/useProcess";
+import { formatSystemLabel } from "@/lib/utils/system-label";
 import type { ProcessNodeTree } from "@/types/process";
+import type { TaskSystemMappingDto } from "@/types/system";
 import type { SystemUsageType } from "@/types/system";
 
 type ProcessOption = {
@@ -76,10 +87,15 @@ export const TaskSystemMapping = () => {
   const deleteMapping = useDeleteTaskSystemMapping(nodeId);
 
   const processOptions = useMemo(() => flattenProcesses(tree), [tree]);
+  const selectedProcess = processOptions.find((process) => process.nodeId === nodeId);
   const selectedSystem = hierarchy?.find((system) => system.systemId === systemId);
   const selectedModule = selectedSystem?.modules.find(
     (module) => module.moduleId === moduleId,
   );
+  const selectedScreen = selectedModule?.screens.find(
+    (screen) => screen.screenId === screenId,
+  );
+  const usageTypeLabel = t(`usageTypes.${usageType}`);
 
   const handleSave = async () => {
     if (!nodeId || !screenId) {
@@ -98,211 +114,260 @@ export const TaskSystemMapping = () => {
     await refetch();
   };
 
-  return (
-    <div className="space-y-4 p-4">
-      <div>
-        <h1 className="text-2xl font-semibold">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
-      </div>
-
-      <section className="rounded-lg border bg-card p-4">
-        <div className="grid gap-3 lg:grid-cols-4">
-          <Field label={t("task")}>
-            <Select value={nodeId ? String(nodeId) : ""} onValueChange={(value) => setNodeId(Number(value))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("selectTask")} />
-              </SelectTrigger>
-              <SelectContent>
-                {processOptions.map((process) => (
-                  <SelectItem key={process.nodeId} value={String(process.nodeId)}>
-                    {process.code} · {process.name} ({process.level})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t("system")}>
-            <Select
-              value={systemId ? String(systemId) : ""}
-              onValueChange={(value) => {
-                setSystemId(Number(value));
-                setModuleId(0);
-                setScreenId(0);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("selectSystem")} />
-              </SelectTrigger>
-              <SelectContent>
-                {hierarchy?.map((system) => (
-                  <SelectItem key={system.systemId} value={String(system.systemId)}>
-                    {system.systemName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t("module")}>
-            <Select
-              value={moduleId ? String(moduleId) : ""}
-              onValueChange={(value) => {
-                setModuleId(Number(value));
-                setScreenId(0);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("selectModule")} />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedSystem?.modules.map((module) => (
-                  <SelectItem key={module.moduleId} value={String(module.moduleId)}>
-                    {module.moduleName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t("screen")}>
-            <Select
-              value={screenId ? String(screenId) : ""}
-              onValueChange={(value) => setScreenId(Number(value))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("selectScreen")} />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedModule?.screens.map((screen) => (
-                  <SelectItem key={screen.screenId} value={String(screen.screenId)}>
-                    {screen.screenName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-        <div className="mt-3 grid gap-3 lg:grid-cols-[220px_1fr_160px]">
-          <Field label={t("usageType")}>
-            <Select
-              value={usageType}
-              onValueChange={(value) =>
-                value && setUsageType(value as SystemUsageType)
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {USAGE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {t(`usageTypes.${type}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t("usageDescription")}>
-            <Textarea
-              value={usageDescription}
-              onChange={(event) => setUsageDescription(event.target.value)}
-            />
-          </Field>
-          <Field label={t("primary")}>
-            <label className="flex h-9 items-center gap-2 rounded-lg border px-3 text-sm">
-              <input
-                type="checkbox"
-                checked={isPrimary}
-                onChange={(event) => setIsPrimary(event.target.checked)}
-              />
-              {t("markPrimary")}
-            </label>
-          </Field>
-        </div>
-        <div className="mt-4 flex justify-end">
+  const mappingColumns = useMemo<DataGridColumn<TaskSystemMappingDto>[]>(
+    () => [
+      {
+        key: "no",
+        header: "No.",
+        width: 48,
+        minWidth: 44,
+        align: "center",
+        cell: (_mapping, rowIndex) => rowIndex + 1,
+      },
+      {
+        key: "system",
+        header: t("system"),
+        width: 180,
+        minWidth: 140,
+        cell: (mapping) => (
+          <div>
+            <div>{mapping.systemName}</div>
+            <div className="font-mono text-[11px] text-slate-500">
+              {mapping.systemCode}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "module",
+        header: t("module"),
+        width: 140,
+        minWidth: 100,
+        cell: (mapping) => mapping.moduleName,
+      },
+      {
+        key: "screen",
+        header: t("screen"),
+        width: 180,
+        minWidth: 140,
+        cell: (mapping) => (
+          <div>
+            <div>{mapping.screenName}</div>
+            <div className="text-[10px] text-slate-500">
+              {mapping.transactionCode ?? mapping.menuPath ?? "-"}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "usageType",
+        header: t("usageType"),
+        width: 120,
+        minWidth: 96,
+        cell: (mapping) => (
+          <Badge className="h-5 px-1.5 text-[10px]">
+            {t(`usageTypes.${mapping.usageType}`)}
+          </Badge>
+        ),
+      },
+      {
+        key: "primary",
+        header: t("primary"),
+        width: 88,
+        minWidth: 72,
+        align: "center",
+        cell: (mapping) => (mapping.isPrimary ? t("primaryYes") : "-"),
+      },
+      {
+        key: "actions",
+        header: t("actions"),
+        width: 96,
+        minWidth: 80,
+        align: "center",
+        cell: (mapping) => (
           <Button
             type="button"
-            disabled={!nodeId || !screenId || createMapping.isPending}
-            onClick={() => void handleSave()}
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => deleteMapping.mutate(mapping.mappingId)}
           >
-            <Link2 className="size-4" />
-            {t("connect")}
+            <Trash2 className="size-3.5" />
+            {tc("delete")}
           </Button>
-        </div>
-      </section>
+        ),
+      },
+    ],
+    [deleteMapping, t, tc],
+  );
 
-      <section className="overflow-hidden rounded-lg border bg-card">
-        <div className="border-b p-3 font-semibold">{t("linkedSystems")}</div>
-        {!nodeId ? (
-          <EmptyState title={t("selectTask")} className="min-h-52" />
-        ) : isLoading ? (
-          <LoadingSpinner className="min-h-52" />
-        ) : !mappings?.length ? (
-          <EmptyState title={t("emptyMappings")} className="min-h-52" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="border-b bg-muted/40 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">{t("system")}</th>
-                  <th className="px-4 py-3 font-medium">{t("module")}</th>
-                  <th className="px-4 py-3 font-medium">{t("screen")}</th>
-                  <th className="px-4 py-3 font-medium">{t("usageType")}</th>
-                  <th className="px-4 py-3 font-medium">{t("primary")}</th>
-                  <th className="px-4 py-3 font-medium">{t("actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mappings.map((mapping) => (
-                  <tr key={mapping.mappingId} className="border-b last:border-b-0">
-                    <td className="px-4 py-3">
-                      <div>{mapping.systemName}</div>
-                      <div className="font-mono text-xs text-muted-foreground">
-                        {mapping.systemCode}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{mapping.moduleName}</td>
-                    <td className="px-4 py-3">
-                      <div>{mapping.screenName}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {mapping.transactionCode ?? mapping.menuPath ?? "-"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge>{t(`usageTypes.${mapping.usageType}`)}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      {mapping.isPrimary ? t("primaryYes") : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteMapping.mutate(mapping.mappingId)}
-                      >
-                        <Trash2 className="size-4" />
-                        {tc("delete")}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
+  const renderMappingBody = () => {
+    if (!nodeId) {
+      return <EmptyState title={t("selectTask")} className="min-h-[240px]" />;
+    }
+
+    if (isLoading) {
+      return <LoadingSpinner className="min-h-[240px]" />;
+    }
+
+    return undefined;
+  };
+
+  return (
+    <ListPageLayout>
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        icon={Link2}
+        actions={
+          <PageActions
+            onSearch={() => void refetch()}
+            onRegister={() => void handleSave()}
+            registerLabel={t("connect")}
+            registerDisabled={!nodeId || !screenId || createMapping.isPending}
+          />
+        }
+      />
+      <ListPageBody
+        filter={
+          <FilterPanel>
+            <FilterField label={t("task")} required>
+                <Select
+                  value={nodeId ? String(nodeId) : ""}
+                  onValueChange={(value) => setNodeId(Number(value))}
+                >
+                  <SelectTrigger variant="filter">
+                    <SelectValue placeholder={t("selectTask")}>
+                      {selectedProcess?.name}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent variant="filter">
+                    {processOptions.map((process) => (
+                      <SelectItem variant="filter" key={process.nodeId} value={String(process.nodeId)}>
+                        {process.code} · {process.name} ({process.level})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+              <FilterField label={t("system")}>
+                <Select
+                  value={systemId ? String(systemId) : ""}
+                  onValueChange={(value) => {
+                    setSystemId(Number(value));
+                    setModuleId(0);
+                    setScreenId(0);
+                  }}
+                >
+                  <SelectTrigger variant="filter">
+                    <SelectValue placeholder={t("selectSystem")}>
+                      {selectedSystem ? formatSystemLabel(selectedSystem) : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent variant="filter">
+                    {hierarchy?.map((system) => (
+                      <SelectItem variant="filter" key={system.systemId} value={String(system.systemId)}>
+                        {formatSystemLabel(system)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+              <FilterField label={t("module")}>
+                <Select
+                  value={moduleId ? String(moduleId) : ""}
+                  onValueChange={(value) => {
+                    setModuleId(Number(value));
+                    setScreenId(0);
+                  }}
+                >
+                  <SelectTrigger variant="filter">
+                    <SelectValue placeholder={t("selectModule")}>
+                      {selectedModule?.moduleName}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent variant="filter">
+                    {selectedSystem?.modules.map((module) => (
+                      <SelectItem variant="filter" key={module.moduleId} value={String(module.moduleId)}>
+                        {module.moduleName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+              <FilterField label={t("screen")}>
+                <Select
+                  value={screenId ? String(screenId) : ""}
+                  onValueChange={(value) => setScreenId(Number(value))}
+                >
+                  <SelectTrigger variant="filter">
+                    <SelectValue placeholder={t("selectScreen")}>
+                      {selectedScreen?.screenName}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent variant="filter">
+                    {selectedModule?.screens.map((screen) => (
+                      <SelectItem variant="filter" key={screen.screenId} value={String(screen.screenId)}>
+                        {screen.screenName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+              <FilterField label={t("usageType")}>
+                <Select
+                  value={usageType}
+                  onValueChange={(value) =>
+                    value && setUsageType(value as SystemUsageType)
+                  }
+                >
+                  <SelectTrigger variant="filter">
+                    <SelectValue>{usageTypeLabel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent variant="filter">
+                    {USAGE_TYPES.map((type) => (
+                      <SelectItem variant="filter" key={type} value={type}>
+                        {t(`usageTypes.${type}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+              <FilterField label={t("usageDescription")}>
+                <Textarea
+                  value={usageDescription}
+                  onChange={(event) => setUsageDescription(event.target.value)}
+                />
+              </FilterField>
+              <FilterField label={t("primary")}>
+                <label className="flex h-9 items-center gap-2 rounded-lg border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isPrimary}
+                    onChange={(event) => setIsPrimary(event.target.checked)}
+                  />
+                  {t("markPrimary")}
+                </label>
+              </FilterField>
+          </FilterPanel>
+        }
+        content={
+          <PageContent>
+            <DataGrid
+              title={t("linkedSystems")}
+              count={mappings?.length ?? 0}
+              countSuffix={tc("countUnit")}
+              icon
+              columns={mappingColumns}
+              data={mappings ?? []}
+              rowKey={(mapping) => mapping.mappingId}
+              storageKey="pams-task-system-mappings-grid"
+              emptyMessage={t("emptyMappings")}
+              body={renderMappingBody()}
+            />
+          </PageContent>
+        }
+      />
+    </ListPageLayout>
   );
 };
-
-const Field = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) => (
-  <div className="space-y-1.5">
-    <Label>{label}</Label>
-    {children}
-  </div>
-);

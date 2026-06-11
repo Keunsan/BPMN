@@ -1,14 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 
+import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type { ProcessHistoryDto } from "@/types/process";
 
 type VersionCompareProps = {
   history: ProcessHistoryDto[];
   versionA: string;
   versionB: string;
+};
+
+type DiffRow = {
+  key: string;
+  valueA: string;
+  valueB: string;
+  changed: boolean;
 };
 
 /** 두 버전 스냅샷 비교 UI */
@@ -19,13 +29,75 @@ export const VersionCompare = ({
 }: VersionCompareProps) => {
   const t = useTranslations("process");
 
-  const snapA = history.find((h) => h.version === versionA)?.snapshotData;
-  const snapB = history.find((h) => h.version === versionB)?.snapshotData;
+  const snapA = history.find((item) => item.version === versionA)?.snapshotData;
+  const snapB = history.find((item) => item.version === versionB)?.snapshotData;
 
-  const diffKeys = new Set([
-    ...Object.keys(snapA ?? {}),
-    ...Object.keys(snapB ?? {}),
-  ]);
+  const diffRows = useMemo<DiffRow[]>(() => {
+    const diffKeys = new Set([
+      ...Object.keys(snapA ?? {}),
+      ...Object.keys(snapB ?? {}),
+    ]);
+
+    return [...diffKeys].map((key) => {
+      const valueA = String(snapA?.[key] ?? "-");
+      const valueB = String(snapB?.[key] ?? "-");
+
+      return {
+        key,
+        valueA,
+        valueB,
+        changed: valueA !== valueB,
+      };
+    });
+  }, [snapA, snapB]);
+
+  const columns = useMemo<DataGridColumn<DiffRow>[]>(
+    () => [
+      {
+        key: "field",
+        header: t("field"),
+        width: 180,
+        minWidth: 140,
+        sticky: "left",
+        cell: (row) => (
+          <span className="font-mono text-[11px]">{row.key}</span>
+        ),
+      },
+      {
+        key: "versionA",
+        header: `v${versionA}`,
+        width: 240,
+        minWidth: 180,
+        cell: (row) => (
+          <span
+            className={cn(
+              row.changed &&
+                "rounded bg-amber-50 px-1 py-0.5 dark:bg-amber-950/20",
+            )}
+          >
+            {row.valueA}
+          </span>
+        ),
+      },
+      {
+        key: "versionB",
+        header: `v${versionB}`,
+        width: 240,
+        minWidth: 180,
+        cell: (row) => (
+          <span
+            className={cn(
+              row.changed &&
+                "rounded bg-amber-50 px-1 py-0.5 dark:bg-amber-950/20",
+            )}
+          >
+            {row.valueB}
+          </span>
+        ),
+      },
+    ],
+    [t, versionA, versionB],
+  );
 
   return (
     <Card>
@@ -35,35 +107,13 @@ export const VersionCompare = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 text-left">{t("field")}</th>
-                <th className="py-2 text-left">v{versionA}</th>
-                <th className="py-2 text-left">v{versionB}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...diffKeys].map((key) => {
-                const a = String(snapA?.[key] ?? "-");
-                const b = String(snapB?.[key] ?? "-");
-                const changed = a !== b;
-
-                return (
-                  <tr
-                    key={key}
-                    className={changed ? "bg-amber-50 dark:bg-amber-950/20" : undefined}
-                  >
-                    <td className="py-1.5 font-mono text-xs">{key}</td>
-                    <td className="py-1.5">{a}</td>
-                    <td className="py-1.5">{b}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataGrid
+          columns={columns}
+          data={diffRows}
+          rowKey={(row) => row.key}
+          storageKey="pams-version-compare-grid"
+          fillHeight={false}
+        />
       </CardContent>
     </Card>
   );

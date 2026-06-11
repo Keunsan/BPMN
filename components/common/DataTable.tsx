@@ -3,15 +3,12 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataGrid,
+  type DataGridAlign,
+  type DataGridColumn,
+} from "@/components/common/DataGrid";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type DataTableColumn<T> = {
@@ -19,6 +16,9 @@ export type DataTableColumn<T> = {
   header: string;
   cell: (row: T) => React.ReactNode;
   className?: string;
+  width?: number;
+  minWidth?: number;
+  align?: DataGridAlign;
 };
 
 type DataTableProps<T> = {
@@ -31,9 +31,34 @@ type DataTableProps<T> = {
   emptyMessage?: string;
   className?: string;
   onRowClick?: (row: T) => void;
+  selectedRowKey?: string | number;
+  title?: string;
+  count?: number;
+  countSuffix?: string;
+  icon?: boolean;
+  storageKey?: string;
+  fillHeight?: boolean;
 };
 
-/** 정렬·페이지네이션 지원 데이터 테이블 */
+const resolveAlign = (
+  column: DataTableColumn<unknown>,
+): DataGridAlign | undefined => {
+  if (column.align) {
+    return column.align;
+  }
+
+  if (column.className?.includes("text-right")) {
+    return "right";
+  }
+
+  if (column.className?.includes("text-center")) {
+    return "center";
+  }
+
+  return undefined;
+};
+
+/** DataGrid 기반 데이터 테이블 — 페이지네이션·행 선택 지원 */
 export const DataTable = <T,>({
   columns,
   data,
@@ -44,53 +69,48 @@ export const DataTable = <T,>({
   emptyMessage,
   className,
   onRowClick,
+  selectedRowKey,
+  title,
+  count,
+  countSuffix,
+  icon,
+  storageKey,
+  fillHeight = false,
 }: DataTableProps<T>) => {
   const t = useTranslations();
 
+  const gridColumns: DataGridColumn<T>[] = columns.map((column) => ({
+    key: column.key,
+    header: column.header,
+    cell: (row) => column.cell(row),
+    className: column.className,
+    width: column.width,
+    minWidth: column.minWidth,
+    align: resolveAlign(column as DataTableColumn<unknown>),
+  }));
+
+  const resolvedStorageKey =
+    storageKey ?? `pams-datatable-${columns.map((column) => column.key).join("-")}`;
+
   return (
-    <div className={cn("space-y-3", className)}>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col.key} className={col.className}>
-                  {col.header}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  {emptyMessage ?? t("common.noData")}
-                </TableCell>
-              </TableRow>
-            ) : (
-              data.map((row) => (
-                <TableRow
-                  key={rowKey(row)}
-                  className={onRowClick ? "cursor-pointer" : undefined}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {columns.map((col) => (
-                    <TableCell key={col.key} className={col.className}>
-                      {col.cell(row)}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+    <div className={cn("space-y-2", className)}>
+      <DataGrid
+        columns={gridColumns}
+        data={data}
+        rowKey={(row) => rowKey(row)}
+        emptyMessage={emptyMessage ?? t("common.noData")}
+        onRowClick={onRowClick}
+        selectedRowKey={selectedRowKey}
+        fillHeight={fillHeight}
+        storageKey={resolvedStorageKey}
+        title={title}
+        count={count}
+        countSuffix={countSuffix}
+        icon={icon}
+      />
 
       {onPageChange && totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1.5">
           <Button
             variant="outline"
             size="icon-sm"
@@ -100,7 +120,7 @@ export const DataTable = <T,>({
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {page} / {totalPages}
           </span>
           <Button

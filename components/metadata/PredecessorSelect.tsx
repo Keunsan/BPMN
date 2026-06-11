@@ -2,8 +2,9 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ProcessTree } from "@/components/process/ProcessTree";
 import { Button } from "@/components/ui/button";
@@ -16,14 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import type { UpsertTaskPredecessorDto } from "@/types/metadata";
 import type { ProcessNodeTree } from "@/types/process";
 
@@ -54,24 +47,27 @@ export const PredecessorSelect = ({
     [value],
   );
 
-  const updateItem = (
-    predecessorNodeId: number,
-    patch: Partial<PredecessorSelection>,
-  ) => {
-    onChange(
-      value.map((item) =>
-        item.predecessorNodeId === predecessorNodeId
-          ? { ...item, ...patch }
-          : item,
-      ),
-    );
-  };
+  const updateItem = useCallback(
+    (predecessorNodeId: number, patch: Partial<PredecessorSelection>) => {
+      onChange(
+        value.map((item) =>
+          item.predecessorNodeId === predecessorNodeId
+            ? { ...item, ...patch }
+            : item,
+        ),
+      );
+    },
+    [onChange, value],
+  );
 
-  const removeItem = (predecessorNodeId: number) => {
-    onChange(
-      value.filter((item) => item.predecessorNodeId !== predecessorNodeId),
-    );
-  };
+  const removeItem = useCallback(
+    (predecessorNodeId: number) => {
+      onChange(
+        value.filter((item) => item.predecessorNodeId !== predecessorNodeId),
+      );
+    },
+    [onChange, value],
+  );
 
   const addSelectedNode = () => {
     if (!selectedNode) return;
@@ -100,69 +96,105 @@ export const PredecessorSelect = ({
       selectedIds.has(selectedNode.nodeId) ||
       (selectedNode.level !== "L3" && selectedNode.level !== "L4"));
 
+  const columns = useMemo<DataGridColumn<PredecessorSelection>[]>(
+    () => [
+      {
+        key: "order",
+        header: t("order"),
+        width: 48,
+        minWidth: 44,
+        align: "center",
+        cell: (_item, rowIndex) => rowIndex + 1,
+      },
+      {
+        key: "processCode",
+        header: t("processCode"),
+        width: 120,
+        minWidth: 96,
+        cell: (item) => (
+          <span className="font-mono text-[11px]">
+            {item.predecessorCode ?? item.predecessorNodeId}
+          </span>
+        ),
+      },
+      {
+        key: "processName",
+        header: t("processName"),
+        width: 180,
+        minWidth: 140,
+        cell: (item) => item.predecessorName ?? "-",
+      },
+      {
+        key: "conditionDesc",
+        header: t("conditionDesc"),
+        width: 240,
+        minWidth: 180,
+        cell: (item) => (
+          <Input
+            value={item.conditionDesc ?? ""}
+            onChange={(event) =>
+              updateItem(item.predecessorNodeId, {
+                conditionDesc: event.target.value,
+              })
+            }
+            placeholder={t("conditionPlaceholder")}
+          />
+        ),
+      },
+      {
+        key: "mandatory",
+        header: t("mandatory"),
+        width: 88,
+        minWidth: 72,
+        align: "center",
+        cell: (item) => (
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={item.isMandatory ?? true}
+            onChange={(event) =>
+              updateItem(item.predecessorNodeId, {
+                isMandatory: event.target.checked,
+              })
+            }
+            aria-label={t("mandatory")}
+          />
+        ),
+      },
+      {
+        key: "actions",
+        header: "",
+        width: 56,
+        minWidth: 48,
+        align: "center",
+        cell: (item) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => removeItem(item.predecessorNodeId)}
+            aria-label={t("removePredecessor")}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        ),
+      },
+    ],
+    [removeItem, t, updateItem],
+  );
+
   return (
     <div className="space-y-3">
       {value.length === 0 ? (
         <EmptyState title={t("noPredecessor")} />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">{t("order")}</TableHead>
-              <TableHead>{t("processCode")}</TableHead>
-              <TableHead>{t("processName")}</TableHead>
-              <TableHead>{t("conditionDesc")}</TableHead>
-              <TableHead className="w-24">{t("mandatory")}</TableHead>
-              <TableHead className="w-16" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {value.map((item, index) => (
-              <TableRow key={item.predecessorNodeId}>
-                <TableCell>{index + 1}</TableCell>
-                <TableCell className="font-mono text-xs">
-                  {item.predecessorCode ?? item.predecessorNodeId}
-                </TableCell>
-                <TableCell>{item.predecessorName ?? "-"}</TableCell>
-                <TableCell>
-                  <Input
-                    value={item.conditionDesc ?? ""}
-                    onChange={(event) =>
-                      updateItem(item.predecessorNodeId, {
-                        conditionDesc: event.target.value,
-                      })
-                    }
-                    placeholder={t("conditionPlaceholder")}
-                  />
-                </TableCell>
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    className="size-4"
-                    checked={item.isMandatory ?? true}
-                    onChange={(event) =>
-                      updateItem(item.predecessorNodeId, {
-                        isMandatory: event.target.checked,
-                      })
-                    }
-                    aria-label={t("mandatory")}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => removeItem(item.predecessorNodeId)}
-                    aria-label={t("removePredecessor")}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DataGrid
+          columns={columns}
+          data={value}
+          rowKey={(item) => item.predecessorNodeId}
+          storageKey="pams-predecessor-select-grid"
+          fillHeight={false}
+        />
       )}
 
       <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>

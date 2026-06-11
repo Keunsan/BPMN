@@ -1,9 +1,21 @@
 import "server-only";
 
-import { buildMockColumns, listExternalTableCache, upsertExternalTableCache } from "@/lib/db/queries/external";
+import { ApiError } from "@/lib/api/error-handler";
+import {
+  buildMockColumns,
+  upsertExternalTableCache,
+} from "@/lib/db/queries/external";
 import * as systemQueries from "@/lib/db/queries/system";
 import { fetchExternalColumns, fetchExternalTables } from "@/lib/external/client";
-import type { ExternalColumn, ExternalTable, ExternalTableQuery } from "@/types/external";
+import {
+  resolveTableListConfig,
+  resolveTableSchemaConfig,
+} from "@/lib/external/resolve-config";
+import type {
+  ExternalColumn,
+  ExternalTable,
+  ExternalTableQuery,
+} from "@/types/external";
 
 const MOCK_TABLES: ExternalTable[] = [
   {
@@ -56,36 +68,38 @@ export const listExternalTables = async (
 ): Promise<ExternalTable[]> => {
   const system = await systemQueries.findSystemById(query.systemId);
   if (!system) {
-    return filterTables(MOCK_TABLES, query);
+    throw new ApiError("E301", "System not found", 404);
   }
 
   if (query.mock) {
     return filterTables(MOCK_TABLES, query);
   }
 
-  try {
-    const tables = await fetchExternalTables(
-      {
-        systemId: system.systemId,
-        systemCode: system.systemCode,
-        tableApiUrl: system.tableApiUrl,
-        tableApiAuthType: system.tableApiAuthType,
-        tableApiConfig: system.tableApiConfig,
-        columnApiUrl: system.columnApiUrl,
-      },
-      query,
-    );
-
-    if (tables.length > 0) {
-      await upsertExternalTableCache(system.systemId, tables);
-      return tables;
-    }
-  } catch {
-    // 외부 API 장애 시 캐시 또는 mock으로 전환한다.
+  const resolved = await resolveTableListConfig(query.systemId);
+  if (!resolved) {
+    throw new ApiError("E601", "Table list API config is not available", 400);
   }
 
-  const cached = await listExternalTableCache(system.systemId, query);
-  return cached.length > 0 ? cached : filterTables(MOCK_TABLES, query);
+  const tables = await fetchExternalTables(
+    {
+      systemId: resolved.systemId,
+      systemCode: resolved.systemCode,
+      tableApiUrl: resolved.tableApiUrl,
+      tableApiAuthType: resolved.tableApiAuthType,
+      tableApiConfig: resolved.tableApiConfig,
+      columnApiUrl: resolved.columnApiUrl,
+      profileQueryParams: resolved.profileQueryParams,
+    },
+    query,
+  );
+
+  if (tables.length > 0) {
+    void upsertExternalTableCache(system.systemId, tables.slice(0, 200)).catch(
+      () => undefined,
+    );
+  }
+
+  return tables;
 };
 
 /** 외부 시스템 컬럼 목록을 조회한다. */
@@ -93,25 +107,29 @@ export const listExternalColumns = async (
   query: ExternalTableQuery & { tableName: string; mock?: boolean },
 ): Promise<ExternalColumn[]> => {
   const system = await systemQueries.findSystemById(query.systemId);
-  if (!system || query.mock) {
+  if (!system) {
+    throw new ApiError("E301", "System not found", 404);
+  }
+
+  if (query.mock) {
     return buildMockColumns(query.tableName);
   }
 
-  try {
-    const columns = await fetchExternalColumns(
-      {
-        systemId: system.systemId,
-        systemCode: system.systemCode,
-        tableApiUrl: system.tableApiUrl,
-        tableApiAuthType: system.tableApiAuthType,
-        tableApiConfig: system.tableApiConfig,
-        columnApiUrl: system.columnApiUrl,
-      },
-      query,
-    );
-
-    return columns.length > 0 ? columns : buildMockColumns(query.tableName);
-  } catch {
-    return buildMockColumns(query.tableName);
+  const resolved = await resolveTableSchemaConfig(query.systemId);
+  if (!resolved) {
+    throw new ApiError("E601", "Table schema API config is not available", 400);
   }
+
+  return fetchExternalColumns(
+    {
+      systemId: resolved.systemId,
+      systemCode: resolved.systemCode,
+      tableApiUrl: resolved.tableApiUrl,
+      tableApiAuthType: resolved.tableApiAuthType,
+      tableApiConfig: resolved.tableApiConfig,
+      columnApiUrl: resolved.columnApiUrl,
+      profileQueryParams: resolved.profileQueryParams,
+    },
+    query,
+  );
 };

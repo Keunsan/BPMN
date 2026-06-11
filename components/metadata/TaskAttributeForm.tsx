@@ -401,6 +401,9 @@ const TaskAttributeEditor = ({
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isSheet = variant === "sheet";
+  const frequencyLabel = scalar.frequency
+    ? t(`frequencyOptions.${scalar.frequency}`)
+    : undefined;
 
   return (
     <form
@@ -542,12 +545,14 @@ const TaskAttributeEditor = ({
                 updateScalar({ frequency: value as FrequencyType })
               }
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("selectFrequency")} />
+              <SelectTrigger variant="filter">
+                <SelectValue placeholder={t("selectFrequency")}>
+                  {frequencyLabel}
+                </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent variant="filter">
                 {frequencyOptions.map((frequency) => (
-                  <SelectItem key={frequency} value={frequency}>
+                  <SelectItem variant="filter" key={frequency} value={frequency}>
                     {t(`frequencyOptions.${frequency}`)}
                   </SelectItem>
                 ))}

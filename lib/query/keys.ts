@@ -50,6 +50,14 @@ export const externalKeys = {
     [...externalKeys.all, "columns", { systemId, tableName, schemaName }] as const,
 };
 
+export const externalApiKeys = {
+  all: ["external-api"] as const,
+  globalConfig: () => [...externalApiKeys.all, "global-config"] as const,
+  profiles: () => [...externalApiKeys.all, "profiles"] as const,
+  profile: (systemId: number) =>
+    [...externalApiKeys.all, "profile", systemId] as const,
+};
+
 export const systemKeys = {
   all: ["system"] as const,
   lists: () => [...systemKeys.all, "list"] as const,
@@ -79,4 +87,9 @@ export const commonCodeKeys = {
   item: (codeId: number) => [...commonCodeKeys.all, "item", codeId] as const,
   lookup: (groupCode: string) =>
     [...commonCodeKeys.all, "lookup", groupCode] as const,
+};
+
+export const sessionKeys = {
+  all: ["session"] as const,
+  status: () => [...sessionKeys.all, "status"] as const,
 };

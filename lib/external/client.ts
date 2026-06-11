@@ -6,6 +6,12 @@ import type { ExternalColumn, ExternalTable, SystemApiConfig } from "@/types/ext
 type ExternalApiConfig = SystemApiConfig & {
   systemId: number;
   systemCode: string;
+  profileQueryParams?: Record<string, string>;
+};
+type ExternalTableQueryParams = { schemaName?: string; search?: string };
+type ExternalTableFetchResult = {
+  tables: ExternalTable[];
+  returnedCount: number;
 };
 
 type AuthConfig = {
@@ -15,6 +21,8 @@ type AuthConfig = {
   apiKey?: string;
   apiKeyHeader?: string;
   apiKeyQuery?: string;
+  headers?: Record<string, unknown>;
+  headerParams?: Record<string, unknown>;
 };
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -22,6 +30,23 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const asAuthConfig = (
   value: Record<string, unknown> | null,
 ): AuthConfig => (value ?? {}) as AuthConfig;
+
+const appendHeaderParams = (
+  headers: Record<string, string>,
+  params?: Record<string, unknown>,
+): void => {
+  if (!params) return;
+
+  for (const [key, value] of Object.entries(params)) {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      headers[key] = String(value);
+    }
+  }
+};
 
 const appendQuery = (
   url: string,
@@ -53,6 +78,9 @@ const buildHeaders = (config: ExternalApiConfig): HeadersInit => {
   if (config.tableApiAuthType === "API_KEY" && auth.apiKey) {
     headers[auth.apiKeyHeader || "X-API-Key"] = auth.apiKey;
   }
+
+  appendHeaderParams(headers, auth.headers);
+  appendHeaderParams(headers, auth.headerParams);
 
   return headers;
 };
@@ -95,22 +123,37 @@ const normalizeTable = (value: Record<string, unknown>): ExternalTable => ({
   schemaName:
     (value.schemaName as string | null | undefined) ??
     (value.schema as string | null | undefined) ??
+    (value.schema_nm as string | null | undefined) ??
     null,
   tableName:
     (value.tableName as string | undefined) ??
+    (value.table_name as string | undefined) ??
+    (value.tbl_nm as string | undefined) ??
     (value.name as string | undefined) ??
     "",
   tableNameKor:
     (value.tableNameKor as string | null | undefined) ??
     (value.tableNameKo as string | null | undefined) ??
+    (value.table_comment as string | null | undefined) ??
+    (value.tbl_cmnt as string | null | undefined) ??
+    (value.comment as string | null | undefined) ??
     (value.koreanName as string | null | undefined) ??
     null,
   tableType:
     (value.tableType as string | null | undefined) ??
+    (value.table_type as string | null | undefined) ??
+    (value.tbl_type as string | null | undefined) ??
     (value.type as string | null | undefined) ??
     null,
-  description: (value.description as string | null | undefined) ?? null,
-  recordCount: (value.recordCount as number | null | undefined) ?? null,
+  description:
+    (value.description as string | null | undefined) ??
+    (value.desc as string | null | undefined) ??
+    (value.tbl_cmnt as string | null | undefined) ??
+    null,
+  recordCount:
+    (value.recordCount as number | null | undefined) ??
+    (value.record_count as number | null | undefined) ??
+    null,
 });
 
 const normalizeColumn = (value: Record<string, unknown>): ExternalColumn => ({
@@ -135,37 +178,68 @@ const normalizeColumn = (value: Record<string, unknown>): ExternalColumn => ({
   description: (value.description as string | null | undefined) ?? null,
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toRecordArray = (value: unknown[]): Record<string, unknown>[] =>
+  value.filter(isRecord);
+
+const ARRAY_PAYLOAD_KEYS = [
+  "data",
+  "items",
+  "list",
+  "rows",
+  "result",
+  "results",
+  "resultData",
+  "result_data",
+  "returnData",
+  "return_data",
+  "tables",
+  "columns",
+  "content",
+];
+
 const unwrapArray = (value: unknown): Record<string, unknown>[] => {
   if (Array.isArray(value)) {
-    return value as Record<string, unknown>[];
+    return toRecordArray(value);
   }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (Array.isArray(record.data)) {
-      return record.data as Record<string, unknown>[];
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  for (const key of ARRAY_PAYLOAD_KEYS) {
+    const nested = value[key];
+    const rows = unwrapArray(nested);
+    if (rows.length || Array.isArray(nested)) {
+      return rows;
     }
-    if (Array.isArray(record.tables)) {
-      return record.tables as Record<string, unknown>[];
-    }
-    if (Array.isArray(record.columns)) {
-      return record.columns as Record<string, unknown>[];
+  }
+
+  for (const nested of Object.values(value)) {
+    if (isRecord(nested)) {
+      const rows = unwrapArray(nested);
+      if (rows.length) {
+        return rows;
+      }
     }
   }
 
   return [];
 };
 
-/** 외부 시스템 테이블 목록을 조회한다. */
-export const fetchExternalTables = async (
+/** 외부 시스템 테이블 목록 테스트용 원본 응답 건수를 함께 조회한다. */
+export const fetchExternalTableResult = async (
   config: ExternalApiConfig,
-  query: { schemaName?: string; search?: string },
-): Promise<ExternalTable[]> => {
+  query: ExternalTableQueryParams,
+): Promise<ExternalTableFetchResult> => {
   if (!config.tableApiUrl) {
-    return [];
+    return { tables: [], returnedCount: 0 };
   }
 
   const auth = asAuthConfig(config.tableApiConfig);
   const url = appendQuery(config.tableApiUrl, {
+    ...config.profileQueryParams,
     schemaName: query.schemaName,
     search: query.search,
     ...(config.tableApiAuthType === "API_KEY" && auth.apiKeyQuery && auth.apiKey
@@ -173,11 +247,19 @@ export const fetchExternalTables = async (
       : {}),
   });
   const payload = await requestJson<unknown>(url, config);
+  const rows = unwrapArray(payload);
 
-  return unwrapArray(payload)
-    .map(normalizeTable)
-    .filter((table) => table.tableName);
+  return {
+    returnedCount: rows.length,
+    tables: rows.map(normalizeTable).filter((table) => table.tableName),
+  };
 };
+
+/** 외부 시스템 테이블 목록을 조회한다. */
+export const fetchExternalTables = async (
+  config: ExternalApiConfig,
+  query: ExternalTableQueryParams,
+): Promise<ExternalTable[]> => (await fetchExternalTableResult(config, query)).tables;
 
 /** 외부 시스템 컬럼 목록을 조회한다. */
 export const fetchExternalColumns = async (
@@ -191,8 +273,8 @@ export const fetchExternalColumns = async (
 
   const auth = asAuthConfig(config.tableApiConfig);
   const url = appendQuery(endpoint, {
-    schemaName: query.schemaName,
-    tableName: query.tableName,
+    ...config.profileQueryParams,
+    tbl_id: query.tableName,
     ...(config.tableApiAuthType === "API_KEY" && auth.apiKeyQuery && auth.apiKey
       ? { [auth.apiKeyQuery]: auth.apiKey }
       : {}),

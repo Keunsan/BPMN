@@ -15,10 +15,12 @@ const readSidebarCollapsed = (): boolean => {
 interface UIState {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
+  filterPanelCollapsed: boolean;
   currentLocale: Locale;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setFilterPanelCollapsed: (collapsed: boolean) => void;
   /** localStorage에서 사이드바 접힘 상태를 복원한다 (클라이언트 마운트 후 1회). */
   hydrateSidebarCollapsed: () => void;
   setCurrentLocale: (locale: Locale) => void;
@@ -26,7 +28,8 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
-  sidebarCollapsed: false,
+  sidebarCollapsed: true,
+  filterPanelCollapsed: false,
   currentLocale: defaultLocale,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -36,6 +39,7 @@ export const useUIStore = create<UIState>((set) => ({
     }
     set({ sidebarCollapsed: collapsed });
   },
+  setFilterPanelCollapsed: (collapsed) => set({ filterPanelCollapsed: collapsed }),
   hydrateSidebarCollapsed: () => {
     set({ sidebarCollapsed: readSidebarCollapsed() });
   },

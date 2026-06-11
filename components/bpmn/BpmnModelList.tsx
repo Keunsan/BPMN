@@ -4,8 +4,8 @@ import {
   Copy,
   MoreHorizontal,
   Pencil,
-  Plus,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
@@ -13,6 +13,16 @@ import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import {
+  ContentPanel,
+  FilterField,
+  FilterPanel,
+  ListPageBody,
+  ListPageLayout,
+  PageActions,
+  PageContent,
+  PageHeader,
+} from "@/components/common/layout";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +64,7 @@ import type { ProcessNodeTree } from "@/types/process";
 /** BPMN 모델 카드/그리드 목록 */
 export const BpmnModelList = () => {
   const t = useTranslations("bpmn");
+  const tc = useTranslations("common");
   const ts = useTranslations("status");
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -62,6 +73,9 @@ export const BpmnModelList = () => {
   );
   const [sort, setSort] = useState<"updated" | "name">("updated");
   const debouncedSearch = useDebounce(search, 300);
+  const statusFilterLabel =
+    statusFilter === "ALL" ? t("allStatus") : ts(statusFilter);
+  const sortLabel = sort === "updated" ? t("sortUpdated") : t("sortName");
 
   const { data: models, isLoading, error, refetch } = useBpmnList({
     search: debouncedSearch || undefined,
@@ -99,65 +113,93 @@ export const BpmnModelList = () => {
   }
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{t("title")}</h1>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 size-4" />
-          {t("newModel")}
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder={t("searchPlaceholder")}
-          className="max-w-sm flex-1"
-        />
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => v && setStatusFilter(v as BpmnModelStatus | "ALL")}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder={t("filterStatus")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t("allStatus")}</SelectItem>
-            {(["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "OBSOLETE"] as const).map(
-              (s) => (
-                <SelectItem key={s} value={s}>
-                  {ts(s)}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
-        <Select value={sort} onValueChange={(v) => v && setSort(v as "updated" | "name")}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="updated">{t("sortUpdated")}</SelectItem>
-            <SelectItem value="name">{t("sortName")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {!models?.length ? (
-        <EmptyState
-          title={t("empty")}
-          description={t("emptyDesc")}
-          action={
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-1 size-4" />
-              {t("newModel")}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {models.map((model) => (
+    <ListPageLayout>
+      <PageHeader
+        title={t("title")}
+        description={t("listDesc")}
+        icon={Workflow}
+        actions={
+          <PageActions
+            onSearch={() => void refetch()}
+            onRegister={() => setCreateOpen(true)}
+            registerLabel={t("newModel")}
+          />
+        }
+      />
+      <ListPageBody
+        filter={
+          <FilterPanel>
+            <FilterField label={t("searchPlaceholder")}>
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder={t("searchPlaceholder")}
+              />
+            </FilterField>
+            <FilterField label={t("filterStatus")}>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) =>
+                  v && setStatusFilter(v as BpmnModelStatus | "ALL")
+                }
+              >
+                <SelectTrigger variant="filter">
+                  <SelectValue placeholder={t("filterStatus")}>
+                    {statusFilterLabel}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent variant="filter">
+                  <SelectItem variant="filter" value="ALL">{t("allStatus")}</SelectItem>
+                  {(
+                    ["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "OBSOLETE"] as const
+                  ).map((s) => (
+                    <SelectItem variant="filter" key={s} value={s}>
+                      {ts(s)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
+            <FilterField label={t("sortLabel")}>
+              <Select
+                value={sort}
+                onValueChange={(v) => v && setSort(v as "updated" | "name")}
+              >
+                <SelectTrigger variant="filter">
+                  <SelectValue>{sortLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent variant="filter">
+                  <SelectItem variant="filter" value="updated">{t("sortUpdated")}</SelectItem>
+                  <SelectItem variant="filter" value="name">{t("sortName")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </FilterPanel>
+        }
+        content={
+          <PageContent>
+            <ContentPanel
+              title={t("title")}
+              count={models?.length ?? 0}
+              countSuffix={tc("countUnit")}
+              icon
+              bodyClassName="p-4"
+            >
+            {!models?.length ? (
+              <EmptyState
+                title={t("empty")}
+                description={t("emptyDesc")}
+                action={
+                  <PageActions
+                    showSearch={false}
+                    onRegister={() => setCreateOpen(true)}
+                    registerLabel={t("newModel")}
+                  />
+                }
+              />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {models.map((model) => (
             <Card key={model.modelId} className="overflow-hidden">
               <Link href={`/bpmn/${model.modelId}`}>
                 <div className="pams-bpmn-thumbnail flex h-36 items-center justify-center bg-muted/30 p-2">
@@ -230,9 +272,13 @@ export const BpmnModelList = () => {
                 </span>
               </CardFooter>
             </Card>
-          ))}
-        </div>
-      )}
+                ))}
+              </div>
+            )}
+            </ContentPanel>
+          </PageContent>
+        }
+      />
 
       <CreateBpmnDialog
         open={createOpen}
@@ -295,7 +341,7 @@ export const BpmnModelList = () => {
           }
         }}
       />
-    </div>
+    </ListPageLayout>
   );
 };
 
@@ -366,18 +412,18 @@ const CreateBpmnDialog = ({
                 }
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger variant="filter">
                 {selectedNode ? (
                   <span data-slot="select-value" className="flex flex-1 text-left">
-                    {selectedNode.code} — {selectedNode.name}
+                    {selectedNode.name}
                   </span>
                 ) : (
                   <SelectValue placeholder={t("selectProcess")} />
                 )}
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent variant="filter">
                 {l3Nodes.map((node) => (
-                  <SelectItem key={node.nodeId} value={String(node.nodeId)}>
+                  <SelectItem variant="filter" key={node.nodeId} value={String(node.nodeId)}>
                     {node.code} — {node.name}
                   </SelectItem>
                 ))}

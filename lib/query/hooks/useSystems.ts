@@ -44,6 +44,8 @@ export const useSystems = (filters: SystemListFilters = {}) =>
         `/api/admin/systems${buildQueryString({
           search: filters.search,
           systemType: filters.systemType,
+          companyCode: filters.companyCode,
+          businessUnitCode: filters.businessUnitCode,
           isActive: filters.isActive,
         })}`,
       ),

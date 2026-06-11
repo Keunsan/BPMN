@@ -10,6 +10,8 @@ export type SystemType =
   | "HR"
   | "FI"
   | "BI"
+  | "GW"
+  | "ETS"
   | "PORTAL"
   | "LEGACY"
   | "OTHER";
@@ -37,6 +39,8 @@ export interface ApplicationSystem {
   systemCode: string;
   systemName: string;
   systemType: SystemType;
+  companyCode: string | null;
+  businessUnitCode: string | null;
   vendor: string | null;
   version: string | null;
   description: string | null;
@@ -87,6 +91,8 @@ export interface SystemScreenDto extends SystemScreen {
 }
 
 export interface ApplicationSystemDto extends ApplicationSystem {
+  companyName?: string | null;
+  businessUnitName?: string | null;
   moduleCount?: number;
   screenCount?: number;
 }
@@ -98,6 +104,8 @@ export interface SystemHierarchyDto extends ApplicationSystemDto {
 export interface SystemListFilters {
   search?: string;
   systemType?: SystemType;
+  companyCode?: string;
+  businessUnitCode?: string;
   isActive?: boolean;
 }
 
@@ -105,6 +113,8 @@ export interface UpsertApplicationSystemDto {
   systemCode: string;
   systemName: string;
   systemType: SystemType;
+  companyCode?: string | null;
+  businessUnitCode?: string | null;
   vendor?: string | null;
   version?: string | null;
   description?: string | null;

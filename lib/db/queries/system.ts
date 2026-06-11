@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Locale } from "@/lib/i18n/config";
 import type {
   ApplicationSystem,
   ApplicationSystemDto,
@@ -40,6 +41,8 @@ const mapSystem = (row: Record<string, unknown>): ApplicationSystem => ({
   systemCode: row.system_code as string,
   systemName: row.system_name as string,
   systemType: row.system_type as ApplicationSystem["systemType"],
+  companyCode: (row.company_code as string | null) ?? null,
+  businessUnitCode: (row.business_unit_code as string | null) ?? null,
   vendor: (row.vendor as string | null) ?? null,
   version: (row.version as string | null) ?? null,
   description: (row.description as string | null) ?? null,
@@ -83,9 +86,10 @@ const mapScreen = (row: Record<string, unknown>): SystemScreen => ({
 /** 시스템 목록을 조회한다. */
 export const listSystems = async (
   filters: SystemListFilters = {},
+  locale: Locale = "ko",
 ): Promise<ApplicationSystemDto[]> => {
   const conditions = ["1=1"];
-  const params: QueryParams = {};
+  const params: QueryParams = { locale };
 
   if (filters.search?.trim()) {
     conditions.push(
@@ -97,6 +101,14 @@ export const listSystems = async (
     conditions.push("s.system_type = @systemType");
     params.systemType = filters.systemType;
   }
+  if (filters.companyCode) {
+    conditions.push("s.company_code = @companyCode");
+    params.companyCode = filters.companyCode;
+  }
+  if (filters.businessUnitCode) {
+    conditions.push("s.business_unit_code = @businessUnitCode");
+    params.businessUnitCode = filters.businessUnitCode;
+  }
   if (filters.isActive !== undefined) {
     conditions.push("s.is_active = @isActive");
     params.isActive = filters.isActive ? 1 : 0;
@@ -105,6 +117,8 @@ export const listSystems = async (
   const rows = await query<Record<string, unknown>>(
     `SELECT
        s.*,
+       COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
        (SELECT COUNT(*) FROM system_module m WHERE m.system_id = s.system_id) AS module_count,
        (
          SELECT COUNT(*)
@@ -113,13 +127,31 @@ export const listSystems = async (
          WHERE m.system_id = s.system_id
        ) AS screen_count
      FROM application_system s
+     LEFT JOIN common_code_group company_group
+       ON company_group.group_code = 'COMPANY_CD'
+     LEFT JOIN common_code company_code
+       ON company_code.group_id = company_group.group_id
+      AND company_code.code = s.company_code
+     LEFT JOIN common_code_i18n company_i18n
+       ON company_i18n.code_id = company_code.code_id
+      AND company_i18n.locale = @locale
+     LEFT JOIN common_code_group bu_group
+       ON bu_group.group_code = 'BU_CD'
+     LEFT JOIN common_code bu_code
+       ON bu_code.group_id = bu_group.group_id
+      AND bu_code.code = s.business_unit_code
+     LEFT JOIN common_code_i18n bu_i18n
+       ON bu_i18n.code_id = bu_code.code_id
+      AND bu_i18n.locale = @locale
      WHERE ${conditions.join(" AND ")}
-     ORDER BY s.is_active DESC, s.system_code`,
+     ORDER BY s.is_active DESC, s.system_code, s.company_code, s.business_unit_code`,
     params,
   );
 
   return rows.map((row) => ({
     ...mapSystem(row),
+    companyName: (row.company_name as string | null) ?? null,
+    businessUnitName: (row.business_unit_name as string | null) ?? null,
     moduleCount: row.module_count as number,
     screenCount: row.screen_count as number,
   }));
@@ -137,14 +169,19 @@ export const findSystemById = async (
   return row ? mapSystem(row) : null;
 };
 
-/** 시스템 코드 중복 여부를 확인한다. */
-export const existsSystemCode = async (
+/** 시스템 식별 조합 중복 여부를 확인한다. */
+export const existsSystemIdentity = async (
   systemCode: string,
+  companyCode: string,
+  businessUnitCode: string,
   excludeSystemId?: number,
 ): Promise<boolean> => {
-  const params: QueryParams = { systemCode };
-  let sql =
-    "SELECT 1 AS found FROM application_system WHERE system_code = @systemCode";
+  const params: QueryParams = { systemCode, companyCode, businessUnitCode };
+  let sql = `SELECT 1 AS found
+             FROM application_system
+             WHERE system_code = @systemCode
+               AND company_code = @companyCode
+               AND business_unit_code = @businessUnitCode`;
 
   if (excludeSystemId) {
     sql += " AND system_id <> @excludeSystemId";
@@ -160,13 +197,15 @@ export const createSystem = async (
 ): Promise<ApplicationSystem> => {
   const row = await queryOne<Record<string, unknown>>(
     `INSERT INTO application_system (
-       system_code, system_name, system_type, vendor, version, description,
+       system_code, system_name, system_type, company_code, business_unit_code,
+       vendor, version, description,
        system_owner_id, is_active, table_api_url, table_api_auth_type,
        table_api_config, column_api_url
      )
      OUTPUT INSERTED.*
      VALUES (
-       @systemCode, @systemName, @systemType, @vendor, @version, @description,
+       @systemCode, @systemName, @systemType, @companyCode, @businessUnitCode,
+       @vendor, @version, @description,
        @systemOwnerId, @isActive, @tableApiUrl, @tableApiAuthType,
        @tableApiConfig, @columnApiUrl
      )`,
@@ -193,6 +232,8 @@ export const updateSystem = async (
      SET system_code = @systemCode,
          system_name = @systemName,
          system_type = @systemType,
+         company_code = @companyCode,
+         business_unit_code = @businessUnitCode,
          vendor = @vendor,
          version = @version,
          description = @description,
@@ -232,6 +273,8 @@ const systemParams = (
   systemCode: input.systemCode,
   systemName: input.systemName,
   systemType: input.systemType,
+  companyCode: input.companyCode ?? null,
+  businessUnitCode: input.businessUnitCode ?? null,
   vendor: input.vendor ?? null,
   version: input.version ?? null,
   description: input.description ?? null,
@@ -488,8 +531,10 @@ const screenParams = (input: UpsertSystemScreenDto): QueryParams => ({
 });
 
 /** 시스템-모듈-화면 전체 계층을 조회한다. */
-export const listSystemHierarchy = async (): Promise<SystemHierarchyDto[]> => {
-  const systems = await listSystems({ isActive: true });
+export const listSystemHierarchy = async (
+  locale: Locale = "ko",
+): Promise<SystemHierarchyDto[]> => {
+  const systems = await listSystems({ isActive: true }, locale);
   const result: SystemHierarchyDto[] = [];
 
   for (const system of systems) {

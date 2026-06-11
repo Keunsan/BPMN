@@ -1,5 +1,5 @@
-import { SystemMasterManagement } from "@/components/admin/SystemMasterManagement";
+import { ExternalApiSettingsManagement } from "@/components/admin/ExternalApiSettingsManagement";
 
 export default function AdminExternalApiPage() {
-  return <SystemMasterManagement />;
+  return <ExternalApiSettingsManagement />;
 }

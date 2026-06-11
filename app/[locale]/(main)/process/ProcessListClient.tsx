@@ -1,8 +1,17 @@
 "use client";
 
+import { Network } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import {
+  ContentPanel,
+  ListPageBody,
+  ListPageLayout,
+  PageActions,
+  PageContent,
+  PageHeader,
+} from "@/components/common/layout";
 import { ProcessDetail } from "@/components/process/ProcessDetail";
 import { ProcessForm } from "@/components/process/ProcessForm";
 import { ProcessTree } from "@/components/process/ProcessTree";
@@ -23,6 +32,7 @@ type ProcessSheetState =
 /** 프로세스 트리에서 선택한 노드를 오른쪽 상세 패널로 표시한다. */
 export const ProcessListClient = () => {
   const t = useTranslations("process");
+  const tm = useTranslations("menu");
   const [sheetState, setSheetState] = useState<ProcessSheetState | null>(null);
   const selectedNode =
     sheetState?.type === "detail" || sheetState?.type === "edit"
@@ -30,11 +40,31 @@ export const ProcessListClient = () => {
       : null;
 
   return (
-    <div className="p-4">
-      <ProcessTree
-        selectedId={selectedNode?.nodeId}
-        onSelect={(node) => setSheetState({ type: "detail", node })}
-        onCreate={(parentId = null) => setSheetState({ type: "create", parentId })}
+    <ListPageLayout>
+      <PageHeader
+        title={tm("processMap")}
+        description={t("searchPlaceholder")}
+        icon={Network}
+        actions={
+          <PageActions
+            showSearch={false}
+            onRegister={() => setSheetState({ type: "create", parentId: null })}
+            registerLabel={t("new")}
+          />
+        }
+      />
+      <ListPageBody
+        content={
+          <PageContent>
+            <ContentPanel title={tm("processMap")} icon bodyClassName="p-4">
+              <ProcessTree
+                selectedId={selectedNode?.nodeId}
+                onSelect={(node) => setSheetState({ type: "detail", node })}
+                onCreate={(parentId = null) => setSheetState({ type: "create", parentId })}
+              />
+            </ContentPanel>
+          </PageContent>
+        }
       />
 
       <Sheet
@@ -98,6 +128,6 @@ export const ProcessListClient = () => {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </ListPageLayout>
   );
 };

@@ -59,6 +59,7 @@ export const ProcessForm = ({
   onSuccess,
 }: ProcessFormProps) => {
   const t = useTranslations("process");
+  const ts = useTranslations("status");
   const router = useRouter();
 
   const [i18n, setI18n] = useState<MultiLangValue>(
@@ -210,13 +211,13 @@ export const ProcessForm = ({
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue>{ts(field.value)}</SelectValue>
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {statusOptions.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {ts(s)}
                       </SelectItem>
                     ))}
                   </SelectContent>

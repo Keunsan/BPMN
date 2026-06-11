@@ -1,10 +1,18 @@
 "use client";
 
+import { Inbox } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable";
-import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import {
+  ListPageBody,
+  ListPageLayout,
+  PageActions,
+  PageContent,
+  PageHeader,
+} from "@/components/common/layout";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { showErrorToast } from "@/components/common/ErrorToast";
@@ -25,9 +33,11 @@ type ApprovalRow = {
 
 /** 승인 대기함 */
 export const ApprovalInbox = () => {
+  const t = useTranslations("governance");
+  const tc = useTranslations("common");
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["governance", "approvals"],
     queryFn: () => apiGet<ApprovalRow[]>("/api/governance/approvals"),
   });
@@ -44,12 +54,12 @@ export const ApprovalInbox = () => {
   });
 
   const columns: DataTableColumn<ApprovalRow>[] = [
-    { key: "code", header: "Code", cell: (r) => r.code },
-    { key: "name", header: "Name", cell: (r) => r.name },
-    { key: "level", header: "Level", cell: (r) => r.level },
+    { key: "code", header: t("code"), cell: (r) => r.code },
+    { key: "name", header: t("name"), cell: (r) => r.name },
+    { key: "level", header: t("level"), cell: (r) => r.level },
     {
       key: "status",
-      header: "Status",
+      header: t("status"),
       cell: () => <StatusBadge status={"IN_REVIEW" as ProcessStatus} />,
     },
     {
@@ -67,11 +77,12 @@ export const ApprovalInbox = () => {
             }
             disabled={mutation.isPending}
           >
-            승인
+            {t("approve")}
           </Button>
           <Button
             size="sm"
             variant="outline"
+            className="pams-page-action-outline"
             onClick={() =>
               mutation.mutate({
                 requestId: r.request_id,
@@ -80,23 +91,47 @@ export const ApprovalInbox = () => {
             }
             disabled={mutation.isPending}
           >
-            반려
+            {t("reject")}
           </Button>
         </div>
       ),
     },
   ];
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-2xl font-semibold">승인 대기함</h1>
-      {!data?.length ? (
-        <EmptyState title="승인 대기 항목이 없습니다." />
-      ) : (
-        <DataTable columns={columns} data={data} rowKey={(r) => r.request_id} />
-      )}
-    </div>
+    <ListPageLayout>
+      <PageHeader
+        title={t("approvalTitle")}
+        description={t("approvalDesc")}
+        icon={Inbox}
+        actions={
+          <PageActions
+            onSearch={() => void refetch()}
+            showRegister={false}
+          />
+        }
+      />
+      <ListPageBody
+        content={
+          <PageContent>
+            <DataTable
+              title={t("approvalTitle")}
+              count={data?.length ?? 0}
+              countSuffix={tc("countUnit")}
+              icon
+              columns={columns}
+              data={data ?? []}
+              rowKey={(r) => r.request_id}
+              storageKey="pams-approval-inbox-grid"
+              emptyMessage={t("approvalEmpty")}
+            />
+          </PageContent>
+        }
+      />
+    </ListPageLayout>
   );
 };

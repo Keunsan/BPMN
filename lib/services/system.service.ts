@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
+import type { Locale } from "@/lib/i18n/config";
 import * as processQueries from "@/lib/db/queries/process";
 import * as systemQueries from "@/lib/db/queries/system";
 import type {
@@ -69,8 +70,9 @@ const assertTaskNode = async (nodeId: number): Promise<void> => {
 
 /** 시스템 목록을 조회한다. */
 export const listSystems = async (
+  locale: Locale,
   filters: SystemListFilters = {},
-): Promise<ApplicationSystemDto[]> => systemQueries.listSystems(filters);
+): Promise<ApplicationSystemDto[]> => systemQueries.listSystems(filters, locale);
 
 /** 시스템 상세를 조회한다. */
 export const getSystem = async (systemId: number): Promise<ApplicationSystemDto> => {
@@ -93,8 +95,20 @@ export const createSystem = async (
   dto: UpsertApplicationSystemDto,
 ): Promise<ApplicationSystemDto> => {
   const normalized = normalizeSystemDto(dto);
-  if (await systemQueries.existsSystemCode(normalized.systemCode)) {
-    throw new ApiError("E304", "Duplicate system code", 409, undefined, "systemCode");
+  if (
+    await systemQueries.existsSystemIdentity(
+      normalized.systemCode,
+      normalized.companyCode ?? "",
+      normalized.businessUnitCode ?? "",
+    )
+  ) {
+    throw new ApiError(
+      "E304",
+      "Duplicate system for company and business unit",
+      409,
+      undefined,
+      "systemCode",
+    );
   }
 
   const created = await systemQueries.createSystem(normalized);
@@ -112,8 +126,21 @@ export const updateSystem = async (
   }
 
   const normalized = normalizeSystemDto(dto);
-  if (await systemQueries.existsSystemCode(normalized.systemCode, systemId)) {
-    throw new ApiError("E304", "Duplicate system code", 409, undefined, "systemCode");
+  if (
+    await systemQueries.existsSystemIdentity(
+      normalized.systemCode,
+      normalized.companyCode ?? "",
+      normalized.businessUnitCode ?? "",
+      systemId,
+    )
+  ) {
+    throw new ApiError(
+      "E304",
+      "Duplicate system for company and business unit",
+      409,
+      undefined,
+      "systemCode",
+    );
   }
 
   const updated = await systemQueries.updateSystem(systemId, normalized);
@@ -138,6 +165,8 @@ const normalizeSystemDto = (
   ...dto,
   systemCode: assertCode(dto.systemCode, "systemCode"),
   systemName: assertName(dto.systemName, "systemName"),
+  companyCode: assertCode(dto.companyCode ?? "", "companyCode"),
+  businessUnitCode: assertCode(dto.businessUnitCode ?? "", "businessUnitCode"),
   vendor: dto.vendor?.trim() || null,
   version: dto.version?.trim() || null,
   description: dto.description?.trim() || null,
@@ -295,8 +324,9 @@ const normalizeScreenDto = (
 });
 
 /** 활성 시스템 계층을 조회한다. */
-export const listSystemHierarchy = async (): Promise<SystemHierarchyDto[]> =>
-  systemQueries.listSystemHierarchy();
+export const listSystemHierarchy = async (
+  locale: Locale,
+): Promise<SystemHierarchyDto[]> => systemQueries.listSystemHierarchy(locale);
 
 /** Task별 시스템 매핑을 조회한다. */
 export const listTaskSystemMappings = async (
