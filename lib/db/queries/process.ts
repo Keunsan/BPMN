@@ -8,6 +8,7 @@ import type {
   ProcessDeleteImpact,
   ProcessDeleteImpactCount,
   ProcessDeleteImpactKind,
+  ProcessFilters,
   ProcessI18nMap,
   ProcessNode,
   UpdateProcessInput,
@@ -30,6 +31,8 @@ const mapProcessNode = (row: Record<string, unknown>): ProcessNode => ({
   validTo: row.valid_to ? new Date(row.valid_to as string) : null,
   isStandard: Boolean(row.is_standard),
   variantOf: (row.variant_of as number | null) ?? null,
+  companyCode: (row.company_code as string | null) ?? null,
+  businessUnitCode: (row.business_unit_code as string | null) ?? null,
   sortOrder: (row.sort_order as number) ?? 0,
   createdBy: (row.created_by as number | null) ?? null,
   createdAt: new Date(row.created_at as string),
@@ -83,9 +86,100 @@ export const findProcessByCode = async (
   return row ? mapProcessNode(row) : null;
 };
 
+/** 변형 코드 생성 */
+export const generateVariantCode = (
+  standardCode: string,
+  companyCode: string,
+  businessUnitCode: string,
+): string => `${standardCode}-V-${companyCode}-${businessUnitCode}`;
+
+/** 동일 표준·scope 변형 존재 여부 */
+export const existsVariantScope = async (
+  standardNodeId: number,
+  companyCode: string,
+  businessUnitCode: string,
+): Promise<boolean> => {
+  const row = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt
+     FROM process_node
+     WHERE variant_of = @standardNodeId
+       AND company_code = @companyCode
+       AND business_unit_code = @businessUnitCode`,
+    { standardNodeId, companyCode, businessUnitCode },
+  );
+  return (row?.cnt ?? 0) > 0;
+};
+
+/** 표준 노드의 scope 변형 조회 */
+export const findVariantByScope = async (
+  standardNodeId: number,
+  companyCode: string,
+  businessUnitCode: string,
+): Promise<ProcessNode | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT * FROM process_node
+     WHERE variant_of = @standardNodeId
+       AND company_code = @companyCode
+       AND business_unit_code = @businessUnitCode`,
+    { standardNodeId, companyCode, businessUnitCode },
+  );
+  return row ? mapProcessNode(row) : null;
+};
+
+/** 표준 노드에 연결된 변형 목록 */
+export const findVariantsByStandardId = async (
+  standardNodeId: number,
+): Promise<ProcessNode[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM process_node
+     WHERE variant_of = @standardNodeId
+     ORDER BY company_code, business_unit_code, code`,
+    { standardNodeId },
+  );
+  return rows.map(mapProcessNode);
+};
+
+/** 표준 노드별 변형 개수 */
+export const countVariantsByStandardIds = async (
+  standardNodeIds: number[],
+): Promise<Map<number, number>> => {
+  const counts = new Map<number, number>();
+  if (standardNodeIds.length === 0) {
+    return counts;
+  }
+
+  const targetIds = new Set(standardNodeIds);
+  const rows = await query<{ variant_of: number; cnt: number }>(
+    `SELECT variant_of, COUNT(*) AS cnt
+     FROM process_node
+     WHERE variant_of IS NOT NULL
+     GROUP BY variant_of`,
+  );
+
+  for (const row of rows) {
+    if (targetIds.has(row.variant_of)) {
+      counts.set(row.variant_of, row.cnt);
+    }
+  }
+  return counts;
+};
+
+/** 표준 노드에 연결된 변형 개수 */
+export const countVariantsForStandard = async (
+  standardNodeId: number,
+): Promise<number> => {
+  const row = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM process_node WHERE variant_of = @standardNodeId`,
+    { standardNodeId },
+  );
+  return row?.cnt ?? 0;
+};
+
 export const countChildProcesses = async (nodeId: number): Promise<number> => {
   const row = await queryOne<{ cnt: number }>(
-    `SELECT COUNT(*) AS cnt FROM process_node WHERE parent_node_id = @nodeId`,
+    `SELECT COUNT(*) AS cnt
+     FROM process_node
+     WHERE parent_node_id = @nodeId AND variant_of IS NULL`,
     { nodeId },
   );
   return row?.cnt ?? 0;
@@ -227,7 +321,9 @@ export const generateProcessCode = async (
 ): Promise<string> => {
   if (!parentNodeId) {
     const row = await queryOne<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM process_node WHERE parent_node_id IS NULL`,
+      `SELECT COUNT(*) AS cnt
+       FROM process_node
+       WHERE parent_node_id IS NULL AND variant_of IS NULL`,
     );
     const seq = String((row?.cnt ?? 0) + 1).padStart(2, "0");
     return `STP-${seq}`;
@@ -277,12 +373,14 @@ export const createProcess = async (
     `INSERT INTO process_node (
       parent_node_id, level, code, name, description, status,
       owner_org_id, version, valid_from, valid_to, is_standard,
+      variant_of, company_code, business_unit_code,
       sort_order, created_by
     )
     OUTPUT INSERTED.*
     VALUES (
       @parentNodeId, @level, @code, @name, @description, @status,
       @ownerOrgId, @version, @validFrom, @validTo, @isStandard,
+      @variantOf, @companyCode, @businessUnitCode,
       @sortOrder, @createdBy
     )`,
     {
@@ -297,6 +395,9 @@ export const createProcess = async (
       validFrom: input.validFrom ?? null,
       validTo: input.validTo ?? null,
       isStandard: input.isStandard ?? true,
+      variantOf: input.variantOf ?? null,
+      companyCode: input.companyCode ?? null,
+      businessUnitCode: input.businessUnitCode ?? null,
       sortOrder: input.sortOrder ?? 0,
       createdBy: input.createdBy ?? null,
     },
@@ -454,22 +555,64 @@ export const deleteProcess = async (
 };
 
 export const listProcessNodes = async (
-  search?: string,
+  filters: ProcessFilters = {},
 ): Promise<ProcessNode[]> => {
-  if (search?.trim()) {
-    const rows = await query<Record<string, unknown>>(
-      `SELECT * FROM process_node
-       WHERE code LIKE @search OR name LIKE @search
-       ORDER BY sort_order, code`,
-      { search: `%${search.trim()}%` },
-    );
-    return rows.map(mapProcessNode);
+  const conditions = ["1=1"];
+  const params: QueryParams = {};
+
+  if (!filters.includeVariants) {
+    conditions.push("variant_of IS NULL");
+  }
+  if (filters.companyCode) {
+    conditions.push("company_code = @companyCode");
+    params.companyCode = filters.companyCode;
+  }
+  if (filters.businessUnitCode) {
+    conditions.push("business_unit_code = @businessUnitCode");
+    params.businessUnitCode = filters.businessUnitCode;
+  }
+  if (filters.level) {
+    conditions.push("level = @level");
+    params.level = filters.level;
+  }
+  if (filters.status) {
+    conditions.push("status = @status");
+    params.status = filters.status;
+  }
+  if (filters.parentNodeId !== undefined) {
+    if (filters.parentNodeId === null) {
+      conditions.push("parent_node_id IS NULL");
+    } else {
+      conditions.push("parent_node_id = @parentNodeId");
+      params.parentNodeId = filters.parentNodeId;
+    }
+  }
+  if (filters.search?.trim()) {
+    conditions.push("(code LIKE @search OR name LIKE @search)");
+    params.search = `%${filters.search.trim()}%`;
   }
 
   const rows = await query<Record<string, unknown>>(
-    `SELECT * FROM process_node ORDER BY sort_order, code`,
+    `SELECT * FROM process_node
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY sort_order, code`,
+    params,
   );
   return rows.map(mapProcessNode);
+};
+
+/** scope에 해당하는 변형 노드 목록 */
+export const listVariantsByScope = async (
+  companyCode: string,
+  businessUnitCode: string,
+  search?: string,
+): Promise<ProcessNode[]> => {
+  return listProcessNodes({
+    includeVariants: true,
+    companyCode,
+    businessUnitCode,
+    search,
+  });
 };
 
 /** 노드 이동 */

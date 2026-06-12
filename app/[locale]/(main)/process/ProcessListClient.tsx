@@ -14,6 +14,10 @@ import {
 } from "@/components/common/layout";
 import { ProcessDetail } from "@/components/process/ProcessDetail";
 import { ProcessForm } from "@/components/process/ProcessForm";
+import {
+  ProcessScopeFilter,
+  useProcessScopeParams,
+} from "@/components/process/ProcessScopeFilter";
 import { ProcessTree } from "@/components/process/ProcessTree";
 import {
   Sheet,
@@ -33,6 +37,8 @@ type ProcessSheetState =
 export const ProcessListClient = () => {
   const t = useTranslations("process");
   const tm = useTranslations("menu");
+  const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
+    useProcessScopeParams();
   const [sheetState, setSheetState] = useState<ProcessSheetState | null>(null);
   const selectedNode =
     sheetState?.type === "detail" || sheetState?.type === "edit"
@@ -54,11 +60,19 @@ export const ProcessListClient = () => {
         }
       />
       <ListPageBody
+        filter={
+          <ProcessScopeFilter
+            companyCode={companyCode}
+            businessUnitCode={businessUnitCode}
+            onScopeChange={setScope}
+          />
+        }
         content={
           <PageContent>
             <ContentPanel title={tm("processMap")} icon bodyClassName="p-4">
               <ProcessTree
                 selectedId={selectedNode?.nodeId}
+                scopeFilters={scopeFilters}
                 onSelect={(node) => setSheetState({ type: "detail", node })}
                 onCreate={(parentId = null) => setSheetState({ type: "create", parentId })}
               />

@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 
 type FilterPanelContextValue = {
-  registerField: () => number;
+  fieldIndex: number;
   showCollapseToggle: boolean;
 };
 
@@ -17,8 +17,5 @@ export const useFilterPanelFieldSlot = () => {
     return { fieldIndex: -1, showCollapseToggle: false };
   }
 
-  return {
-    fieldIndex: context.registerField(),
-    showCollapseToggle: context.showCollapseToggle,
-  };
+  return context;
 };

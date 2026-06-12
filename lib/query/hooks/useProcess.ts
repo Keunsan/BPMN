@@ -8,21 +8,29 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
 import { processKeys } from "@/lib/query/keys";
 import type {
   CreateProcessDto,
+  CreateVariantDto,
   MoveProcessDto,
   ProcessDeleteImpact,
+  ProcessFilters,
   ProcessHistoryDto,
   ProcessNodeDto,
   ProcessNodeTree,
+  StandardVariantCompareDto,
   UpdateProcessDto,
 } from "@/types/process";
 
 /** 프로세스 트리 조회 훅 */
-export const useProcessTree = (search?: string) => {
+export const useProcessTree = (filters: ProcessFilters = {}) => {
   return useQuery({
-    queryKey: processKeys.tree({ search }),
+    queryKey: processKeys.tree(filters),
     queryFn: () =>
       apiGet<ProcessNodeTree[]>("/api/process", {
-        params: { format: "tree", search },
+        params: {
+          format: "tree",
+          search: filters.search,
+          companyCode: filters.companyCode,
+          businessUnitCode: filters.businessUnitCode,
+        },
       }),
   });
 };
@@ -122,6 +130,58 @@ export const useMoveProcess = () => {
       apiPut<ProcessNodeDto>(`/api/process/${nodeId}/move`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: processKeys.all });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) showErrorToast(error);
+    },
+  });
+};
+
+/** 표준 프로세스 변형 목록 */
+export const useProcessVariants = (standardNodeId: number, enabled = true) => {
+  return useQuery({
+    queryKey: processKeys.variants(standardNodeId),
+    queryFn: () =>
+      apiGet<ProcessNodeDto[]>(`/api/process/${standardNodeId}/variants`),
+    enabled: standardNodeId > 0 && enabled,
+  });
+};
+
+/** 표준·변형 비교 */
+export const useStandardVariantCompare = (
+  standardNodeId: number,
+  filters: Pick<ProcessFilters, "companyCode" | "businessUnitCode">,
+  enabled = true,
+) => {
+  return useQuery({
+    queryKey: processKeys.compareVariant(standardNodeId, filters),
+    queryFn: () =>
+      apiGet<StandardVariantCompareDto>(
+        `/api/process/${standardNodeId}/compare-variant`,
+        {
+          params: {
+            companyCode: filters.companyCode,
+            businessUnitCode: filters.businessUnitCode,
+          },
+        },
+      ),
+    enabled:
+      enabled &&
+      standardNodeId > 0 &&
+      Boolean(filters.companyCode && filters.businessUnitCode),
+  });
+};
+
+/** 변형 생성 mutation */
+export const useCreateProcessVariant = (standardNodeId: number) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateVariantDto) =>
+      apiPost<ProcessNodeDto>(`/api/process/${standardNodeId}/variant`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: processKeys.all });
+      qc.invalidateQueries({ queryKey: processKeys.variants(standardNodeId) });
+      qc.invalidateQueries({ queryKey: processKeys.detail(standardNodeId) });
     },
     onError: (error) => {
       if (error instanceof ApiError) showErrorToast(error);

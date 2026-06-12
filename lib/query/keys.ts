@@ -16,6 +16,11 @@ export const processKeys = {
   tree: (filters?: ProcessFilters) => [...processKeys.trees(), filters ?? {}] as const,
   details: () => [...processKeys.all, "detail"] as const,
   detail: (id: number) => [...processKeys.details(), id] as const,
+  variants: (id: number) => [...processKeys.all, "variants", id] as const,
+  compareVariant: (
+    id: number,
+    filters: Pick<ProcessFilters, "companyCode" | "businessUnitCode">,
+  ) => [...processKeys.all, "compare-variant", id, filters] as const,
 };
 
 export const bpmnKeys = {

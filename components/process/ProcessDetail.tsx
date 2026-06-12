@@ -15,9 +15,11 @@ import { useTaskAttributeList } from "@/lib/query/hooks/useMetadata";
 import {
   useProcessDetail,
   useProcessHistory,
+  useProcessVariants,
   useRequestApproval,
 } from "@/lib/query/hooks/useProcess";
-import { useRouter } from "@/lib/i18n/navigation";
+import { Link, useRouter } from "@/lib/i18n/navigation";
+import { formatProcessScope } from "@/lib/utils/process-label";
 import type { BpmnModelDto } from "@/types/bpmn";
 import type { TaskAttributeListItem } from "@/types/metadata";
 import type { ProcessHistoryDto, ProcessNodeDto } from "@/types/process";
@@ -79,6 +81,10 @@ export const ProcessDetail = ({
   const router = useRouter();
   const { data: node, isLoading } = useProcessDetail(nodeId);
   const { data: history } = useProcessHistory(nodeId);
+  const { data: variants } = useProcessVariants(
+    nodeId,
+    Boolean(node?.isStandard && !node.variantOf),
+  );
   const { data: bpmnModels, isLoading: isBpmnLoading } = useBpmnList({
     nodeId: node?.level === "L4" ? undefined : nodeId,
     linkedNodeId: node?.level === "L4" ? nodeId : undefined,
@@ -258,9 +264,75 @@ export const ProcessDetail = ({
                   </div>
                   <div>
                     <dt className="text-muted-foreground">{t("isStandard")}</dt>
-                    <dd>{node.isStandard ? t("yes") : t("no")}</dd>
+                    <dd>
+                      {node.variantOf
+                        ? t("variant.label")
+                        : node.isStandard
+                          ? t("yes")
+                          : t("no")}
+                    </dd>
                   </div>
+                  {node.variantOf && node.standardProcess && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-muted-foreground">
+                        {t("variant.standardProcess")}
+                      </dt>
+                      <dd>
+                        <Link
+                          href={`/process/${node.standardProcess.nodeId}`}
+                          className="text-primary hover:underline"
+                        >
+                          {node.standardProcess.code} {node.standardProcess.name}
+                        </Link>
+                      </dd>
+                    </div>
+                  )}
+                  {(node.companyCode || node.businessUnitCode) && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-muted-foreground">{t("scope.label")}</dt>
+                      <dd>{formatProcessScope(node) || "-"}</dd>
+                    </div>
+                  )}
                 </dl>
+
+                {node.isStandard && !node.variantOf && (variants?.length ?? 0) > 0 && (
+                  <div className="space-y-2 border-t pt-3">
+                    <h4 className="text-sm font-medium">{t("variant.listTitle")}</h4>
+                    <ul className="space-y-2 text-sm">
+                      {variants?.map((variant) => (
+                        <li
+                          key={variant.nodeId}
+                          className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-mono text-xs text-muted-foreground">
+                              {variant.code}
+                            </p>
+                            <p className="truncate">{variant.displayName ?? variant.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {formatProcessScope(variant)}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/process/${variant.nodeId}`}
+                            className="inline-flex h-[1.625rem] shrink-0 items-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2 text-xs hover:bg-muted"
+                          >
+                            {t("viewDetail")}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {node.isStandard &&
+                  !node.variantOf &&
+                  (node.variantCount ?? 0) > 0 &&
+                  (node.level === "L3" || node.level === "L4") && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("variant.impactHint", { count: node.variantCount ?? 0 })}
+                    </p>
+                  )}
               </CardContent>
             </Card>
           </TabsContent>

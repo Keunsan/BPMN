@@ -46,6 +46,65 @@ export const bumpVersion = (
   return `${major}.${minor + 1}.0`;
 };
 
+/** scope overlay 트리 — 표준 노드를 기준으로 변형을 대체한다 */
+export const buildOverlayProcessTree = (
+  standardNodes: ProcessNodeTree[],
+  variantNodes: ProcessNodeTree[],
+): ProcessNodeTree[] => {
+  const standardById = new Map(standardNodes.map((node) => [node.nodeId, node]));
+  const variantByStandardId = new Map(
+    variantNodes
+      .filter((node) => node.variantOf != null)
+      .map((node) => [node.variantOf!, node]),
+  );
+
+  const effectiveByStandardId = new Map<number, ProcessNodeTree>();
+
+  for (const node of standardNodes) {
+    if (node.level === "L1" || node.level === "L2") {
+      effectiveByStandardId.set(node.nodeId, {
+        ...node,
+        isOverlayVariant: false,
+      });
+      continue;
+    }
+
+    const variant = variantByStandardId.get(node.nodeId);
+    if (variant) {
+      effectiveByStandardId.set(node.nodeId, {
+        ...variant,
+        isOverlayVariant: true,
+      });
+    } else {
+      effectiveByStandardId.set(node.nodeId, {
+        ...node,
+        isOverlayVariant: false,
+      });
+    }
+  }
+
+  const getEffectiveParentId = (standardParentId: number | null): number | null => {
+    if (standardParentId == null) {
+      return null;
+    }
+    const parentStandard = standardById.get(standardParentId);
+    if (!parentStandard) {
+      return standardParentId;
+    }
+    return effectiveByStandardId.get(standardParentId)?.nodeId ?? standardParentId;
+  };
+
+  const effectiveNodes = standardNodes.map((node) => {
+    const effective = effectiveByStandardId.get(node.nodeId)!;
+    return {
+      ...effective,
+      parentNodeId: getEffectiveParentId(node.parentNodeId),
+    };
+  });
+
+  return buildProcessTree(effectiveNodes);
+};
+
 /** 다음 레벨 계산 */
 export const getNextLevel = (
   parentLevel: string | null,

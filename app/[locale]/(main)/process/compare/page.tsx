@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { ProcessCompareClient } from "@/components/process/ProcessCompareClient";
 
 export default function ProcessComparePage() {
-  return <PlaceholderPage titleKey="menu.processCompare" />;
+  return <ProcessCompareClient />;
 }

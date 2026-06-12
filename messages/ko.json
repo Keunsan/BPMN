@@ -160,7 +160,40 @@
     "selectVersions": "비교할 버전을 선택하세요",
     "selectVersionsDesc": "이력 탭에서 행을 클릭하면 버전 비교가 시작됩니다.",
     "compareTitle": "v{a} ↔ v{b} 비교",
-    "field": "필드"
+    "field": "필드",
+    "scope": {
+      "label": "적용 범위",
+      "companyCode": "법인",
+      "businessUnitCode": "사업부",
+      "selectCompany": "법인을 선택하세요",
+      "selectBusinessUnit": "사업부를 선택하세요",
+      "allCompanies": "전체 법인",
+      "allBusinessUnits": "전체 사업부",
+      "standardViewHint": "법인·사업부를 모두 선택하면 해당 범위의 변형 프로세스를 overlay로 조회합니다.",
+      "overlayViewHint": "선택한 법인·사업부 기준으로 표준 프로세스와 변형을 병합해 표시합니다."
+    },
+    "variant": {
+      "label": "변형",
+      "badge": "변형",
+      "count": "변형 {count}",
+      "createTitle": "변형 프로세스 생성",
+      "createDesc": "표준 프로세스 {code} ({name})의 법인·사업부별 변형을 생성합니다.",
+      "createAction": "변형 생성",
+      "standardProcess": "기준 표준 프로세스",
+      "listTitle": "등록된 변형",
+      "impactHint": "이 표준 프로세스를 변경하면 연결된 변형 {count}건에 영향을 줄 수 있습니다.",
+      "comparePageDesc": "표준 프로세스와 법인·사업부별 변형의 차이를 비교합니다.",
+      "selectStandard": "표준 프로세스",
+      "compareSelectScope": "비교 범위를 선택하세요",
+      "compareSelectScopeDesc": "법인·사업부와 표준 프로세스를 선택하면 비교 결과가 표시됩니다.",
+      "compareNoVariant": "해당 범위의 변형이 없습니다",
+      "compareNoVariantDesc": "선택한 법인·사업부에 대한 변형을 먼저 생성하세요.",
+      "compareTitle": "{standardCode} ↔ {variantCode}",
+      "standardColumn": "표준",
+      "variantColumn": "변형",
+      "noStandardOptions": "비교 가능한 표준 프로세스가 없습니다",
+      "noStandardOptionsDesc": "L3 또는 L4 표준 프로세스를 먼저 등록하세요."
+    }
   },
   "bpmn": {
     "title": "BPMN 모델",

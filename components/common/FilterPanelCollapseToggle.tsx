@@ -35,7 +35,6 @@ export const FilterPanelCollapseToggle = ({
       size="icon-sm"
       className={cn(
         "shrink-0 text-muted-foreground hover:text-foreground",
-        compact && "!size-4 rounded-sm p-0",
         className,
       )}
       onClick={() => setFilterPanelCollapsed(!filterPanelCollapsed)}

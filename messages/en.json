@@ -160,7 +160,40 @@
     "selectVersions": "Select versions to compare",
     "selectVersionsDesc": "Click a row in the History tab to start comparison.",
     "compareTitle": "Compare v{a} ↔ v{b}",
-    "field": "Field"
+    "field": "Field",
+    "scope": {
+      "label": "Scope",
+      "companyCode": "Company",
+      "businessUnitCode": "Business Unit",
+      "selectCompany": "Select company",
+      "selectBusinessUnit": "Select business unit",
+      "allCompanies": "All companies",
+      "allBusinessUnits": "All business units",
+      "standardViewHint": "Select both company and business unit to view scoped variant overlays.",
+      "overlayViewHint": "Showing standard processes merged with variants for the selected scope."
+    },
+    "variant": {
+      "label": "Variant",
+      "badge": "Variant",
+      "count": "{count} variants",
+      "createTitle": "Create Process Variant",
+      "createDesc": "Create a company/business-unit variant of standard process {code} ({name}).",
+      "createAction": "Create Variant",
+      "standardProcess": "Source Standard Process",
+      "listTitle": "Registered Variants",
+      "impactHint": "Changes to this standard may affect {count} linked variant(s).",
+      "comparePageDesc": "Compare standard and scoped variant processes.",
+      "selectStandard": "Standard Process",
+      "compareSelectScope": "Select comparison scope",
+      "compareSelectScopeDesc": "Choose company, business unit, and a standard process to compare.",
+      "compareNoVariant": "No variant for this scope",
+      "compareNoVariantDesc": "Create a variant for the selected company and business unit first.",
+      "compareTitle": "{standardCode} ↔ {variantCode}",
+      "standardColumn": "Standard",
+      "variantColumn": "Variant",
+      "noStandardOptions": "No comparable standard processes",
+      "noStandardOptionsDesc": "Register L3 or L4 standard processes first."
+    }
   },
   "bpmn": {
     "title": "BPMN Models",

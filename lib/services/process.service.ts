@@ -2,33 +2,80 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
 import type { Locale } from "@/lib/i18n/config";
-import { buildProcessTree, bumpVersion, getNextLevel } from "@/lib/utils/process";
+import {
+  buildOverlayProcessTree,
+  buildProcessTree,
+  bumpVersion,
+  getNextLevel,
+} from "@/lib/utils/process";
 import type {
   CreateProcessDto,
+  CreateVariantDto,
   MoveProcessDto,
   ProcessDeleteImpact,
+  ProcessFilters,
   ProcessHistoryDto,
   ProcessI18nMap,
   ProcessNodeDto,
   ProcessNodeTree,
   ProcessStatus,
+  StandardVariantCompareDto,
   UpdateProcessDto,
 } from "@/types/process";
 
+import * as commonCodeQueries from "@/lib/db/queries/common-code";
 import * as processQueries from "@/lib/db/queries/process";
+
+type ScopeNameLookup = {
+  companyNames: Map<string, string>;
+  businessUnitNames: Map<string, string>;
+};
+
+/** 공통코드 lookup으로 scope 표시명 맵을 만든다 */
+const loadScopeNameLookup = async (locale: Locale): Promise<ScopeNameLookup> => {
+  const [companyCodes, businessUnitCodes] = await Promise.all([
+    commonCodeQueries.lookupCommonCodesByGroupCode("COMPANY_CD", locale),
+    commonCodeQueries.lookupCommonCodesByGroupCode("BU_CD", locale),
+  ]);
+
+  return {
+    companyNames: new Map(
+      companyCodes.map((item) => [item.code, item.displayName]),
+    ),
+    businessUnitNames: new Map(
+      businessUnitCodes.map((item) => [item.code, item.displayName]),
+    ),
+  };
+};
 
 /** 노드를 DTO로 변환 (locale 적용) */
 const toProcessDto = async (
   node: NonNullable<Awaited<ReturnType<typeof processQueries.findProcessById>>>,
   locale: Locale,
+  scopeLookup?: ScopeNameLookup,
+  options?: {
+    variantCount?: number;
+    standardProcess?: ProcessNodeDto["standardProcess"];
+  },
 ): Promise<ProcessNodeDto> => {
   const i18n = await processQueries.findProcessI18n(node.nodeId);
+  const lookup = scopeLookup ?? (await loadScopeNameLookup(locale));
+
   return {
     ...node,
     i18n,
     displayName: processQueries.resolveDisplayName(node, i18n, locale),
     displayDescription:
       i18n[locale]?.description ?? i18n.ko?.description ?? node.description,
+    companyName: node.companyCode
+      ? (lookup.companyNames.get(node.companyCode) ?? node.companyCode)
+      : null,
+    businessUnitName: node.businessUnitCode
+      ? (lookup.businessUnitNames.get(node.businessUnitCode) ??
+        node.businessUnitCode)
+      : null,
+    variantCount: options?.variantCount,
+    standardProcess: options?.standardProcess ?? null,
   };
 };
 
@@ -41,20 +88,68 @@ const resolveKoName = (dto: CreateProcessDto | UpdateProcessDto): string => {
   return koName.trim();
 };
 
-/** 프로세스 트리 조회 */
-export const getProcessTree = async (
+const toProcessTreeNodes = async (
+  nodes: Awaited<ReturnType<typeof processQueries.listProcessNodes>>,
   locale: Locale,
-  search?: string,
+  options?: {
+    variantCounts?: Map<number, number>;
+    scopeLookup?: ScopeNameLookup;
+  },
 ): Promise<ProcessNodeTree[]> => {
-  const nodes = await processQueries.listProcessNodes(search);
+  const scopeLookup = options?.scopeLookup ?? (await loadScopeNameLookup(locale));
   const dtos: ProcessNodeTree[] = [];
 
   for (const node of nodes) {
-    const dto = await toProcessDto(node, locale);
+    const dto = await toProcessDto(node, locale, scopeLookup, {
+      variantCount: options?.variantCounts?.get(node.nodeId),
+    });
     dtos.push({ ...dto, name: dto.displayName ?? dto.name });
   }
 
-  return buildProcessTree(dtos);
+  return dtos;
+};
+
+/** 프로세스 트리 조회 */
+export const getProcessTree = async (
+  locale: Locale,
+  filters: ProcessFilters = {},
+): Promise<ProcessNodeTree[]> => {
+  const search = filters.search;
+  const scopeLookup = await loadScopeNameLookup(locale);
+  const standardNodes = await processQueries.listProcessNodes({ search });
+  const standardDtos = await toProcessTreeNodes(standardNodes, locale, {
+    scopeLookup,
+  });
+
+  const hasOverlayScope = Boolean(
+    filters.companyCode?.trim() && filters.businessUnitCode?.trim(),
+  );
+
+  if (!hasOverlayScope) {
+    const variantCounts = await processQueries.countVariantsByStandardIds(
+      standardNodes
+        .filter((node) => node.level === "L3" || node.level === "L4")
+        .map((node) => node.nodeId),
+    );
+
+    const withCounts = standardDtos.map((node) => ({
+      ...node,
+      variantCount: variantCounts.get(node.nodeId) ?? 0,
+    }));
+
+    return buildProcessTree(withCounts);
+  }
+
+  const variantNodes = await processQueries.listVariantsByScope(
+    filters.companyCode!.trim(),
+    filters.businessUnitCode!.trim(),
+    search,
+  );
+  const variantDtos = await toProcessTreeNodes(variantNodes, locale, {
+    scopeLookup,
+  });
+
+  return buildOverlayProcessTree(standardDtos, variantDtos);
 };
 
 /** 프로세스 상세 */
@@ -66,7 +161,28 @@ export const getProcessDetail = async (
   if (!node) {
     throw new ApiError("E302", "Process not found", 404);
   }
-  return toProcessDto(node, locale);
+
+  let standardProcess: ProcessNodeDto["standardProcess"] = null;
+  if (node.variantOf) {
+    const standard = await processQueries.findProcessById(node.variantOf);
+    if (standard) {
+      standardProcess = {
+        nodeId: standard.nodeId,
+        code: standard.code,
+        name: standard.name,
+      };
+    }
+  }
+
+  const variantCount =
+    node.variantOf == null && (node.level === "L3" || node.level === "L4")
+      ? await processQueries.countVariantsForStandard(node.nodeId)
+      : undefined;
+
+  return toProcessDto(node, locale, undefined, {
+    variantCount,
+    standardProcess,
+  });
 };
 
 /** 프로세스 생성 */
@@ -196,6 +312,204 @@ export const updateProcess = async (
   return toProcessDto(updated, locale);
 };
 
+/** 표준 프로세스의 변형 목록 */
+export const listVariantsByStandard = async (
+  standardNodeId: number,
+  locale: Locale,
+): Promise<ProcessNodeDto[]> => {
+  const standard = await processQueries.findProcessById(standardNodeId);
+  if (!standard) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  const variants = await processQueries.findVariantsByStandardId(standardNodeId);
+  const scopeLookup = await loadScopeNameLookup(locale);
+
+  return Promise.all(
+    variants.map((variant) =>
+      toProcessDto(variant, locale, scopeLookup, {
+        standardProcess: {
+          nodeId: standard.nodeId,
+          code: standard.code,
+          name: standard.name,
+        },
+      }),
+    ),
+  );
+};
+
+/** 표준 프로세스에서 법인·사업부 변형 생성 */
+export const createVariantFromStandard = async (
+  standardNodeId: number,
+  dto: CreateVariantDto,
+  locale: Locale,
+  userId?: number,
+): Promise<ProcessNodeDto> => {
+  const standard = await processQueries.findProcessById(standardNodeId);
+  if (!standard) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  if (!standard.isStandard || standard.variantOf != null) {
+    throw new ApiError(
+      "E405",
+      "Only standard processes can create variants",
+      400,
+    );
+  }
+
+  if (standard.level !== "L3" && standard.level !== "L4") {
+    throw new ApiError(
+      "E405",
+      "Variants can only be created from L3 or L4 standard processes",
+      400,
+    );
+  }
+
+  const companyCode = dto.companyCode.trim();
+  const businessUnitCode = dto.businessUnitCode.trim();
+  if (!companyCode || !businessUnitCode) {
+    throw new ApiError(
+      "E001",
+      "Company and business unit are required",
+      400,
+      undefined,
+      "companyCode",
+    );
+  }
+
+  if (
+    await processQueries.existsVariantScope(
+      standardNodeId,
+      companyCode,
+      businessUnitCode,
+    )
+  ) {
+    throw new ApiError(
+      "E304",
+      "Duplicate variant for company and business unit",
+      409,
+    );
+  }
+
+  const code = processQueries.generateVariantCode(
+    standard.code,
+    companyCode,
+    businessUnitCode,
+  );
+
+  const existingCode = await processQueries.findProcessByCode(code);
+  if (existingCode) {
+    throw new ApiError("E304", "Variant code already exists", 409, undefined, "code");
+  }
+
+  let parentNodeId = standard.parentNodeId;
+  if (standard.level === "L4" && standard.parentNodeId) {
+    const parentVariant = await processQueries.findVariantByScope(
+      standard.parentNodeId,
+      companyCode,
+      businessUnitCode,
+    );
+    if (parentVariant) {
+      parentNodeId = parentVariant.nodeId;
+    }
+  }
+
+  const standardI18n = await processQueries.findProcessI18n(standardNodeId);
+  const node = await processQueries.createProcess({
+    parentNodeId,
+    level: standard.level,
+    code,
+    name: standard.name,
+    description: standard.description,
+    status: "DRAFT",
+    ownerOrgId: standard.ownerOrgId,
+    version: "1.0.0",
+    validFrom: standard.validFrom
+      ? standard.validFrom.toISOString().slice(0, 10)
+      : null,
+    validTo: standard.validTo
+      ? standard.validTo.toISOString().slice(0, 10)
+      : null,
+    isStandard: false,
+    variantOf: standardNodeId,
+    companyCode,
+    businessUnitCode,
+    sortOrder: standard.sortOrder,
+    createdBy: userId ?? null,
+  });
+
+  await processQueries.upsertProcessI18n(node.nodeId, standardI18n);
+
+  await processQueries.insertProcessHistory({
+    nodeId: node.nodeId,
+    version: node.version ?? "1.0.0",
+    changeType: "CREATE",
+    changeReason: `Variant created from standard ${standard.code}`,
+    snapshotData: JSON.stringify(node),
+    createdBy: userId ?? null,
+  });
+
+  return toProcessDto(node, locale, undefined, {
+    standardProcess: {
+      nodeId: standard.nodeId,
+      code: standard.code,
+      name: standard.name,
+    },
+  });
+};
+
+/** 표준·변형 비교 */
+export const compareStandardVariant = async (
+  standardNodeId: number,
+  companyCode: string,
+  businessUnitCode: string,
+  locale: Locale,
+): Promise<StandardVariantCompareDto> => {
+  const standard = await getProcessDetail(standardNodeId, locale);
+  const variantNode = await processQueries.findVariantByScope(
+    standardNodeId,
+    companyCode.trim(),
+    businessUnitCode.trim(),
+  );
+
+  const variant = variantNode
+    ? await toProcessDto(variantNode, locale, undefined, {
+        standardProcess: {
+          nodeId: standard.nodeId,
+          code: standard.code,
+          name: standard.name,
+        },
+      })
+    : null;
+
+  const compareKeys = [
+    "code",
+    "name",
+    "description",
+    "status",
+    "version",
+    "level",
+  ] as const;
+
+  const diffRows = compareKeys.map((key) => {
+    const standardValue = String(standard[key] ?? "-");
+    const variantValue = String(variant?.[key] ?? "-");
+    return {
+      key,
+      standardValue,
+      variantValue,
+      changed: variant ? standardValue !== variantValue : false,
+    };
+  });
+
+  return {
+    standard,
+    variant,
+    diffRows,
+  };
+};
+
 /** 프로세스 삭제 */
 export const deleteProcess = async (
   nodeId: number,
@@ -204,6 +518,17 @@ export const deleteProcess = async (
   const current = await processQueries.findProcessById(nodeId);
   if (!current) {
     throw new ApiError("E302", "Process not found", 404);
+  }
+
+  if (current.variantOf == null) {
+    const variantCount = await processQueries.countVariantsForStandard(nodeId);
+    if (variantCount > 0) {
+      throw new ApiError(
+        "E401",
+        "Cannot delete standard process with existing variants",
+        400,
+      );
+    }
   }
 
   const impact = await processQueries.getProcessDeleteImpact(nodeId);
@@ -367,7 +692,10 @@ export const changeProcessStatus = async (
 };
 
 /** 전체 목록 (flat) */
-export const listProcesses = async (locale: Locale, search?: string) => {
-  const nodes = await processQueries.listProcessNodes(search);
+export const listProcesses = async (
+  locale: Locale,
+  filters: ProcessFilters = {},
+) => {
+  const nodes = await processQueries.listProcessNodes(filters);
   return Promise.all(nodes.map((n) => toProcessDto(n, locale)));
 };

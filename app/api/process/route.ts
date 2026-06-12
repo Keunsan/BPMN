@@ -6,21 +6,33 @@ import {
   getProcessTree,
   listProcesses,
 } from "@/lib/services/process.service";
-import type { CreateProcessDto } from "@/types/process";
+import type {
+  CreateProcessDto,
+  ProcessLevel,
+  ProcessStatus,
+} from "@/types/process";
 
 /** GET /api/process — 트리 또는 flat 목록 */
 export const GET = withApiHandler(async ({ request, locale }) => {
   const { searchParams } = request.nextUrl;
   const format = searchParams.get("format");
-  const search = searchParams.get("search") ?? undefined;
+  const filters = {
+    search: searchParams.get("search") ?? undefined,
+    companyCode: searchParams.get("companyCode") ?? undefined,
+    businessUnitCode: searchParams.get("businessUnitCode") ?? undefined,
+    level: (searchParams.get("level") ?? undefined) as ProcessLevel | undefined,
+    status: (searchParams.get("status") ?? undefined) as
+      | ProcessStatus
+      | undefined,
+  };
 
   if (format === "tree") {
-    const data = await getProcessTree(locale, search);
+    const data = await getProcessTree(locale, filters);
     return { data };
   }
 
   const { page, limit } = getPaginationParams(request);
-  const all = await listProcesses(locale, search);
+  const all = await listProcesses(locale, filters);
   const start = (page - 1) * limit;
   const items = all.slice(start, start + limit);
 

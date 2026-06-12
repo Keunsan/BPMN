@@ -160,7 +160,40 @@
     "selectVersions": "請選擇要比較的版本",
     "selectVersionsDesc": "在紀錄分頁點擊列即可開始比較。",
     "compareTitle": "比較 v{a} ↔ v{b}",
-    "field": "欄位"
+    "field": "欄位",
+    "scope": {
+      "label": "適用範圍",
+      "companyCode": "法人",
+      "businessUnitCode": "事業部",
+      "selectCompany": "請選擇法人",
+      "selectBusinessUnit": "請選擇事業部",
+      "allCompanies": "全部法人",
+      "allBusinessUnits": "全部事業部",
+      "standardViewHint": "同時選擇法人與事業部後，將以 overlay 方式檢視該範圍的變形流程。",
+      "overlayViewHint": "依所選法人·事業部合併顯示標準流程與變形流程。"
+    },
+    "variant": {
+      "label": "變形",
+      "badge": "變形",
+      "count": "變形 {count}",
+      "createTitle": "建立變形流程",
+      "createDesc": "為標準流程 {code} ({name}) 建立法人·事業部變形。",
+      "createAction": "建立變形",
+      "standardProcess": "基準標準流程",
+      "listTitle": "已登錄變形",
+      "impactHint": "變更此標準流程可能影響已連結的變形 {count} 筆。",
+      "comparePageDesc": "比較標準流程與法人·事業部變形之差異。",
+      "selectStandard": "標準流程",
+      "compareSelectScope": "請選擇比較範圍",
+      "compareSelectScopeDesc": "選擇法人、事業部與標準流程後顯示比較結果。",
+      "compareNoVariant": "此範圍尚無變形",
+      "compareNoVariantDesc": "請先為所選法人·事業部建立變形。",
+      "compareTitle": "{standardCode} ↔ {variantCode}",
+      "standardColumn": "標準",
+      "variantColumn": "變形",
+      "noStandardOptions": "無可比較的標準流程",
+      "noStandardOptionsDesc": "請先登錄 L3 或 L4 標準流程。"
+    }
   },
   "bpmn": {
     "title": "BPMN 模型",

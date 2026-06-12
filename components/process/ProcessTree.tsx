@@ -10,6 +10,7 @@ import {
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   FolderTree,
   GripVertical,
   MoreHorizontal,
@@ -24,6 +25,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { VariantCreateDialog } from "@/components/process/VariantCreateDialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,9 +43,12 @@ import {
 } from "@/lib/query/hooks/useProcess";
 import { useRouter } from "@/lib/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { formatProcessScope } from "@/lib/utils/process-label";
 import type {
   ProcessDeleteImpact,
+  ProcessFilters,
   ProcessLevel,
+  ProcessNodeDto,
   ProcessNodeTree,
 } from "@/types/process";
 
@@ -57,6 +63,7 @@ type ProcessTreeProps = {
   selectedId?: number;
   onSelect?: (node: ProcessNodeTree) => void;
   onCreate?: (parentId?: number | null) => void;
+  scopeFilters?: Pick<ProcessFilters, "companyCode" | "businessUnitCode">;
   className?: string;
   /** picker: 모달 등에서 선택만 하고 페이지 이동·편집 UI를 숨김 */
   variant?: "default" | "picker";
@@ -73,6 +80,7 @@ type TreeNodeItemProps = {
   onSelect?: (node: ProcessNodeTree) => void;
   onCreate?: (parentId?: number | null) => void;
   onDelete: (node: ProcessNodeTree) => void;
+  onCreateVariant?: (node: ProcessNodeTree) => void;
   filter: string;
   pickerMode?: boolean;
 };
@@ -87,6 +95,7 @@ const TreeNodeItem = ({
   onSelect,
   onCreate,
   onDelete,
+  onCreateVariant,
   filter,
   pickerMode = false,
 }: TreeNodeItemProps) => {
@@ -144,7 +153,25 @@ const TreeNodeItem = ({
             {node.code}
           </span>
           <span className="truncate">{node.name}</span>
+          {node.isOverlayVariant && (
+            <Badge variant="secondary" className="shrink-0 text-[10px]">
+              {t("variant.badge")}
+            </Badge>
+          )}
+          {!node.isOverlayVariant &&
+            (node.variantCount ?? 0) > 0 &&
+            (node.level === "L3" || node.level === "L4") && (
+              <Badge variant="outline" className="shrink-0 text-[10px]">
+                {t("variant.count", { count: node.variantCount ?? 0 })}
+              </Badge>
+            )}
         </button>
+
+        {node.isOverlayVariant && formatProcessScope(node) && (
+          <span className="hidden max-w-28 truncate text-[10px] text-muted-foreground xl:inline">
+            {formatProcessScope(node)}
+          </span>
+        )}
 
         <StatusBadge
           status={node.status}
@@ -175,6 +202,14 @@ const TreeNodeItem = ({
               >
                 {t("addChild")}
               </DropdownMenuItem>
+              {node.isStandard &&
+                !node.variantOf &&
+                (node.level === "L3" || node.level === "L4") && (
+                  <DropdownMenuItem onClick={() => onCreateVariant?.(node)}>
+                    <Copy className="size-3.5" />
+                    {t("variant.createAction")}
+                  </DropdownMenuItem>
+                )}
               <DropdownMenuItem
                 className="text-destructive"
                 onClick={() => onDelete(node)}
@@ -200,6 +235,7 @@ const TreeNodeItem = ({
               onSelect={onSelect}
               onCreate={onCreate}
               onDelete={onDelete}
+              onCreateVariant={onCreateVariant}
               filter={filter}
               pickerMode={pickerMode}
             />
@@ -218,6 +254,7 @@ export const ProcessTree = ({
   className,
   variant = "default",
   fixSearchOnScroll = false,
+  scopeFilters,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
   const t = useTranslations("process");
@@ -226,9 +263,16 @@ export const ProcessTree = ({
   const debouncedSearch = useDebounce(search);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<ProcessNodeTree | null>(null);
+  const [variantTarget, setVariantTarget] = useState<ProcessNodeTree | null>(null);
   const hasInitializedExpansion = useRef(false);
 
-  const { data: tree, isLoading, isError, refetch } = useProcessTree(debouncedSearch);
+  const treeFilters = {
+    search: debouncedSearch || undefined,
+    companyCode: scopeFilters?.companyCode,
+    businessUnitCode: scopeFilters?.businessUnitCode,
+  };
+
+  const { data: tree, isLoading, isError, refetch } = useProcessTree(treeFilters);
 
   /** 최초 로드 시 L1 노드를 펼침 — 토글 시 상위가 접히지 않도록 state에 반영 */
   useEffect(() => {
@@ -380,6 +424,7 @@ export const ProcessTree = ({
           onSelect={handleSelect}
           onCreate={onCreate}
           onDelete={handleRequestDelete}
+          onCreateVariant={setVariantTarget}
           filter={debouncedSearch}
           pickerMode={pickerMode}
         />
@@ -455,6 +500,19 @@ export const ProcessTree = ({
       ) : (
         treeBody
       )}
+
+      <VariantCreateDialog
+        open={Boolean(variantTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setVariantTarget(null);
+          }
+        }}
+        standardNode={variantTarget}
+        onSuccess={(created: ProcessNodeDto) => {
+          onSelect?.(created as ProcessNodeTree);
+        }}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

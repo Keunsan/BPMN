@@ -21,6 +21,8 @@ export interface ProcessNode {
   validTo: Date | null;
   isStandard: boolean;
   variantOf: number | null;
+  companyCode: string | null;
+  businessUnitCode: string | null;
   sortOrder: number;
   createdBy: number | null;
   createdAt: Date;
@@ -46,6 +48,10 @@ export interface ProcessNodeHistory {
 
 export interface ProcessNodeTree extends ProcessNode {
   children?: ProcessNodeTree[];
+  /** overlay 조회 시 변형 노드 여부 */
+  isOverlayVariant?: boolean;
+  /** 표준 노드에 연결된 변형 개수 */
+  variantCount?: number;
 }
 
 export interface CreateProcessInput {
@@ -60,6 +66,9 @@ export interface CreateProcessInput {
   validFrom?: string | null;
   validTo?: string | null;
   isStandard?: boolean;
+  variantOf?: number | null;
+  companyCode?: string | null;
+  businessUnitCode?: string | null;
   sortOrder?: number;
   createdBy?: number | null;
 }
@@ -82,6 +91,10 @@ export interface ProcessFilters {
   status?: ProcessStatus;
   parentNodeId?: number | null;
   search?: string;
+  companyCode?: string;
+  businessUnitCode?: string;
+  /** true면 변형 노드도 포함한다 */
+  includeVariants?: boolean;
 }
 
 /** locale별 프로세스명/설명 */
@@ -94,6 +107,28 @@ export interface ProcessNodeDto extends ProcessNode {
   i18n?: ProcessI18nMap;
   displayName?: string;
   displayDescription?: string | null;
+  companyName?: string | null;
+  businessUnitName?: string | null;
+  standardProcess?: Pick<ProcessNode, "nodeId" | "code" | "name"> | null;
+  variantCount?: number;
+}
+
+export interface CreateVariantDto {
+  companyCode: string;
+  businessUnitCode: string;
+  copyBpmn?: boolean;
+  copyMetadata?: boolean;
+}
+
+export interface StandardVariantCompareDto {
+  standard: ProcessNodeDto;
+  variant: ProcessNodeDto | null;
+  diffRows: Array<{
+    key: string;
+    standardValue: string;
+    variantValue: string;
+    changed: boolean;
+  }>;
 }
 
 export interface CreateProcessDto {

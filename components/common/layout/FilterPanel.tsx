@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { Children, isValidElement } from "react";
 
 import { FilterPanelCollapseToggle } from "@/components/common/FilterPanelCollapseToggle";
 import { FilterPanelContext } from "@/components/common/layout/filter-panel-context";
@@ -34,21 +35,27 @@ export const FilterPanel = ({
 }: FilterPanelProps) => {
   const t = useTranslations("common");
   const filterPanelCollapsed = useUIStore((state) => state.filterPanelCollapsed);
-  let fieldIndex = 0;
 
   const renderChildren = () => {
-    const fields = showCollapseToggle ? (
-      <FilterPanelContext.Provider
-        value={{
-          showCollapseToggle: true,
-          registerField: () => fieldIndex++,
-        }}
-      >
-        {children}
-      </FilterPanelContext.Provider>
-    ) : (
-      children
-    );
+    const fields = showCollapseToggle
+      ? Children.map(Children.toArray(children), (child, fieldIndex) => {
+          if (!isValidElement(child)) {
+            return child;
+          }
+
+          return (
+            <FilterPanelContext.Provider
+              key={child.key ?? fieldIndex}
+              value={{
+                fieldIndex,
+                showCollapseToggle: true,
+              }}
+            >
+              {child}
+            </FilterPanelContext.Provider>
+          );
+        })
+      : children;
 
     if (variant === "card") {
       return <div className={filterPanelFieldStackClass}>{fields}</div>;
