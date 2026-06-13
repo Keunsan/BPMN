@@ -15,6 +15,7 @@ import {
   PredecessorSelect,
   type PredecessorSelection,
 } from "@/components/metadata/PredecessorSelect";
+import { TaskLinkedResourcesSummary } from "@/components/metadata/TaskLinkedResourcesSummary";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -569,7 +570,7 @@ const TaskAttributeEditor = ({
         open={openSections.has("system")}
         onToggle={toggleSection}
       >
-        <EmptyState title={t("systemSeparate")} />
+        <TaskLinkedResourcesSummary nodeId={nodeId} />
       </SectionCard>
 
       <SectionCard

@@ -38,9 +38,14 @@ const parseJsonConfig = (value: unknown): Record<string, unknown> | null => {
   }
 };
 
+const toNumber = (value: unknown): number => Number(value);
+
+const toNullableNumber = (value: unknown): number | null =>
+  value === null || value === undefined ? null : Number(value);
+
 /** application_system 행을 도메인 타입으로 변환한다. */
 const mapSystem = (row: Record<string, unknown>): ApplicationSystem => ({
-  systemId: row.system_id as number,
+  systemId: toNumber(row.system_id),
   systemCode: row.system_code as string,
   systemName: row.system_name as string,
   systemType: row.system_type as ApplicationSystem["systemType"],
@@ -49,7 +54,7 @@ const mapSystem = (row: Record<string, unknown>): ApplicationSystem => ({
   vendor: (row.vendor as string | null) ?? null,
   version: (row.version as string | null) ?? null,
   description: (row.description as string | null) ?? null,
-  systemOwnerId: (row.system_owner_id as number | null) ?? null,
+  systemOwnerId: toNullableNumber(row.system_owner_id),
   isActive: Boolean(row.is_active),
   tableApiUrl: (row.table_api_url as string | null) ?? null,
   tableApiAuthType:
@@ -155,8 +160,8 @@ export const listSystems = async (
     ...mapSystem(row),
     companyName: (row.company_name as string | null) ?? null,
     businessUnitName: (row.business_unit_name as string | null) ?? null,
-    moduleCount: row.module_count as number,
-    screenCount: row.screen_count as number,
+    moduleCount: toNumber(row.module_count),
+    screenCount: toNumber(row.screen_count),
   }));
 };
 

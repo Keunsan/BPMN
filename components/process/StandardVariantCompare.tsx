@@ -32,6 +32,9 @@ export const StandardVariantCompare = ({
         width: 140,
         minWidth: 120,
         sticky: "left",
+        sortable: true,
+        filter: "text",
+        value: (row) => row.key,
         cell: (row) => (
           <span className="font-mono text-[11px]">{row.key}</span>
         ),
@@ -41,6 +44,9 @@ export const StandardVariantCompare = ({
         header: t("variant.standardColumn"),
         width: 240,
         minWidth: 180,
+        sortable: true,
+        filter: "text",
+        value: (row) => row.standardValue,
         cell: (row) => (
           <span
             className={cn(
@@ -57,6 +63,9 @@ export const StandardVariantCompare = ({
         header: t("variant.variantColumn"),
         width: 240,
         minWidth: 180,
+        sortable: true,
+        filter: "text",
+        value: (row) => row.variantValue,
         cell: (row) => (
           <span
             className={cn(

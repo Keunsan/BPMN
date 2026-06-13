@@ -32,6 +32,7 @@ alwaysApply: false
 ## DataGrid 정렬·필터 (opt-in)
 
 - `sortable` / `filter: "text" | "select"` / `value` accessor를 **함께** 지정. `cell`은 표시 전용, 비교값은 `value`.
+- **컬럼당 하나의 값만** 표시한다. 이름+레벨, 코드+한글명 등 복합 정보는 **컬럼을 분리**한다(예: `processName` / `processLevel`, `tableName` / `tableNameKor`).
 - 필터 UI: Base UI Popover(`components/ui/popover.tsx`). 스타일: `app/globals.css` `pams-data-grid-*`.
 - i18n: `common.sortAscending`, `sortDescending`, `clearSort`, `filterColumn`, `filterPlaceholder`, `filterClear`, `filterNoOptions` (ko/en/zh-TW).
 - 서버 무한 스크롤 그리드는 클라이언트 sort/filter **로드된 행만** 적용 → 전체 기준이 필요하면 서버 API로 처리하고 opt-in 하지 않음.

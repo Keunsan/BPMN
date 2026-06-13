@@ -19,6 +19,9 @@ export type DataTableColumn<T> = {
   width?: number;
   minWidth?: number;
   align?: DataGridAlign;
+  sortable?: boolean;
+  filter?: "text" | "select";
+  value?: (row: T) => string | number | null;
 };
 
 type DataTableProps<T> = {
@@ -87,6 +90,9 @@ export const DataTable = <T,>({
     width: column.width,
     minWidth: column.minWidth,
     align: resolveAlign(column as DataTableColumn<unknown>),
+    sortable: column.sortable,
+    filter: column.filter,
+    value: column.value,
   }));
 
   const resolvedStorageKey =

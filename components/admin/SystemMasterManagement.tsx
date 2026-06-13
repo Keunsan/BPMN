@@ -169,6 +169,9 @@ export const SystemMasterManagement = () => {
         header: t("systemCode"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (system) => system.systemCode,
         cell: (system) => (
           <span className="font-mono text-[11px]">{system.systemCode}</span>
         ),
@@ -178,6 +181,9 @@ export const SystemMasterManagement = () => {
         header: t("systemName"),
         width: 160,
         minWidth: 120,
+        sortable: true,
+        filter: "text",
+        value: (system) => system.systemName,
         cell: (system) => <span className="font-medium">{system.systemName}</span>,
       },
       {
@@ -185,6 +191,9 @@ export const SystemMasterManagement = () => {
         header: t("companyCode"),
         width: 140,
         minWidth: 100,
+        sortable: true,
+        filter: "select",
+        value: (system) => system.companyName ?? system.companyCode ?? "",
         cell: (system) => system.companyName ?? system.companyCode ?? "-",
       },
       {
@@ -192,6 +201,9 @@ export const SystemMasterManagement = () => {
         header: t("businessUnitCode"),
         width: 140,
         minWidth: 100,
+        sortable: true,
+        filter: "select",
+        value: (system) => system.businessUnitName ?? system.businessUnitCode ?? "",
         cell: (system) =>
           system.businessUnitName ?? system.businessUnitCode ?? "-",
       },
@@ -200,6 +212,9 @@ export const SystemMasterManagement = () => {
         header: t("systemType"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "select",
+        value: (system) => system.systemType,
         cell: (system) => (
           <Badge variant={system.isActive ? "default" : "secondary"}>
             {t(`systemTypes.${system.systemType}`)}
@@ -211,6 +226,9 @@ export const SystemMasterManagement = () => {
         header: t("descriptionField"),
         width: 220,
         minWidth: 160,
+        sortable: true,
+        filter: "text",
+        value: (system) => system.description ?? "",
         cell: (system) => (
           <p className="line-clamp-2 text-slate-500">
             {system.description || "-"}
@@ -313,6 +331,7 @@ export const SystemMasterManagement = () => {
               storageKey="pams-systems-grid"
               emptyMessage={tc("noData")}
               onRowClick={startEditSystem}
+              fillHeight
             />
           </PageContent>
         }

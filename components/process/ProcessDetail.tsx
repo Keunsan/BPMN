@@ -141,12 +141,20 @@ export const ProcessDetail = ({
       cell: (model) => model.modelName,
     },
     {
+      key: "processCode",
+      header: t("code"),
+      cell: (model) => model.processCode ?? "-",
+      sortable: true,
+      filter: "text",
+      value: (model) => model.processCode ?? "",
+    },
+    {
       key: "processName",
       header: t("bpmnModelOwnerProcess"),
-      cell: (model) =>
-        model.processCode
-          ? `${model.processCode} ${model.processName ?? ""}`.trim()
-          : "-",
+      cell: (model) => model.processName ?? "-",
+      sortable: true,
+      filter: "text",
+      value: (model) => model.processName ?? "",
     },
     {
       key: "version",

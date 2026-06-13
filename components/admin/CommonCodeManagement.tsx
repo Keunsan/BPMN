@@ -179,6 +179,9 @@ export const CommonCodeManagement = () => {
         header: t("groupName"),
         width: 180,
         minWidth: 140,
+        sortable: true,
+        filter: "text",
+        value: (group) => group.displayName,
         cell: (group) => <span className="font-medium">{group.displayName}</span>,
       },
       {
@@ -186,6 +189,9 @@ export const CommonCodeManagement = () => {
         header: t("groupCode"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (group) => group.groupCode,
         cell: (group) => (
           <span className="font-mono text-[11px] text-slate-500">
             {group.groupCode}
@@ -197,6 +203,9 @@ export const CommonCodeManagement = () => {
         header: t("status"),
         width: 96,
         minWidth: 80,
+        sortable: true,
+        filter: "select",
+        value: (group) => (group.isActive ? t("active") : t("inactive")),
         cell: (group) => (
           <Badge variant={group.isActive ? "default" : "secondary"}>
             {group.isActive ? t("active") : t("inactive")}
@@ -209,6 +218,8 @@ export const CommonCodeManagement = () => {
         width: 88,
         minWidth: 72,
         align: "center",
+        sortable: true,
+        value: (group) => group.itemCount,
         cell: (group) => group.itemCount,
       },
       {
@@ -254,6 +265,9 @@ export const CommonCodeManagement = () => {
         header: t("code"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.code,
         cell: (item) => <span className="font-mono text-[11px]">{item.code}</span>,
       },
       {
@@ -261,6 +275,9 @@ export const CommonCodeManagement = () => {
         header: t("codeName"),
         width: 180,
         minWidth: 140,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.displayName,
         cell: (item) => item.displayName,
       },
       {
@@ -269,6 +286,8 @@ export const CommonCodeManagement = () => {
         width: 88,
         minWidth: 72,
         align: "center",
+        sortable: true,
+        value: (item) => item.sortOrder,
         cell: (item) => item.sortOrder,
       },
       {
@@ -276,6 +295,9 @@ export const CommonCodeManagement = () => {
         header: t("status"),
         width: 96,
         minWidth: 80,
+        sortable: true,
+        filter: "select",
+        value: (item) => (item.isActive ? t("active") : t("inactive")),
         cell: (item) => (
           <Badge variant={item.isActive ? "default" : "secondary"}>
             {item.isActive ? t("active") : t("inactive")}
@@ -420,6 +442,7 @@ export const CommonCodeManagement = () => {
                 emptyMessage={t("emptyGroups")}
                 selectedRowKey={selectedGroupCode ?? undefined}
                 onRowClick={(group) => setSelectedGroupCode(group.groupCode)}
+                fillHeight
               />
 
               <DataGrid
@@ -458,6 +481,7 @@ export const CommonCodeManagement = () => {
                 storageKey="pams-common-code-items-grid"
                 emptyMessage={t("emptyItems")}
                 body={renderItemBody()}
+                fillHeight
               />
             </div>
           </PageContent>

@@ -59,6 +59,9 @@ export const VersionCompare = ({
         width: 180,
         minWidth: 140,
         sticky: "left",
+        sortable: true,
+        filter: "text",
+        value: (row) => row.key,
         cell: (row) => (
           <span className="font-mono text-[11px]">{row.key}</span>
         ),
@@ -68,6 +71,9 @@ export const VersionCompare = ({
         header: `v${versionA}`,
         width: 240,
         minWidth: 180,
+        sortable: true,
+        filter: "text",
+        value: (row) => row.valueA,
         cell: (row) => (
           <span
             className={cn(
@@ -84,6 +90,9 @@ export const VersionCompare = ({
         header: `v${versionB}`,
         width: 240,
         minWidth: 180,
+        sortable: true,
+        filter: "text",
+        value: (row) => row.valueB,
         cell: (row) => (
           <span
             className={cn(

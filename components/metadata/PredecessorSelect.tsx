@@ -111,6 +111,9 @@ export const PredecessorSelect = ({
         header: t("processCode"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (item) => String(item.predecessorCode ?? item.predecessorNodeId),
         cell: (item) => (
           <span className="font-mono text-[11px]">
             {item.predecessorCode ?? item.predecessorNodeId}
@@ -122,6 +125,9 @@ export const PredecessorSelect = ({
         header: t("processName"),
         width: 180,
         minWidth: 140,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.predecessorName ?? "",
         cell: (item) => item.predecessorName ?? "-",
       },
       {

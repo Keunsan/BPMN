@@ -78,6 +78,8 @@ type DataGridProps<T> = {
   icon?: React.ReactNode;
   body?: React.ReactNode;
   fillHeight?: boolean;
+  /** 외부 패널·제목 바 없이 테이블만 렌더 — 복합 패널 내부 섹션용 */
+  embedded?: boolean;
   /** 스크롤이 하단 근처에 도달하면 호출 — 무한 스크롤용 */
   onReachEnd?: () => void;
   /** 다음 페이지 로딩 중 하단 인디케이터 표시 */
@@ -137,6 +139,7 @@ export const DataGrid = <T,>({
   icon,
   body,
   fillHeight = true,
+  embedded = false,
   onReachEnd,
   loadingMore = false,
 }: DataGridProps<T>) => {
@@ -223,27 +226,17 @@ export const DataGrid = <T,>({
 
   const tableMinWidth = minTableWidth ?? table.getTotalSize();
 
-  const showTitleBar = Boolean(title || count !== undefined || toolbar || icon);
+  const showTitleBar =
+    !embedded && Boolean(title || count !== undefined || toolbar || icon);
 
-  return (
-    <div
-      className={cn(
-        pamsContentPanelClass,
-        fillHeight && "min-h-0 flex-1",
-        className,
-      )}
-    >
-      {showTitleBar ? (
-        <PanelTitleBar
-          title={title}
-          count={count}
-          countSuffix={countSuffix}
-          toolbar={toolbar}
-          icon={Boolean(icon)}
-        />
-      ) : null}
-
-      <div className="min-h-0 flex-1 overflow-auto" onScroll={handleScroll}>
+  const tableContent = (
+      <div
+        className={cn(
+          embedded ? "overflow-auto" : "min-h-0 flex-1 overflow-auto",
+          !embedded && fillHeight && "min-h-0 flex-1",
+        )}
+        onScroll={handleScroll}
+      >
         {body ?? (
           <table
             className={cn("pams-data-grid-table", tableClassName)}
@@ -437,6 +430,32 @@ export const DataGrid = <T,>({
           </div>
         ) : null}
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className={cn("min-h-0 w-full min-w-0", className)}>{tableContent}</div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        pamsContentPanelClass,
+        fillHeight && "min-h-0 flex-1",
+        className,
+      )}
+    >
+      {showTitleBar ? (
+        <PanelTitleBar
+          title={title}
+          count={count}
+          countSuffix={countSuffix}
+          toolbar={toolbar}
+          icon={Boolean(icon)}
+        />
+      ) : null}
+      {tableContent}
     </div>
   );
 };

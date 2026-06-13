@@ -154,7 +154,7 @@ export const ExternalTableBrowser = ({
 
   const selectedSystem = useMemo(
 
-    () => systems?.find((system) => system.systemId === systemId) ?? null,
+    () => systems?.find((system) => Number(system.systemId) === systemId) ?? null,
 
     [systemId, systems],
 
@@ -322,6 +322,12 @@ export const ExternalTableBrowser = ({
 
         minWidth: 120,
 
+        sortable: true,
+
+        filter: "text",
+
+        value: (table) => table.tableName,
+
         cell: (table) => (
 
           <span className="font-mono text-[11px]">{table.tableName}</span>
@@ -339,6 +345,12 @@ export const ExternalTableBrowser = ({
         width: 160,
 
         minWidth: 100,
+
+        sortable: true,
+
+        filter: "text",
+
+        value: (table) => table.tableNameKor ?? "",
 
         cell: (table) => table.tableNameKor ?? "-",
 
@@ -604,6 +616,8 @@ export const ExternalTableBrowser = ({
 
         ]}
 
+        fillHeight
+
       />
 
 
@@ -760,6 +774,12 @@ const ColumnPanel = ({
 
         sticky: "left",
 
+        sortable: true,
+
+        filter: "text",
+
+        value: (column) => column.columnName,
+
         cell: (column) => (
 
           <span className="font-mono text-[11px]">{column.columnName}</span>
@@ -778,6 +798,12 @@ const ColumnPanel = ({
 
         minWidth: 100,
 
+        sortable: true,
+
+        filter: "text",
+
+        value: (column) => column.columnNameKor ?? "",
+
         cell: (column) => column.columnNameKor ?? "-",
 
       },
@@ -791,6 +817,12 @@ const ColumnPanel = ({
         width: 120,
 
         minWidth: 96,
+
+        sortable: true,
+
+        filter: "select",
+
+        value: (column) => column.dataType,
 
         cell: (column) => (
 
@@ -824,6 +856,12 @@ const ColumnPanel = ({
 
         align: "center",
 
+        sortable: true,
+
+        filter: "select",
+
+        value: (column) => (column.isNullable ? "NULL" : "NOT NULL"),
+
         cell: (column) => (column.isNullable ? "NULL" : "NOT NULL"),
 
       },
@@ -837,6 +875,12 @@ const ColumnPanel = ({
         width: 200,
 
         minWidth: 120,
+
+        sortable: true,
+
+        filter: "text",
+
+        value: (column) => column.description ?? "",
 
         cell: (column) => (
 
@@ -935,6 +979,8 @@ const ColumnPanel = ({
         "",
 
       ]}
+
+      fillHeight
 
     />
 

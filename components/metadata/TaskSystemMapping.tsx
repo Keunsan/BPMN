@@ -187,7 +187,9 @@ export const TaskSystemMapping = () => {
   }, [taskOptions, taskSearch]);
 
   const selectedTask = taskOptions.find((task) => task.nodeId === nodeId);
-  const selectedSystem = hierarchy?.find((system) => system.systemId === systemId);
+  const selectedSystem = hierarchy?.find(
+    (system) => Number(system.systemId) === systemId,
+  );
   const catalogItems = useMemo(
     () => catalog?.pages.flatMap((page) => page.items) ?? [],
     [catalog?.pages],
@@ -315,6 +317,9 @@ export const TaskSystemMapping = () => {
         header: t("company"),
         width: 96,
         minWidth: 72,
+        sortable: true,
+        filter: "select",
+        value: (mapping) => mapping.companyName ?? mapping.companyCode ?? "",
         cell: (mapping) => (
           <span className="truncate">
             {mapping.companyName ?? mapping.companyCode ?? "-"}
@@ -326,6 +331,10 @@ export const TaskSystemMapping = () => {
         header: t("businessUnit"),
         width: 96,
         minWidth: 72,
+        sortable: true,
+        filter: "select",
+        value: (mapping) =>
+          mapping.businessUnitName ?? mapping.businessUnitCode ?? "",
         cell: (mapping) => (
           <span className="truncate">
             {mapping.businessUnitName ?? mapping.businessUnitCode ?? "-"}
@@ -359,6 +368,9 @@ export const TaskSystemMapping = () => {
         header: t("menuId"),
         width: 96,
         minWidth: 80,
+        sortable: true,
+        filter: "text",
+        value: (mapping) => mapping.menuId,
         cell: (mapping) => (
           <span className="font-mono text-[11px]">{mapping.menuId}</span>
         ),
@@ -368,6 +380,9 @@ export const TaskSystemMapping = () => {
         header: t("screen"),
         width: 160,
         minWidth: 120,
+        sortable: true,
+        filter: "text",
+        value: (mapping) => mapping.screenName,
         cell: (mapping) => <span className="truncate">{mapping.screenName}</span>,
       },
       {
@@ -440,6 +455,9 @@ export const TaskSystemMapping = () => {
         header: t("company"),
         width: 96,
         minWidth: 72,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.companyName ?? item.companyCode ?? "",
         cell: (item) => (
           <span className="truncate">
             {item.companyName ?? item.companyCode ?? "-"}
@@ -451,6 +469,9 @@ export const TaskSystemMapping = () => {
         header: t("businessUnit"),
         width: 96,
         minWidth: 72,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.businessUnitName ?? item.businessUnitCode ?? "",
         cell: (item) => (
           <span className="truncate">
             {item.businessUnitName ?? item.businessUnitCode ?? "-"}
@@ -462,6 +483,9 @@ export const TaskSystemMapping = () => {
         header: t("system"),
         width: 96,
         minWidth: 80,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.systemName ?? "",
         cell: (item) => <span className="truncate">{item.systemName}</span>,
       },
       {
@@ -469,6 +493,9 @@ export const TaskSystemMapping = () => {
         header: t("module"),
         width: 72,
         minWidth: 60,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.moduleCode ?? "",
         cell: (item) => (
           <span className="font-mono text-[11px]">{item.moduleCode}</span>
         ),
@@ -478,6 +505,9 @@ export const TaskSystemMapping = () => {
         header: t("menuId"),
         width: 100,
         minWidth: 80,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.menuId ?? "",
         cell: (item) => (
           <span className="font-mono text-[11px]">{item.menuId}</span>
         ),
@@ -487,6 +517,9 @@ export const TaskSystemMapping = () => {
         header: t("screen"),
         width: 180,
         minWidth: 140,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.screenName,
         cell: (item) => <span className="truncate">{item.screenName}</span>,
       },
       {
@@ -494,6 +527,9 @@ export const TaskSystemMapping = () => {
         header: t("menuPath"),
         width: 220,
         minWidth: 160,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.menuPath ?? "",
         cell: (item) => (
           <span className="line-clamp-2 text-[11px] text-slate-600">
             {item.menuPath ?? "-"}

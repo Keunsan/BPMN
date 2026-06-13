@@ -81,6 +81,9 @@ export const TaskAttributeList = () => {
         header: t("processCode"),
         width: 120,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.processCode,
         cell: (item) => (
           <span className="font-mono text-[11px]">{item.processCode}</span>
         ),
@@ -90,72 +93,118 @@ export const TaskAttributeList = () => {
         header: t("processName"),
         width: 180,
         minWidth: 140,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.processName,
         cell: (item) => (
-          <div>
-            <div className="font-medium">{item.processName}</div>
-            <div className="text-[10px] text-slate-500">{item.processLevel}</div>
-          </div>
+          <span className="truncate font-medium">{item.processName}</span>
         ),
       },
       {
-        key: "parentProcess",
-        header: t("parentProcess"),
-        width: 160,
-        minWidth: 120,
+        key: "processLevel",
+        header: t("level"),
+        width: 52,
+        minWidth: 44,
+        align: "center",
+        sortable: true,
+        filter: "select",
+        value: (item) => item.processLevel,
+        cell: (item) => item.processLevel,
+      },
+      {
+        key: "parentCode",
+        header: t("parentCode"),
+        width: 120,
+        minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.parentCode ?? "",
         cell: (item) =>
           item.parentCode ? (
-            <div>
-              <div className="font-mono text-[11px]">{item.parentCode}</div>
-              <div className="truncate">{item.parentName}</div>
-            </div>
+            <span className="truncate font-mono text-[11px]">
+              {item.parentCode}
+            </span>
           ) : (
             "-"
           ),
+      },
+      {
+        key: "parentName",
+        header: t("parentName"),
+        width: 140,
+        minWidth: 120,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.parentName ?? "",
+        cell: (item) => (
+          <span className="truncate">{item.parentName ?? "-"}</span>
+        ),
       },
       {
         key: "definition",
         header: t("definition"),
         width: 200,
         minWidth: 160,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.definition ?? "",
         cell: (item) => (
-          <div>
-            <p className="line-clamp-2">{item.definition || "-"}</p>
-            {item.purpose ? (
-              <p className="mt-1 line-clamp-1 text-[10px] text-slate-500">
-                {item.purpose}
-              </p>
-            ) : null}
-          </div>
+          <span className="line-clamp-2">{item.definition || "-"}</span>
+        ),
+      },
+      {
+        key: "purpose",
+        header: t("purpose"),
+        width: 160,
+        minWidth: 120,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.purpose ?? "",
+        cell: (item) => (
+          <span className="line-clamp-2">{item.purpose ?? "-"}</span>
         ),
       },
       {
         key: "bpmnModel",
         header: t("bpmnModel"),
-        width: 180,
-        minWidth: 140,
+        width: 160,
+        minWidth: 120,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.bpmnModelName ?? "",
         cell: (item) =>
           item.bpmnModelId ? (
-            <div className="space-y-1">
-              <Link
-                href={`/bpmn/${item.bpmnModelId}`}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                {item.bpmnModelName}
-                <ExternalLink className="size-3" />
-              </Link>
-              {item.bpmnElementName ? (
-                <p className="text-[10px] text-slate-500">{item.bpmnElementName}</p>
-              ) : null}
-            </div>
+            <Link
+              href={`/bpmn/${item.bpmnModelId}`}
+              className="inline-flex max-w-full items-center gap-1 truncate text-primary hover:underline"
+            >
+              <span className="truncate">{item.bpmnModelName}</span>
+              <ExternalLink className="size-3 shrink-0" />
+            </Link>
           ) : (
             <span className="text-slate-500">-</span>
           ),
+      },
+      {
+        key: "bpmnElement",
+        header: t("bpmnElement"),
+        width: 140,
+        minWidth: 100,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.bpmnElementName ?? "",
+        cell: (item) => (
+          <span className="truncate">{item.bpmnElementName ?? "-"}</span>
+        ),
       },
       {
         key: "frequency",
         header: t("frequency"),
         width: 96,
         minWidth: 80,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.frequency ?? "",
         cell: (item) =>
           item.frequency ? t(`frequencyOptions.${item.frequency}`) : "-",
       },
@@ -164,6 +213,9 @@ export const TaskAttributeList = () => {
         header: t("listStatus"),
         width: 100,
         minWidth: 88,
+        sortable: true,
+        filter: "select",
+        value: (item) => item.processStatus,
         cell: (item) => <StatusBadge status={item.processStatus} />,
       },
       {
@@ -171,6 +223,9 @@ export const TaskAttributeList = () => {
         header: t("listUpdatedAt"),
         width: 108,
         minWidth: 96,
+        sortable: true,
+        filter: "text",
+        value: (item) => item.updatedAt?.toISOString() ?? "",
         cell: (item) =>
           item.updatedAt
             ? new Intl.DateTimeFormat(undefined, {
@@ -283,6 +338,7 @@ export const TaskAttributeList = () => {
               storageKey="pams-task-attributes-grid"
               emptyMessage={t("listEmpty")}
               onRowClick={(item) => setDetailNodeId(item.nodeId)}
+              fillHeight
             />
           </PageContent>
         }
