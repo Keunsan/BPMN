@@ -270,6 +270,27 @@ L1: Source to Pay (STP)
 | XML Import/Export | BPMN 2.0 XML 표준 형식 |
 | 이미지 저장 | SVG, PNG 형식 다이어그램 이미지 |
 | 버전 비교 | 버전 간 변경점 시각적 비교 |
+| **Task ↔ L4 연결** | User Task 등에 동일 L3 하위 L4 프로세스 연결 |
+| **Call Activity ↔ L3** ⭐ | Call Activity에 **전사 L3** 연결 (L2 형제·타 L2 크로스 허용) |
+| **선행 동기화** ⭐ | BPMN `sequenceFlow` 저장 시 `task_predecessor` 자동 병합 |
+
+**계층 vs 실행 흐름:**
+
+- **Layer A (트리)**: L1→L2→L3→L4 분류·코드 체계. L3 아래는 L4만.
+- **Layer B (BPMN)**: L3 BPMN에서 L4 Task + **외부 L3 Call Activity**로 E2E 실행 순서 표현.
+- **Layer C**: Call Activity/L4 연결 노드 간 선행 관계는 BPMN 저장 시 `task_predecessor`에 병합.
+
+**Call Activity 예시 (크로스-L2):**
+
+```
+L3-수요관리 BPMN:
+  [Call: L3-계획수립(생산)] → L4-수요입력 → [Call: L3-발주등록(구매)] → L4-수요확정
+```
+
+| BPMN 요소 | linked_node_id | properties.linkKind |
+|-----------|----------------|---------------------|
+| User Task | L4 | `L4_TASK` |
+| Call Activity | L3 (전사, 자기 L3 제외) | `L3_CALL`, completionScope=`FULL` |
 
 #### 4.2.3 Task 속성 관리 (Layer C) ⭐ 변경
 
@@ -632,7 +653,7 @@ CREATE TABLE bpmn_element (
         'START_EVENT', 'END_EVENT', 'INTERMEDIATE_EVENT',
         'USER_TASK', 'SERVICE_TASK', 'MANUAL_TASK', 'SCRIPT_TASK',
         'EXCLUSIVE_GATEWAY', 'PARALLEL_GATEWAY', 'INCLUSIVE_GATEWAY',
-        'POOL', 'LANE', 'SEQUENCE_FLOW', 'MESSAGE_FLOW', 'SUBPROCESS'
+        'POOL', 'LANE', 'SEQUENCE_FLOW', 'MESSAGE_FLOW', 'SUBPROCESS', 'CALL_ACTIVITY'
     ))
 );
 

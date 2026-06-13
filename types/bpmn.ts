@@ -36,9 +36,26 @@ export type BpmnElementType =
 
   | "MESSAGE_FLOW"
 
-  | "SUBPROCESS";
+  | "SUBPROCESS"
+  | "CALL_ACTIVITY";
 
+/** BPMN 요소 ↔ 프로세스 노드 연결 유형 */
+export type BpmnLinkKind = "L4_TASK" | "L3_CALL";
 
+/** BPMN 에디터 프로세스 연결 payload */
+export type ProcessLinkInfo = {
+  nodeId: number;
+  code: string;
+  name: string;
+  linkKind: BpmnLinkKind;
+  level: "L3" | "L4";
+};
+
+/** bpmn_element.properties JSON 스키마 */
+export type BpmnElementLinkProperties = {
+  linkKind: BpmnLinkKind;
+  completionScope?: "FULL";
+};
 
 export interface BpmnModel {
 

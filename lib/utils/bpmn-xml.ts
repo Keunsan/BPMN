@@ -19,6 +19,7 @@ const BPMN_TYPE_MAP: Record<string, BpmnElementType> = {
   "bpmn:SequenceFlow": "SEQUENCE_FLOW",
   "bpmn:MessageFlow": "MESSAGE_FLOW",
   "bpmn:SubProcess": "SUBPROCESS",
+  "bpmn:CallActivity": "CALL_ACTIVITY",
 };
 
 /** XML·moddle 표기 차이(task vs Task)를 흡수한다 */
@@ -40,6 +41,7 @@ const BPMN_TYPE_BY_LOCAL: Record<string, BpmnElementType> = {
   sequenceflow: "SEQUENCE_FLOW",
   messageflow: "MESSAGE_FLOW",
   subprocess: "SUBPROCESS",
+  callactivity: "CALL_ACTIVITY",
 };
 
 export const mapBpmnJsType = (type: string): BpmnElementType | null => {

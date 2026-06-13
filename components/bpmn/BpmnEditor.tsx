@@ -37,15 +37,20 @@ import {
 } from "@/components/ui/sheet";
 import { useLinkOrCreateBpmnTask } from "@/lib/query/hooks/useBpmn";
 import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
+import {
+  isProcessLinkCompatible,
+  parseProcessLinkInfo,
+} from "@/lib/utils/bpmn-link";
 import { cn } from "@/lib/utils";
 import type {
   BpmnElementLinkDto,
   BpmnElementType,
   BpmnModelDto,
+  ProcessLinkInfo,
 } from "@/types/bpmn";
 
 import type { BpmnEditorHandle } from "./BpmnEditorInner";
-import { ProcessLinkModal, type ProcessLinkInfo } from "./ProcessLinkModal";
+import { ProcessLinkModal } from "./ProcessLinkModal";
 import { ProcessLinkSidebar } from "./ProcessLinkSidebar";
 
 const BpmnEditorInner = dynamic(
@@ -267,7 +272,17 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   }, [clearGuard]);
 
   const linkElementToProcess = useCallback(
-    (elementId: string, link: ProcessLinkInfo | null) => {
+    (
+      elementId: string,
+      link: ProcessLinkInfo | null,
+      elementType?: BpmnElementType | null,
+    ) => {
+      const type = elementType ?? selectedElementType;
+      if (link && !isProcessLinkCompatible(type, link)) {
+        toast.error(t("linkIncompatible"));
+        return;
+      }
+
       setLinks((prev) => {
         const next = { ...prev };
         if (link) {
@@ -291,7 +306,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         }
       }
     },
-    [selectedElementId, t],
+    [selectedElementId, selectedElementType, t],
   );
 
   const handleLinkConfirm = (link: ProcessLinkInfo | null) => {
@@ -302,10 +317,15 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   };
 
   const handleProcessLinkDrop = useCallback(
-    (elementId: string, link: ProcessLinkInfo) => {
-      linkElementToProcess(elementId, link);
+    (
+      elementId: string,
+      link: ProcessLinkInfo,
+      elementType: BpmnElementType | null,
+    ) => {
+      linkElementToProcess(elementId, link, elementType);
       setSelectedElementId(elementId);
       setSelectedElementName(link.name);
+      setSelectedElementType(elementType);
     },
     [linkElementToProcess],
   );
@@ -338,6 +358,8 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         nodeId: link.nodeId,
         code: link.code,
         name: link.name,
+        level: "L4",
+        linkKind: "L4_TASK",
       },
     }));
     apiRef.current?.updateElementName(selectedElementId, link.name);
@@ -426,6 +448,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           parentNodeId={model.nodeId}
           parentCode={model.processCode}
           parentName={model.processName}
+          selectedElementType={selectedElementType}
           links={links}
           selectedElementId={selectedElementId}
           selectedElementName={selectedElementName}
@@ -491,6 +514,8 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         open={linkModalOpen}
         onOpenChange={setLinkModalOpen}
         elementName={selectedElementName}
+        elementType={selectedElementType}
+        ownerNodeId={model.nodeId}
         currentLink={selectedLink}
         onConfirm={handleLinkConfirm}
       />
@@ -555,7 +580,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
             <div className="px-4 text-sm text-muted-foreground">
               {t("selectTaskFirst")}
             </div>
-          ) : selectedLink ? (
+          ) : selectedLink?.linkKind === "L4_TASK" ? (
             <div className="space-y-3">
               <div className="mx-4 rounded-md border bg-muted/40 p-3 text-sm">
                 <p className="font-medium">
@@ -567,6 +592,13 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
                 nodeId={selectedLink.nodeId}
                 autoPredecessor={autoPredecessor}
               />
+            </div>
+          ) : selectedLink?.linkKind === "L3_CALL" ? (
+            <div className="mx-4 space-y-3 rounded-md border bg-muted/40 p-4 text-sm">
+              <p className="font-medium">
+                {selectedLink.code} — {selectedLink.name}
+              </p>
+              <p className="text-muted-foreground">{t("linkedCallActivityDesc")}</p>
             </div>
           ) : (
             <div className="space-y-4 px-4">
@@ -609,11 +641,13 @@ const buildLinksFromModel = (
       continue;
     }
 
-    map[el.elementBpmnId] = {
-      nodeId: el.linkedNodeId,
-      code: el.linkedProcessCode ?? String(el.linkedNodeId),
-      name: el.linkedProcessName ?? el.elementName ?? "",
-    };
+    map[el.elementBpmnId] = parseProcessLinkInfo(
+      el.linkedNodeId,
+      el.linkedProcessCode ?? String(el.linkedNodeId),
+      el.linkedProcessName ?? el.elementName ?? "",
+      el.elementType,
+      el.properties,
+    );
   }
 
   return map;
@@ -661,7 +695,7 @@ const getSingleLinkedPredecessor = (
     predecessorNodeId: predecessor.nodeId,
     predecessorCode: predecessor.code,
     predecessorName: predecessor.name,
-    predecessorLevel: "L4",
+    predecessorLevel: predecessor.level,
     conditionDesc: null,
     isMandatory: true,
   };

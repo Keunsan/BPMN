@@ -1,4 +1,4 @@
-import type { ProcessLinkInfo } from "@/components/bpmn/ProcessLinkModal";
+import type { ProcessLinkInfo } from "@/types/bpmn";
 
 /** BPMN 캔버스 드롭용 L4 프로세스 drag MIME */
 export const PAMS_PROCESS_DRAG_MIME = "application/pams-process";
@@ -58,7 +58,16 @@ export const parseProcessLinkDrag = (
         typeof parsed.code === "string" &&
         typeof parsed.name === "string"
       ) {
-        return parsed;
+        return {
+          nodeId: parsed.nodeId,
+          code: parsed.code,
+          name: parsed.name,
+          level: parsed.level === "L3" ? "L3" : "L4",
+          linkKind:
+            parsed.linkKind === "L3_CALL" || parsed.level === "L3"
+              ? "L3_CALL"
+              : "L4_TASK",
+        };
       }
     } catch {
       // 다음 후보 시도

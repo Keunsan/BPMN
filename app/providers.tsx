@@ -1,5 +1,6 @@
 "use client";
 
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
@@ -31,11 +32,13 @@ export function Providers({ locale, children }: ProvidersProps) {
   const queryClient = getQueryClient();
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
-      <QueryClientProvider client={queryClient}>
-        <LocaleSync locale={locale} />
-        <ErrorBoundary>{children}</ErrorBoundary>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <NuqsAdapter>
+      <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
+        <QueryClientProvider client={queryClient}>
+          <LocaleSync locale={locale} />
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </NuqsAdapter>
   );
 }

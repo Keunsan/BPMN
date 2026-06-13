@@ -2,47 +2,78 @@
 
 import { useTranslations } from "next-intl";
 
-import { Button } from "@/components/ui/button";
 import {
-  L4ProcessSelectDialog,
-  type L4ProcessSelection,
-} from "@/components/process/L4ProcessSelectDialog";
+  ProcessNodeSelectDialog,
+  type ProcessNodeSelection,
+} from "@/components/process/ProcessNodeSelectDialog";
+import { Button } from "@/components/ui/button";
+import type { BpmnElementType, ProcessLinkInfo } from "@/types/bpmn";
 
-export type ProcessLinkInfo = L4ProcessSelection;
+export type { ProcessLinkInfo };
 
 type ProcessLinkModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   elementName?: string | null;
+  elementType?: BpmnElementType | null;
+  ownerNodeId: number;
   currentLink?: ProcessLinkInfo | null;
   onConfirm: (link: ProcessLinkInfo | null) => void;
 };
 
-/** BPMN Task → L4 프로세스 연결 모달 */
+const toProcessLinkInfo = (process: ProcessNodeSelection): ProcessLinkInfo => ({
+  nodeId: process.nodeId,
+  code: process.code,
+  name: process.name,
+  level: process.level === "L3" ? "L3" : "L4",
+  linkKind: process.level === "L3" ? "L3_CALL" : "L4_TASK",
+});
+
+/** BPMN Task/Call Activity → L4/L3 프로세스 연결 모달 */
 export const ProcessLinkModal = ({
   open,
   onOpenChange,
   elementName,
+  elementType,
+  ownerNodeId,
   currentLink,
   onConfirm,
 }: ProcessLinkModalProps) => {
   const t = useTranslations("bpmn");
+  const isCallActivity = elementType === "CALL_ACTIVITY";
 
   return (
-    <L4ProcessSelectDialog
+    <ProcessNodeSelectDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={t("linkProcess")}
+      title={isCallActivity ? t("linkCallActivity") : t("linkProcess")}
       description={
         elementName
-          ? t("linkProcessDesc", { name: elementName })
-          : t("linkProcessDescGeneric")
+          ? isCallActivity
+            ? t("linkCallActivityDesc", { name: elementName })
+            : t("linkProcessDesc", { name: elementName })
+          : isCallActivity
+            ? t("linkCallActivityDescGeneric")
+            : t("linkProcessDescGeneric")
       }
-      currentProcess={currentLink}
+      allowedLevels={isCallActivity ? ["L3"] : ["L4"]}
+      excludeNodeIds={isCallActivity ? [ownerNodeId] : []}
+      currentProcess={
+        currentLink
+          ? {
+              nodeId: currentLink.nodeId,
+              code: currentLink.code,
+              name: currentLink.name,
+              level: currentLink.level,
+            }
+          : null
+      }
       currentProcessLabel={t("currentLink")}
-      helperText={t("linkL4Only")}
+      helperText={isCallActivity ? t("linkL3CallHint") : t("linkL4Only")}
       confirmLabel={t("confirmLink")}
-      onConfirm={onConfirm}
+      onConfirm={(process) => {
+        onConfirm(process ? toProcessLinkInfo(process) : null);
+      }}
       extraAction={
         currentLink ? (
           <Button

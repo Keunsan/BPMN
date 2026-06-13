@@ -424,6 +424,38 @@ export const listTaskPredecessors = async (
   return rows.map(mapTaskPredecessor);
 };
 
+/** BPMN sequence flow에서 도출한 선행 관계를 기존 목록에 병합한다. */
+export const mergeTaskPredecessorsFromBpmn = async (
+  pairs: Array<{ nodeId: number; predecessorNodeId: number }>,
+): Promise<void> => {
+  if (pairs.length === 0) {
+    return;
+  }
+
+  await transaction(async (tx) => {
+    for (const pair of pairs) {
+      await tx(
+        `IF NOT EXISTS (
+           SELECT 1 FROM task_predecessor
+           WHERE node_id = @nodeId AND predecessor_node_id = @predecessorNodeId
+         )
+         INSERT INTO task_predecessor (
+           node_id, predecessor_node_id, condition_desc, is_mandatory
+         )
+         VALUES (
+           @nodeId, @predecessorNodeId, @conditionDesc, @isMandatory
+         )`,
+        {
+          nodeId: pair.nodeId,
+          predecessorNodeId: pair.predecessorNodeId,
+          conditionDesc: "BPMN sequence flow",
+          isMandatory: true,
+        },
+      );
+    }
+  });
+};
+
 /** 선행 프로세스 목록을 현재 선택 값으로 교체한다. */
 export const replaceTaskPredecessors = async (
   nodeId: number,

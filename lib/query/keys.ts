@@ -84,6 +84,8 @@ export const analysisKeys = {
   search: (query: string) => [...analysisKeys.all, "search", query] as const,
   impact: (params: Record<string, unknown>) =>
     [...analysisKeys.all, "impact", params] as const,
+  operationsGraph: (params: Record<string, unknown>) =>
+    [...analysisKeys.all, "operations-graph", params] as const,
 };
 
 export const commonCodeKeys = {

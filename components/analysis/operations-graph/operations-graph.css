@@ -1,0 +1,120 @@
+/** 운영 지식그래프 캔버스 스타일 */
+
+.pams-operations-graph-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid oklch(0.88 0.01 280 / 0.9);
+  background-color: oklch(1 0 0);
+}
+
+.dark .pams-operations-graph-canvas {
+  border-color: oklch(0.38 0.02 280 / 0.65);
+  background-color: oklch(0.2 0.01 280);
+}
+
+.pams-operations-graph-canvas .react-flow__background {
+  opacity: 0.35;
+}
+
+.pams-operations-graph-node-card {
+  min-width: 120px;
+  max-width: 160px;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius-lg) - 2px);
+  border: 1px solid oklch(0.88 0.01 280 / 0.85);
+  background: oklch(1 0 0 / 0.96);
+  box-shadow: 0 1px 2px oklch(0.15 0.02 280 / 0.04);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.dark .pams-operations-graph-node-card {
+  border-color: oklch(0.38 0.02 280 / 0.7);
+  background: oklch(0.24 0.01 280 / 0.96);
+}
+
+.pams-operations-graph-node-card--selected {
+  border-color: oklch(0.52 0.24 293);
+  box-shadow:
+    0 0 0 2px oklch(0.52 0.24 293 / 0.18),
+    0 2px 8px oklch(0.15 0.02 280 / 0.1);
+}
+
+.pams-operations-graph-node-card--critical {
+  border-color: oklch(0.58 0.18 35 / 0.7);
+}
+
+.pams-operations-graph-node-card--kind-l3 {
+  border-left: 3px solid oklch(0.52 0.24 293);
+}
+
+.pams-operations-graph-node-card--kind-task {
+  border-left: 3px solid oklch(0.55 0.02 280);
+}
+
+.pams-operations-graph-node-card--kind-application {
+  border-left: 3px solid oklch(0.55 0.14 250);
+}
+
+.pams-operations-graph-node-card--kind-table {
+  border-left: 3px solid oklch(0.68 0.14 75);
+}
+
+.pams-operations-graph-node-card--kind-interface {
+  border-left: 3px solid oklch(0.62 0.1 195);
+}
+
+.pams-operations-graph-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: calc(var(--radius-lg) - 2px);
+  border: 1px solid oklch(0.9 0.01 280 / 0.8);
+  background: oklch(0.985 0.004 280);
+}
+
+.dark .pams-operations-graph-metric {
+  border-color: oklch(0.38 0.02 280 / 0.55);
+  background: oklch(0.22 0.01 280 / 0.6);
+}
+
+.pams-operations-graph-inspector-section {
+  border-bottom: 1px solid oklch(0.9 0.01 280 / 0.75);
+}
+
+.dark .pams-operations-graph-inspector-section {
+  border-bottom-color: oklch(0.38 0.02 280 / 0.55);
+}
+
+.pams-operations-graph-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.pams-operations-graph-legend-swatch--l3 {
+  background: oklch(0.52 0.24 293);
+}
+
+.pams-operations-graph-legend-swatch--task {
+  background: oklch(0.55 0.02 280);
+}
+
+.pams-operations-graph-legend-swatch--application {
+  background: oklch(0.55 0.14 250);
+}
+
+.pams-operations-graph-legend-swatch--table {
+  background: oklch(0.68 0.14 75);
+}
+
+.pams-operations-graph-legend-swatch--interface {
+  background: oklch(0.62 0.1 195);
+}

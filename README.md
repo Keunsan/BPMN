@@ -81,15 +81,19 @@ npm run db:migrate   # DDL 마이그레이션 실행
 
 > `/process/compare` 단독 페이지는 아직 Placeholder (상세 화면 내 버전 비교는 동작)
 
-### Phase 3: Layer B — BPMN 모델링 (Week 5-6) — ✅ 완료
+### Phase 3: Layer B — BPMN 모델링 (Week 5-6) — ✅ 완료 (+ Call Activity)
 
 | 기능 | 구현 |
 |------|------|
 | bpmn.js 에디터 (속성 패널, 미니맵) | `BpmnEditor`, `BpmnEditorPage` |
 | BPMN XML·SVG 저장·로드 | `bpmn.service.ts`, `/api/bpmn` |
 | Task ↔ L4 프로세스 연결 | `ProcessLinkModal`, `/api/bpmn/[modelId]/task-link` |
+| **Call Activity ↔ L3 (크로스-L2)** ⭐ | `ProcessLinkSidebar` L3 탭, migration `022` |
+| **BPMN → task_predecessor 동기화** ⭐ | `bpmn-predecessor-sync.ts`, `mergeTaskPredecessorsFromBpmn` |
 | BPMN 버전 비교 | `BpmnCompareView`, `/api/bpmn/compare` |
 | 모델 목록 CRUD·복제 | `BpmnModelList`, `/api/bpmn/[modelId]/duplicate` |
+
+> DB 마이그레이션: `npm run db:migrate` (`022_bpmn_call_activity.sql`)
 
 ### Phase 4: Layer C — 운영 메타데이터 (Week 7-9) — 🔄 진행 중
 

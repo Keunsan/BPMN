@@ -24,6 +24,7 @@ import {
   UserCog,
   Users,
   Webhook,
+  Waypoints,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -47,6 +48,7 @@ export type SidebarIconKey =
   | "impactAnalysis"
   | "unifiedSearch"
   | "heatMap"
+  | "operationsGraph"
   | "approvalInbox"
   | "changeHistory"
   | "improvements"
@@ -76,6 +78,7 @@ export const sidebarNavIcons: Record<SidebarIconKey, LucideIcon> = {
   impactAnalysis: Radar,
   unifiedSearch: Search,
   heatMap: Flame,
+  operationsGraph: Waypoints,
   approvalInbox: Inbox,
   changeHistory: History,
   improvements: Lightbulb,

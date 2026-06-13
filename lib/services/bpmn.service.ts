@@ -2,8 +2,14 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
 import * as bpmnQueries from "@/lib/db/queries/bpmn";
+import * as metadataQueries from "@/lib/db/queries/metadata";
 import { findProcessById } from "@/lib/db/queries/process";
 import { bumpVersion } from "@/lib/utils/process";
+import { derivePredecessorsFromBpmn } from "@/lib/utils/bpmn-predecessor-sync";
+import {
+  isBpmnCallActivityType,
+  isBpmnTaskElementType,
+} from "@/lib/utils/bpmn-link";
 import { diffBpmnXml, EMPTY_BPMN_XML, parseBpmnElementsFromXml } from "@/lib/utils/bpmn-xml";
 import { upsertTaskAttribute } from "@/lib/services/metadata.service";
 import { createProcess } from "@/lib/services/process.service";
@@ -159,6 +165,64 @@ const mergeElements = (
   return merged;
 };
 
+/** BPMN 요소 연결 대상(L3 Call / L4 Task) 유효성을 검사한다 */
+const validateBpmnElementLinks = async (
+  ownerNodeId: number,
+  elements: BpmnElementLinkDto[],
+): Promise<void> => {
+  for (const element of elements) {
+    if (!element.linkedNodeId) {
+      continue;
+    }
+
+    const linked = await findProcessById(element.linkedNodeId);
+    if (!linked) {
+      throw new ApiError("E302", "Linked process not found", 404);
+    }
+
+    if (isBpmnCallActivityType(element.elementType)) {
+      if (linked.level !== "L3") {
+        throw new ApiError(
+          "E405",
+          "Call Activity can only link to an L3 process",
+          400,
+          undefined,
+          "linkedNodeId",
+        );
+      }
+      if (linked.nodeId === ownerNodeId) {
+        throw new ApiError(
+          "E404",
+          "Call Activity cannot reference the same L3 process",
+          400,
+          undefined,
+          "linkedNodeId",
+        );
+      }
+      continue;
+    }
+
+    if (isBpmnTaskElementType(element.elementType) && linked.level !== "L4") {
+      throw new ApiError(
+        "E405",
+        "BPMN Task can only link to an L4 process",
+        400,
+        undefined,
+        "linkedNodeId",
+      );
+    }
+  }
+};
+
+/** BPMN sequence flow에서 task_predecessor를 병합 동기화한다 */
+const syncPredecessorsFromBpmnModel = async (
+  bpmnXml: string | null,
+  elements: BpmnElementLinkDto[],
+): Promise<void> => {
+  const pairs = derivePredecessorsFromBpmn(bpmnXml, elements);
+  await metadataQueries.mergeTaskPredecessorsFromBpmn(pairs);
+};
+
 /** BPMN 모델 수정 */
 export const updateBpmnModel = async (
   modelId: number,
@@ -171,25 +235,26 @@ export const updateBpmnModel = async (
   }
 
   if (dto.createNewVersion) {
-    await bpmnQueries.clearCurrentFlagForNode(existing.nodeId);
+    const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
+    if (merged.length > 0) {
+      await validateBpmnElementLinks(existing.nodeId, merged);
+    }
 
-    const newModelId = await bpmnQueries.insertBpmnModel({
+    const newModelId = await bpmnQueries.insertBpmnModelVersion(existing.modelId, {
       nodeId: existing.nodeId,
       modelName: dto.modelName?.trim() ?? existing.modelName,
       version: bumpVersion(existing.version, "minor"),
-      bpmnXml: dto.bpmnXml ?? existing.bpmnXml,
-      svgContent: dto.svgContent ?? existing.svgContent,
+      bpmnXml: dto.bpmnXml ?? existing.bpmnXml ?? null,
+      svgContent: dto.svgContent ?? existing.svgContent ?? null,
       status: dto.status ?? existing.status,
-      isCurrent: true,
       createdBy: userId ?? null,
+      elements: merged,
     });
 
-    const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
-    if (merged.length > 0) {
-      await bpmnQueries.syncBpmnElements(newModelId, merged);
-    }
-
-    await bpmnQueries.updateBpmnModel(existing.modelId, { isCurrent: false });
+    await syncPredecessorsFromBpmnModel(
+      dto.bpmnXml ?? existing.bpmnXml ?? null,
+      merged,
+    );
 
     const created = await bpmnQueries.findBpmnModelById(newModelId);
     if (!created) {
@@ -215,7 +280,14 @@ export const updateBpmnModel = async (
 
   const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
   if (dto.elements !== undefined || dto.bpmnXml !== undefined) {
+    if (merged.length > 0) {
+      await validateBpmnElementLinks(existing.nodeId, merged);
+    }
     await bpmnQueries.syncBpmnElements(modelId, merged);
+    await syncPredecessorsFromBpmnModel(
+      dto.bpmnXml ?? existing.bpmnXml ?? null,
+      merged,
+    );
   }
 
   return getBpmnModelDetail(modelId);

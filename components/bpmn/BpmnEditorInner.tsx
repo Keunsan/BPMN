@@ -3,13 +3,12 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 import { EMPTY_BPMN_XML, mapBpmnJsType } from "@/lib/utils/bpmn-xml";
+import { toBpmnElementLinkProperties } from "@/lib/utils/bpmn-link";
 import {
   consumeProcessLinkDrag,
   isProcessLinkDragEvent,
 } from "@/lib/constants/process-link";
-import type { BpmnElementLinkDto, BpmnElementType } from "@/types/bpmn";
-
-import type { ProcessLinkInfo } from "./ProcessLinkModal";
+import type { BpmnElementLinkDto, BpmnElementType, ProcessLinkInfo } from "@/types/bpmn";
 
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-js.css";
@@ -73,7 +72,11 @@ type BpmnEditorInnerProps = {
     x: number;
     y: number;
   } | null) => void;
-  onProcessLinkDrop?: (elementId: string, link: ProcessLinkInfo) => void;
+  onProcessLinkDrop?: (
+    elementId: string,
+    link: ProcessLinkInfo,
+    elementType: BpmnElementType | null,
+  ) => void;
   onReady?: (api: BpmnEditorHandle) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
@@ -124,6 +127,8 @@ export const BpmnEditorInner = ({
         BpmnPropertiesProviderModule,
       } = await import("bpmn-js-properties-panel");
       const { default: minimapModule } = await import("diagram-js-minimap");
+      const { pamsPaletteModule } = await import("./pams-palette-provider");
+      const { pamsContextPadModule } = await import("./pams-context-pad-provider");
 
       if (destroyed || !canvasRef.current || !propertiesRef.current) {
         return;
@@ -138,6 +143,8 @@ export const BpmnEditorInner = ({
           BpmnPropertiesPanelModule,
           BpmnPropertiesProviderModule,
           minimapModule,
+          pamsPaletteModule,
+          pamsContextPadModule,
         ],
       });
 
@@ -269,7 +276,19 @@ export const BpmnEditorInner = ({
         );
         setDropHighlight(modeler, null, dropHighlightRef);
         if (link && elementId) {
-          onProcessLinkDropRef.current?.(elementId, link);
+          const elementRegistry = modeler.get("elementRegistry") as {
+            get: (id: string) =>
+              | {
+                  businessObject?: { $type?: string };
+                  type: string;
+                }
+              | undefined;
+          };
+          const dropped = elementRegistry.get(elementId);
+          const mapped = dropped
+            ? mapBpmnJsType(dropped.businessObject?.$type ?? dropped.type)
+            : null;
+          onProcessLinkDropRef.current?.(elementId, link, mapped);
         }
       };
 
@@ -742,7 +761,9 @@ const openMinimap = (modeler: import("bpmn-js/lib/Modeler").default): void => {
 };
 
 const isLinkableType = (type: string): boolean =>
-  type.includes("Task") || type.includes("SubProcess");
+  type.includes("Task") ||
+  type.includes("SubProcess") ||
+  type.includes("CallActivity");
 
 /** 화면 좌표 아래 linkable BPMN 요소 id를 반환한다 (드래그 중 elementFromPoint 오류 방지) */
 const resolveLinkableElementAtPoint = (
@@ -871,7 +892,7 @@ const refreshLinkOverlays = (
     try {
       overlays.add(elementId, "pams-link", {
         position: { bottom: 14, right: 0 },
-        html: `<div class="pams-bpmn-link-badge" title="${escapeHtml(link.name)}">${escapeHtml(link.code)}</div>`,
+        html: `<div class="pams-bpmn-link-badge ${link.linkKind === "L3_CALL" ? "pams-bpmn-link-badge-l3" : ""}" title="${escapeHtml(link.name)}">${escapeHtml(link.linkKind === "L3_CALL" ? `L3:${link.code}` : link.code)}</div>`,
       });
     } catch {
       // 요소 미존재
@@ -916,6 +937,7 @@ const extractElements = (
       elementType: mapped,
       elementName: element.businessObject?.name ?? null,
       linkedNodeId: link?.nodeId ?? null,
+      properties: link ? toBpmnElementLinkProperties(link) : null,
     });
   });
 

@@ -78,6 +78,7 @@ export const BpmnModelList = () => {
   const sortLabel = sort === "updated" ? t("sortUpdated") : t("sortName");
 
   const { data: models, isLoading, error, refetch } = useBpmnList({
+    isCurrent: true,
     search: debouncedSearch || undefined,
     status: statusFilter === "ALL" ? undefined : statusFilter,
     sort,

@@ -265,28 +265,98 @@ export const syncBpmnElements = async (
   elements: BpmnElementLinkDto[],
 ): Promise<void> => {
   await transaction(async (txRequest) => {
-    await txRequest(`DELETE FROM bpmn_element WHERE model_id = @modelId`, {
-      modelId,
+    await insertBpmnElementsWithTx(txRequest, modelId, elements);
+  });
+};
+
+/** 새 BPMN 버전을 트랜잭션으로 생성한다 — 실패 시 고아 model 방지 */
+export const insertBpmnModelVersion = async (
+  existingModelId: number,
+  input: {
+    nodeId: number;
+    modelName: string;
+    version: string;
+    bpmnXml: string | null;
+    svgContent: string | null;
+    status: BpmnModelStatus;
+    createdBy: number | null;
+    elements: BpmnElementLinkDto[];
+  },
+): Promise<number> => {
+  return transaction(async (txRequest) => {
+    await txRequest(
+      `UPDATE bpmn_model SET is_current = 0 WHERE node_id = @nodeId AND is_current = 1`,
+      { nodeId: input.nodeId },
+    );
+
+    const insertResult = await txRequest(
+      `INSERT INTO bpmn_model (
+         node_id, model_name, version, bpmn_xml, svg_content, status, is_current, created_by
+       )
+       OUTPUT INSERTED.model_id AS model_id
+       VALUES (
+         @nodeId, @modelName, @version, @bpmnXml, @svgContent, @status, 1, @createdBy
+       )`,
+      {
+        nodeId: input.nodeId,
+        modelName: input.modelName,
+        version: input.version,
+        bpmnXml: input.bpmnXml,
+        svgContent: input.svgContent,
+        status: input.status,
+        createdBy: input.createdBy,
+      },
+    );
+
+    const newModelId = (
+      insertResult.recordset as { model_id: number }[] | undefined
+    )?.[0]?.model_id;
+
+    if (!newModelId) {
+      throw new Error("Failed to insert bpmn_model version");
+    }
+
+    if (input.elements.length > 0) {
+      await insertBpmnElementsWithTx(txRequest, newModelId, input.elements);
+    }
+
+    await txRequest(`UPDATE bpmn_model SET is_current = 0 WHERE model_id = @modelId`, {
+      modelId: existingModelId,
     });
 
-    for (const el of elements) {
-      await txRequest(
-        `INSERT INTO bpmn_element (
-           model_id, element_type, element_bpmn_id, element_name, linked_node_id, properties
-         ) VALUES (
-           @modelId, @elementType, @elementBpmnId, @elementName, @linkedNodeId, @properties
-         )`,
-        {
-          modelId,
-          elementType: el.elementType,
-          elementBpmnId: el.elementBpmnId,
-          elementName: el.elementName ?? null,
-          linkedNodeId: el.linkedNodeId ?? null,
-          properties: el.properties ? JSON.stringify(el.properties) : null,
-        },
-      );
-    }
+    return newModelId;
   });
+};
+
+const insertBpmnElementsWithTx = async (
+  txRequest: (
+    queryText: string,
+    params?: Record<string, string | number | boolean | Date | null | undefined>,
+  ) => Promise<unknown>,
+  modelId: number,
+  elements: BpmnElementLinkDto[],
+): Promise<void> => {
+  await txRequest(`DELETE FROM bpmn_element WHERE model_id = @modelId`, {
+    modelId,
+  });
+
+  for (const el of elements) {
+    await txRequest(
+      `INSERT INTO bpmn_element (
+         model_id, element_type, element_bpmn_id, element_name, linked_node_id, properties
+       ) VALUES (
+         @modelId, @elementType, @elementBpmnId, @elementName, @linkedNodeId, @properties
+       )`,
+      {
+        modelId,
+        elementType: el.elementType,
+        elementBpmnId: el.elementBpmnId,
+        elementName: el.elementName ?? null,
+        linkedNodeId: el.linkedNodeId ?? null,
+        properties: el.properties ? JSON.stringify(el.properties) : null,
+      },
+    );
+  }
 };
 
 /** 단일 BPMN 요소와 프로세스 노드 연결을 저장한다. */

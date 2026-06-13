@@ -89,6 +89,7 @@ export const ProcessDetail = ({
   const { data: bpmnModels, isLoading: isBpmnLoading } = useBpmnList({
     nodeId: node?.level === "L4" ? undefined : nodeId,
     linkedNodeId: node?.level === "L4" ? nodeId : undefined,
+    isCurrent: true,
     sort: "updated",
   }, {
     enabled: Boolean(node),

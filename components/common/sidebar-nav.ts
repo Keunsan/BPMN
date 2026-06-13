@@ -102,6 +102,11 @@ export const sidebarNav: SidebarNavItem[] = [
         iconKey: "impactAnalysis",
       },
       {
+        labelKey: "menu.operationsGraph",
+        href: "/analysis/operations-graph",
+        iconKey: "operationsGraph",
+      },
+      {
         labelKey: "menu.unifiedSearch",
         href: "/analysis/search",
         iconKey: "unifiedSearch",

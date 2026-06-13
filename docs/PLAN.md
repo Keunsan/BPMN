@@ -739,6 +739,25 @@ task_predecessor 테이블 활용
 - [ ] 순환 참조 체크
 - [ ] API 구현
 
+#### Week 7, Day 5 — BPMN Call Activity (크로스-L2 L3) ⭐
+
+**목표:** L3 BPMN에서 Call Activity로 **전사 L3** 호출 + `task_predecessor` 동기화
+
+```
+구현:
+- migration 022: bpmn_element CALL_ACTIVITY 타입
+- ProcessLinkSidebar: 로컬 L4 / 전사 L3 탭
+- ProcessLinkModal: Task→L4, Call Activity→L3
+- bpmn.service: 연결 검증 + sequenceFlow → task_predecessor 병합
+- lib/utils/bpmn-predecessor-sync.ts
+```
+
+**체크리스트:**
+- [x] CALL_ACTIVITY DB·타입·XML 매핑
+- [x] 전사 L3 선택 UI (L2 형제 제한 없음)
+- [x] BPMN 저장 시 선행 관계 병합
+- [ ] L2 오케스트레이션 뷰 (Phase 5)
+
 #### Week 8, Day 1-2: 시스템 연계 매핑
 
 **Cursor Prompt 25: 시스템 마스터 관리**
