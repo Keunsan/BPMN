@@ -9,6 +9,7 @@ import type {
   CommonCodeGroupListFilters,
   CommonCodeItemDto,
   CommonCodeItemI18nMap,
+  CommonCodeItemKey,
   CommonCodeItemListFilters,
   CommonCodeLookupItem,
   UpsertCommonCodeGroupDto,
@@ -123,7 +124,7 @@ const assertItemCode = (code: string): void => {
 
 /** 그룹 DTO를 API 응답 형태로 변환한다. */
 const toGroupDto = (
-  group: Awaited<ReturnType<typeof commonCodeQueries.findCommonCodeGroupById>>,
+  group: Awaited<ReturnType<typeof commonCodeQueries.findCommonCodeGroupByCode>>,
   locale: Locale,
   i18n: CommonCodeGroupI18nMap,
   itemCount = 0,
@@ -142,10 +143,9 @@ const toGroupDto = (
 
 /** 코드 DTO를 API 응답 형태로 변환한다. */
 const toItemDto = (
-  item: Awaited<ReturnType<typeof commonCodeQueries.findCommonCodeItemById>>,
+  item: Awaited<ReturnType<typeof commonCodeQueries.findCommonCodeItem>>,
   locale: Locale,
   i18n: CommonCodeItemI18nMap,
-  groupCode?: string,
 ): CommonCodeItemDto => {
   if (!item) {
     throw new ApiError("E301", "Common code not found", 404);
@@ -154,7 +154,6 @@ const toItemDto = (
   return {
     ...item,
     displayName: resolveDisplayName(locale, item.codeName, i18n, "codeName"),
-    groupCode,
     i18n,
   };
 };
@@ -174,16 +173,17 @@ export const listCommonCodeGroups = async (
 
 /** 공통코드 그룹 상세를 조회한다. */
 export const getCommonCodeGroup = async (
-  groupId: number,
+  groupCode: string,
   locale: Locale,
 ): Promise<CommonCodeGroupDto> => {
-  const group = await commonCodeQueries.findCommonCodeGroupById(groupId);
+  const normalized = normalizeCode(groupCode);
+  const group = await commonCodeQueries.findCommonCodeGroupByCode(normalized);
   if (!group) {
     throw new ApiError("E301", "Common code group not found", 404);
   }
 
-  const i18n = await commonCodeQueries.findCommonCodeGroupI18n(groupId);
-  const items = await commonCodeQueries.listCommonCodeItems(groupId, locale);
+  const i18n = await commonCodeQueries.findCommonCodeGroupI18n(normalized);
+  const items = await commonCodeQueries.listCommonCodeItems(normalized, locale);
 
   return toGroupDto(group, locale, i18n, items.length);
 };
@@ -207,19 +207,20 @@ export const createCommonCodeGroup = async (
 
   const group = await commonCodeQueries.createCommonCodeGroup(normalized, userId);
   const i18n = buildGroupI18nMap(normalized);
-  await commonCodeQueries.upsertCommonCodeGroupI18n(group.groupId, i18n);
+  await commonCodeQueries.upsertCommonCodeGroupI18n(group.groupCode, i18n);
 
-  return getCommonCodeGroup(group.groupId, locale);
+  return getCommonCodeGroup(group.groupCode, locale);
 };
 
 /** 공통코드 그룹을 수정한다. */
 export const updateCommonCodeGroup = async (
-  groupId: number,
+  groupCode: string,
   dto: Partial<UpsertCommonCodeGroupDto>,
   locale: Locale,
   userId: number,
 ): Promise<CommonCodeGroupDto> => {
-  const existing = await commonCodeQueries.findCommonCodeGroupById(groupId);
+  const normalizedGroupCode = normalizeCode(groupCode);
+  const existing = await commonCodeQueries.findCommonCodeGroupByCode(normalizedGroupCode);
   if (!existing) {
     throw new ApiError("E301", "Common code group not found", 404);
   }
@@ -233,7 +234,7 @@ export const updateCommonCodeGroup = async (
     if (
       await commonCodeQueries.existsCommonCodeGroupCode(
         normalized.groupCode,
-        groupId,
+        normalizedGroupCode,
       )
     ) {
       throw new ApiError("E304", "Duplicate code", 409, undefined, "groupCode");
@@ -257,7 +258,7 @@ export const updateCommonCodeGroup = async (
   });
 
   const updated = await commonCodeQueries.updateCommonCodeGroup(
-    groupId,
+    normalizedGroupCode,
     merged,
     userId,
   );
@@ -268,41 +269,46 @@ export const updateCommonCodeGroup = async (
 
   if (dto.i18n) {
     const i18n = buildGroupI18nMap(merged);
-    await commonCodeQueries.upsertCommonCodeGroupI18n(groupId, i18n);
+    await commonCodeQueries.upsertCommonCodeGroupI18n(updated.groupCode, i18n);
   }
 
   if (merged.isActive === false) {
-    await commonCodeQueries.deactivateCommonCodeGroupWithItems(groupId, userId);
+    await commonCodeQueries.deactivateCommonCodeGroupWithItems(
+      updated.groupCode,
+      userId,
+    );
   }
 
-  return getCommonCodeGroup(groupId, locale);
+  return getCommonCodeGroup(updated.groupCode, locale);
 };
 
 /** 공통코드 그룹을 비활성화한다. */
 export const deactivateCommonCodeGroup = async (
-  groupId: number,
+  groupCode: string,
   userId: number,
 ): Promise<void> => {
-  const existing = await commonCodeQueries.findCommonCodeGroupById(groupId);
+  const normalized = normalizeCode(groupCode);
+  const existing = await commonCodeQueries.findCommonCodeGroupByCode(normalized);
   if (!existing) {
     throw new ApiError("E301", "Common code group not found", 404);
   }
 
-  await commonCodeQueries.deactivateCommonCodeGroupWithItems(groupId, userId);
+  await commonCodeQueries.deactivateCommonCodeGroupWithItems(normalized, userId);
 };
 
 /** 그룹별 공통코드 목록을 조회한다. */
 export const listCommonCodeItems = async (
-  groupId: number,
+  groupCode: string,
   locale: Locale,
   filters: CommonCodeItemListFilters = {},
 ): Promise<CommonCodeItemDto[]> => {
-  const group = await commonCodeQueries.findCommonCodeGroupById(groupId);
+  const normalized = normalizeCode(groupCode);
+  const group = await commonCodeQueries.findCommonCodeGroupByCode(normalized);
   if (!group) {
     throw new ApiError("E301", "Common code group not found", 404);
   }
 
-  const rows = await commonCodeQueries.listCommonCodeItems(groupId, locale, filters);
+  const rows = await commonCodeQueries.listCommonCodeItems(normalized, locale, filters);
 
   return rows.map((row) => ({
     ...row,
@@ -312,18 +318,21 @@ export const listCommonCodeItems = async (
 
 /** 공통코드 상세를 조회한다. */
 export const getCommonCodeItem = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   locale: Locale,
 ): Promise<CommonCodeItemDto> => {
-  const item = await commonCodeQueries.findCommonCodeItemById(codeId);
+  const normalized: CommonCodeItemKey = {
+    groupCode: normalizeCode(key.groupCode),
+    code: normalizeCode(key.code),
+  };
+  const item = await commonCodeQueries.findCommonCodeItem(normalized);
   if (!item) {
     throw new ApiError("E301", "Common code not found", 404);
   }
 
-  const i18n = await commonCodeQueries.findCommonCodeItemI18n(codeId);
-  const group = await commonCodeQueries.findCommonCodeGroupById(item.groupId);
+  const i18n = await commonCodeQueries.findCommonCodeItemI18n(normalized);
 
-  return toItemDto(item, locale, i18n, group?.groupCode);
+  return toItemDto(item, locale, i18n);
 };
 
 /** 공통코드를 생성한다. */
@@ -332,12 +341,15 @@ export const createCommonCodeItem = async (
   locale: Locale,
   userId: number,
 ): Promise<CommonCodeItemDto> => {
-  const normalized = withKoItemFallback(dto);
+  const normalized = withKoItemFallback({
+    ...dto,
+    groupCode: normalizeCode(dto.groupCode),
+  });
   assertItemCode(normalized.code);
 
-  const group = await commonCodeQueries.findCommonCodeGroupById(normalized.groupId);
+  const group = await commonCodeQueries.findCommonCodeGroupByCode(normalized.groupCode);
   if (!group) {
-    throw new ApiError("E301", "Common code group not found", 404, undefined, "groupId");
+    throw new ApiError("E301", "Common code group not found", 404, undefined, "groupCode");
   }
 
   if (!normalized.codeName?.trim()) {
@@ -346,7 +358,7 @@ export const createCommonCodeItem = async (
 
   if (
     await commonCodeQueries.existsCommonCodeItemCode(
-      normalized.groupId,
+      normalized.groupCode,
       normalized.code,
     )
   ) {
@@ -355,19 +367,29 @@ export const createCommonCodeItem = async (
 
   const item = await commonCodeQueries.createCommonCodeItem(normalized, userId);
   const i18n = buildItemI18nMap(normalized);
-  await commonCodeQueries.upsertCommonCodeItemI18n(item.codeId, i18n);
+  await commonCodeQueries.upsertCommonCodeItemI18n(
+    { groupCode: item.groupCode, code: item.code },
+    i18n,
+  );
 
-  return getCommonCodeItem(item.codeId, locale);
+  return getCommonCodeItem(
+    { groupCode: item.groupCode, code: item.code },
+    locale,
+  );
 };
 
 /** 공통코드를 수정한다. */
 export const updateCommonCodeItem = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   dto: Partial<UpsertCommonCodeItemDto>,
   locale: Locale,
   userId: number,
 ): Promise<CommonCodeItemDto> => {
-  const existing = await commonCodeQueries.findCommonCodeItemById(codeId);
+  const normalizedKey: CommonCodeItemKey = {
+    groupCode: normalizeCode(key.groupCode),
+    code: normalizeCode(key.code),
+  };
+  const existing = await commonCodeQueries.findCommonCodeItem(normalizedKey);
   if (!existing) {
     throw new ApiError("E301", "Common code not found", 404);
   }
@@ -380,9 +402,9 @@ export const updateCommonCodeItem = async (
     assertItemCode(normalized.code);
     if (
       await commonCodeQueries.existsCommonCodeItemCode(
-        existing.groupId,
+        existing.groupCode,
         normalized.code,
-        codeId,
+        normalizedKey.code,
       )
     ) {
       throw new ApiError("E304", "Duplicate code", 409, undefined, "code");
@@ -390,7 +412,7 @@ export const updateCommonCodeItem = async (
   }
 
   const merged = withKoItemFallback({
-    groupId: existing.groupId,
+    groupCode: existing.groupCode,
     code: normalized.code ?? existing.code,
     codeName: normalized.codeName ?? dto.i18n?.ko?.codeName ?? existing.codeName,
     description:
@@ -403,7 +425,7 @@ export const updateCommonCodeItem = async (
   });
 
   const updated = await commonCodeQueries.updateCommonCodeItem(
-    codeId,
+    normalizedKey,
     merged,
     userId,
   );
@@ -414,23 +436,33 @@ export const updateCommonCodeItem = async (
 
   if (dto.i18n) {
     const i18n = buildItemI18nMap(merged);
-    await commonCodeQueries.upsertCommonCodeItemI18n(codeId, i18n);
+    await commonCodeQueries.upsertCommonCodeItemI18n(
+      { groupCode: updated.groupCode, code: updated.code },
+      i18n,
+    );
   }
 
-  return getCommonCodeItem(codeId, locale);
+  return getCommonCodeItem(
+    { groupCode: updated.groupCode, code: updated.code },
+    locale,
+  );
 };
 
 /** 공통코드를 비활성화한다. */
 export const deactivateCommonCodeItem = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   userId: number,
 ): Promise<void> => {
-  const existing = await commonCodeQueries.findCommonCodeItemById(codeId);
+  const normalized: CommonCodeItemKey = {
+    groupCode: normalizeCode(key.groupCode),
+    code: normalizeCode(key.code),
+  };
+  const existing = await commonCodeQueries.findCommonCodeItem(normalized);
   if (!existing) {
     throw new ApiError("E301", "Common code not found", 404);
   }
 
-  await commonCodeQueries.deactivateCommonCodeItem(codeId, userId);
+  await commonCodeQueries.deactivateCommonCodeItem(normalized, userId);
 };
 
 /** 그룹 코드로 lookup 목록을 조회한다. */

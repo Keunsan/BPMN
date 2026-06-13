@@ -13,6 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePathname, useRouter } from "@/lib/i18n/navigation";
+import {
+  ENTERPRISE_BUSINESS_UNIT_CODE,
+  ENTERPRISE_COMPANY_CODE,
+} from "@/lib/constants/process-scope";
 import { useCommonCodeLookup } from "@/lib/query/hooks/useCommonCode";
 import type { ProcessFilters } from "@/types/process";
 
@@ -88,11 +92,16 @@ export const ProcessScopeFilter = ({
 
       {!companyCode || !businessUnitCode ? (
         <p className="px-1 text-[11px] text-muted-foreground">
-          {t("scope.standardViewHint")}
+          {t("scope.catalogViewHint")}
+        </p>
+      ) : companyCode === ENTERPRISE_COMPANY_CODE &&
+        businessUnitCode === ENTERPRISE_BUSINESS_UNIT_CODE ? (
+        <p className="px-1 text-[11px] text-muted-foreground">
+          {t("scope.enterpriseViewHint")}
         </p>
       ) : (
         <p className="px-1 text-[11px] text-muted-foreground">
-          {t("scope.overlayViewHint")}
+          {t("scope.organizationViewHint")}
         </p>
       )}
     </FilterPanel>

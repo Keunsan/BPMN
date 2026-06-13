@@ -44,6 +44,7 @@ import {
 import { useRouter } from "@/lib/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { formatProcessScope } from "@/lib/utils/process-label";
+import { isEnterpriseScope } from "@/lib/utils/process-scope";
 import type {
   ProcessDeleteImpact,
   ProcessFilters,
@@ -159,6 +160,13 @@ const TreeNodeItem = ({
             </Badge>
           )}
           {!node.isOverlayVariant &&
+            !isEnterpriseScope(node.companyCode, node.businessUnitCode) &&
+            !node.variantOf && (
+              <Badge variant="outline" className="shrink-0 text-[10px]">
+                {t("scope.scopedBadge")}
+              </Badge>
+            )}
+          {!node.isOverlayVariant &&
             (node.variantCount ?? 0) > 0 &&
             (node.level === "L3" || node.level === "L4") && (
               <Badge variant="outline" className="shrink-0 text-[10px]">
@@ -202,8 +210,7 @@ const TreeNodeItem = ({
               >
                 {t("addChild")}
               </DropdownMenuItem>
-              {node.isStandard &&
-                !node.variantOf &&
+              {!node.variantOf &&
                 (node.level === "L3" || node.level === "L4") && (
                   <DropdownMenuItem onClick={() => onCreateVariant?.(node)}>
                     <Copy className="size-3.5" />

@@ -7,8 +7,8 @@ import {
 import type { CreateTaskSystemMappingDto } from "@/types/system";
 
 /** GET /api/metadata/tasks/[nodeId]/systems — Task 시스템 매핑 목록 */
-export const GET = withApiHandler(async ({ params }) => {
-  const data = await listTaskSystemMappings(Number(params.nodeId));
+export const GET = withApiHandler(async ({ params, locale }) => {
+  const data = await listTaskSystemMappings(Number(params.nodeId), locale);
   return { data };
 });
 

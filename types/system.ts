@@ -54,19 +54,18 @@ export interface ApplicationSystem {
   updatedAt: Date | null;
 }
 
-export interface SystemModule {
-  moduleId: number;
-  systemId: number;
+/** 공통코드(MODULE_CD) 기반 업무 모듈 */
+export interface SystemModuleOption {
   moduleCode: string;
   moduleName: string;
-  description: string | null;
-  isActive: boolean;
-  createdAt: Date;
+  screenCount?: number;
 }
 
 export interface SystemScreen {
   screenId: number;
-  moduleId: number;
+  systemId: number;
+  moduleCode: string;
+  menuId: string;
   screenCode: string;
   screenName: string;
   transactionCode: string | null;
@@ -78,15 +77,13 @@ export interface SystemScreen {
   createdAt: Date;
 }
 
-export interface SystemModuleDto extends SystemModule {
-  screenCount?: number;
+export interface SystemModuleDto extends SystemModuleOption {
+  screens?: SystemScreenDto[];
 }
 
 export interface SystemScreenDto extends SystemScreen {
-  systemId?: number;
   systemCode?: string;
   systemName?: string;
-  moduleCode?: string;
   moduleName?: string;
 }
 
@@ -99,6 +96,11 @@ export interface ApplicationSystemDto extends ApplicationSystem {
 
 export interface SystemHierarchyDto extends ApplicationSystemDto {
   modules: Array<SystemModuleDto & { screens: SystemScreenDto[] }>;
+}
+
+export interface SystemScreenListFilters {
+  moduleCode?: string;
+  isActive?: boolean;
 }
 
 export interface SystemListFilters {
@@ -126,18 +128,12 @@ export interface UpsertApplicationSystemDto {
   columnApiUrl?: string | null;
 }
 
-export interface UpsertSystemModuleDto {
+export interface UpsertSystemScreenDto {
   systemId: number;
   moduleCode: string;
-  moduleName: string;
-  description?: string | null;
-  isActive?: boolean;
-}
-
-export interface UpsertSystemScreenDto {
-  moduleId: number;
-  screenCode: string;
+  menuId: string;
   screenName: string;
+  screenCode?: string;
   transactionCode?: string | null;
   menuPath?: string | null;
   screenType?: ScreenType | null;
@@ -161,9 +157,13 @@ export interface TaskSystemMappingDto extends TaskSystemMapping {
   systemId: number;
   systemCode: string;
   systemName: string;
-  moduleId: number;
+  companyCode: string | null;
+  businessUnitCode: string | null;
+  companyName: string | null;
+  businessUnitName: string | null;
   moduleCode: string;
   moduleName: string;
+  menuId: string;
   screenCode: string;
   screenName: string;
   transactionCode: string | null;
@@ -177,4 +177,27 @@ export interface CreateTaskSystemMappingDto {
   usageType: SystemUsageType;
   usageDescription?: string | null;
   isPrimary?: boolean;
+}
+
+export interface BatchCreateTaskSystemMappingDto {
+  screenIds: number[];
+  usageType?: SystemUsageType;
+  usageDescription?: string | null;
+  isPrimary?: boolean;
+}
+
+export interface ScreenCatalogFilters {
+  systemId?: number;
+  moduleCode?: string;
+  search?: string;
+  excludeNodeId?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ScreenCatalogItem extends SystemScreenDto {
+  companyCode: string | null;
+  businessUnitCode: string | null;
+  companyName: string | null;
+  businessUnitName: string | null;
 }

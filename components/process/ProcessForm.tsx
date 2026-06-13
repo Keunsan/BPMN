@@ -24,13 +24,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProcessScopeFields } from "@/components/process/ProcessScopeFields";
 import {
   useCreateProcess,
+  useProcessDetail,
   useUpdateProcess,
 } from "@/lib/query/hooks/useProcess";
 import { useRouter } from "@/lib/i18n/navigation";
+import { isEnterpriseScope } from "@/lib/utils/process-scope";
 import { cn } from "@/lib/utils";
-import type { ProcessNodeDto, ProcessStatus } from "@/types/process";
+import type { ProcessNodeDto, ProcessScopeMode, ProcessStatus } from "@/types/process";
 
 const statusOptions: ProcessStatus[] = [
   "DRAFT",
@@ -70,6 +73,27 @@ export const ProcessForm = ({
       },
     },
   );
+  const [scopeMode, setScopeMode] = useState<ProcessScopeMode>(
+    initialData && !isEnterpriseScope(initialData.companyCode, initialData.businessUnitCode)
+      ? "scoped"
+      : "enterprise",
+  );
+  const [companyCode, setCompanyCode] = useState(initialData?.companyCode ?? "");
+  const [businessUnitCode, setBusinessUnitCode] = useState(
+    initialData?.businessUnitCode ?? "",
+  );
+
+  const { data: parentNode } = useProcessDetail(parentIdProp ?? 0);
+  const childLevel =
+    mode === "create" && parentNode
+      ? parentNode.level === "L1"
+        ? "L2"
+        : parentNode.level === "L2"
+          ? "L3"
+          : parentNode.level === "L3"
+            ? "L4"
+            : null
+      : null;
 
   const schema = useMemo(
     () =>
@@ -84,7 +108,6 @@ export const ProcessForm = ({
           "OBSOLETE",
         ]),
         version: z.string().optional(),
-        isStandard: z.boolean(),
       }),
     [],
   );
@@ -98,7 +121,6 @@ export const ProcessForm = ({
       autoCode: mode === "create",
       status: initialData?.status ?? "DRAFT",
       version: initialData?.version ?? "1.0.0",
-      isStandard: initialData?.isStandard ?? true,
     },
   });
 
@@ -111,6 +133,16 @@ export const ProcessForm = ({
       return;
     }
 
+    if (
+      mode === "create" &&
+      childLevel === "L3" &&
+      scopeMode === "scoped" &&
+      (!companyCode || !businessUnitCode)
+    ) {
+      form.setError("root", { message: t("scope.scopedRequired") });
+      return;
+    }
+
     const payload = {
       parentNodeId: parentIdProp ?? initialData?.parentNodeId ?? null,
       code: values.autoCode ? undefined : values.code,
@@ -119,7 +151,10 @@ export const ProcessForm = ({
       description: i18n.ko.description ?? null,
       status: values.status,
       version: values.version,
-      isStandard: values.isStandard,
+      scopeMode: childLevel === "L3" ? scopeMode : undefined,
+      companyCode: childLevel === "L3" && scopeMode === "scoped" ? companyCode : undefined,
+      businessUnitCode:
+        childLevel === "L3" && scopeMode === "scoped" ? businessUnitCode : undefined,
       i18n,
     };
 
@@ -165,6 +200,44 @@ export const ProcessForm = ({
           required
           multiline
         />
+
+        {mode === "create" && childLevel === "L3" && (
+          <ProcessScopeFields
+            mode="create-l3"
+            scopeMode={scopeMode}
+            onScopeModeChange={setScopeMode}
+            companyCode={companyCode}
+            businessUnitCode={businessUnitCode}
+            onCompanyCodeChange={setCompanyCode}
+            onBusinessUnitCodeChange={setBusinessUnitCode}
+          />
+        )}
+
+        {mode === "create" && childLevel === "L4" && parentNode && (
+          <ProcessScopeFields
+            mode="create-l4"
+            scopeMode="enterprise"
+            onScopeModeChange={() => undefined}
+            companyCode={companyCode}
+            businessUnitCode={businessUnitCode}
+            onCompanyCodeChange={setCompanyCode}
+            onBusinessUnitCodeChange={setBusinessUnitCode}
+            inheritedCompanyCode={parentNode.companyCode}
+            inheritedBusinessUnitCode={parentNode.businessUnitCode}
+          />
+        )}
+
+        {mode === "edit" && initialData && (
+          <ProcessScopeFields
+            mode="readonly"
+            scopeMode={scopeMode}
+            onScopeModeChange={setScopeMode}
+            companyCode={initialData.companyCode ?? ""}
+            businessUnitCode={initialData.businessUnitCode ?? ""}
+            onCompanyCodeChange={setCompanyCode}
+            onBusinessUnitCodeChange={setBusinessUnitCode}
+          />
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
@@ -239,23 +312,6 @@ export const ProcessForm = ({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="isStandard"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-2">
-                <FormControl>
-                  <input
-                    type="checkbox"
-                    checked={field.value}
-                    onChange={(e) => field.onChange(e.target.checked)}
-                    className="size-4"
-                  />
-                </FormControl>
-                <FormLabel>{t("isStandard")}</FormLabel>
-              </FormItem>
-            )}
-          />
         </div>
 
         {form.formState.errors.root && (

@@ -13,7 +13,6 @@ export type CommonCodeItemI18nMap = Partial<
 
 /** 공통코드 그룹 엔티티 */
 export interface CommonCodeGroup extends AuditFields {
-  groupId: number;
   groupCode: string;
   groupName: string;
   description: string | null;
@@ -23,8 +22,7 @@ export interface CommonCodeGroup extends AuditFields {
 
 /** 공통코드 엔티티 */
 export interface CommonCodeItem extends AuditFields {
-  codeId: number;
-  groupId: number;
+  groupCode: string;
   code: string;
   codeName: string;
   description: string | null;
@@ -42,7 +40,6 @@ export interface CommonCodeGroupDto extends CommonCodeGroup {
 /** 공통코드 DTO */
 export interface CommonCodeItemDto extends CommonCodeItem {
   displayName: string;
-  groupCode?: string;
   i18n?: CommonCodeItemI18nMap;
 }
 
@@ -78,11 +75,17 @@ export type UpsertCommonCodeGroupDto = {
 
 /** 코드 생성/수정 DTO */
 export type UpsertCommonCodeItemDto = {
-  groupId: number;
+  groupCode: string;
   code: string;
   codeName?: string;
   description?: string | null;
   sortOrder?: number;
   isActive?: boolean;
   i18n?: CommonCodeItemI18nMap;
+};
+
+/** 공통코드 식별 키 */
+export type CommonCodeItemKey = {
+  groupCode: string;
+  code: string;
 };

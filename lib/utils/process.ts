@@ -1,4 +1,13 @@
-import type { ProcessNodeTree } from "@/types/process";
+import type { ProcessNodeTree, ProcessTreeViewMode } from "@/types/process";
+
+import type { ProcessScopePair } from "@/lib/utils/process-scope";
+import {
+  isBaseVisibleInCatalogView,
+  isBaseVisibleInEnterpriseView,
+  isBaseVisibleInOrgView,
+  isEnterpriseScope,
+  normalizeProcessScope,
+} from "@/lib/utils/process-scope";
 
 /** flat 목록을 트리 구조로 변환 */
 export const buildProcessTree = (
@@ -46,63 +55,114 @@ export const bumpVersion = (
   return `${major}.${minor + 1}.0`;
 };
 
-/** scope overlay 트리 — 표준 노드를 기준으로 변형을 대체한다 */
-export const buildOverlayProcessTree = (
-  standardNodes: ProcessNodeTree[],
+/** 필터 파라미터로 hybrid 트리 조회 모드를 결정한다 */
+export const resolveProcessTreeViewMode = (
+  companyCode?: string,
+  businessUnitCode?: string,
+): ProcessTreeViewMode => {
+  const company = companyCode?.trim();
+  const businessUnit = businessUnitCode?.trim();
+  if (!company || !businessUnit) {
+    return "catalog";
+  }
+  if (isEnterpriseScope(company, businessUnit)) {
+    return "enterprise";
+  }
+  return "organization";
+};
+
+/** hybrid 트리 — 전체 카탈로그 / 전사 공통 / 조직 E2E */
+export const buildHybridProcessTree = (
+  baseNodes: ProcessNodeTree[],
   variantNodes: ProcessNodeTree[],
+  viewMode: ProcessTreeViewMode,
+  orgScope?: ProcessScopePair,
 ): ProcessNodeTree[] => {
-  const standardById = new Map(standardNodes.map((node) => [node.nodeId, node]));
-  const variantByStandardId = new Map(
-    variantNodes
-      .filter((node) => node.variantOf != null)
-      .map((node) => [node.variantOf!, node]),
+  if (viewMode === "catalog") {
+    return buildProcessTree(
+      baseNodes.filter((node) => isBaseVisibleInCatalogView(node)),
+    );
+  }
+
+  if (viewMode === "enterprise") {
+    return buildProcessTree(
+      baseNodes.filter((node) => isBaseVisibleInEnterpriseView(node)),
+    );
+  }
+
+  const scope = normalizeProcessScope(
+    orgScope?.companyCode,
+    orgScope?.businessUnitCode,
   );
+  const orgVariants = variantNodes.filter((variant) => {
+    const variantScope = normalizeProcessScope(
+      variant.companyCode,
+      variant.businessUnitCode,
+    );
+    return (
+      variantScope.companyCode === scope.companyCode &&
+      variantScope.businessUnitCode === scope.businessUnitCode
+    );
+  });
+  const variantByBaseId = new Map(
+    orgVariants.map((variant) => [variant.variantOf!, variant]),
+  );
+  const variantBaseIds = new Set(variantByBaseId.keys());
+  const variantIds = new Set(orgVariants.map((variant) => variant.nodeId));
+  const included: ProcessNodeTree[] = [];
+  const includedIds = new Set<number>();
 
-  const effectiveByStandardId = new Map<number, ProcessNodeTree>();
+  const pushNode = (node: ProcessNodeTree, isOverlayVariant = false) => {
+    if (includedIds.has(node.nodeId)) {
+      return;
+    }
+    includedIds.add(node.nodeId);
+    included.push({ ...node, isOverlayVariant });
+  };
 
-  for (const node of standardNodes) {
-    if (node.level === "L1" || node.level === "L2") {
-      effectiveByStandardId.set(node.nodeId, {
-        ...node,
-        isOverlayVariant: false,
-      });
+  for (const base of baseNodes) {
+    if (base.level === "L1" || base.level === "L2") {
+      if (isEnterpriseScope(base.companyCode, base.businessUnitCode)) {
+        pushNode(base);
+      }
       continue;
     }
 
-    const variant = variantByStandardId.get(node.nodeId);
-    if (variant) {
-      effectiveByStandardId.set(node.nodeId, {
-        ...variant,
-        isOverlayVariant: true,
-      });
-    } else {
-      effectiveByStandardId.set(node.nodeId, {
-        ...node,
-        isOverlayVariant: false,
-      });
+    if (variantByBaseId.has(base.nodeId)) {
+      pushNode(variantByBaseId.get(base.nodeId)!, true);
+      continue;
+    }
+
+    if (isEnterpriseScope(base.companyCode, base.businessUnitCode)) {
+      if (base.level === "L4" && base.parentNodeId) {
+        const parent = baseNodes.find((item) => item.nodeId === base.parentNodeId);
+        if (parent && variantByBaseId.has(parent.nodeId)) {
+          continue;
+        }
+      }
+      pushNode(base);
+      continue;
+    }
+
+    if (
+      isBaseVisibleInOrgView(
+        base,
+        scope.companyCode,
+        scope.businessUnitCode,
+        variantBaseIds,
+      )
+    ) {
+      pushNode(base);
     }
   }
 
-  const getEffectiveParentId = (standardParentId: number | null): number | null => {
-    if (standardParentId == null) {
-      return null;
+  for (const base of baseNodes) {
+    if (base.parentNodeId && variantIds.has(base.parentNodeId)) {
+      pushNode(base);
     }
-    const parentStandard = standardById.get(standardParentId);
-    if (!parentStandard) {
-      return standardParentId;
-    }
-    return effectiveByStandardId.get(standardParentId)?.nodeId ?? standardParentId;
-  };
+  }
 
-  const effectiveNodes = standardNodes.map((node) => {
-    const effective = effectiveByStandardId.get(node.nodeId)!;
-    return {
-      ...effective,
-      parentNodeId: getEffectiveParentId(node.parentNodeId),
-    };
-  });
-
-  return buildProcessTree(effectiveNodes);
+  return buildProcessTree(included);
 };
 
 /** 다음 레벨 계산 */

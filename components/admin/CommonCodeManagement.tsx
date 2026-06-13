@@ -45,15 +45,21 @@ import {
 import type {
   CommonCodeGroupDto,
   CommonCodeItemDto,
+  CommonCodeItemKey,
   UpsertCommonCodeGroupDto,
   UpsertCommonCodeItemDto,
 } from "@/types/common-code";
 
 type DialogMode =
   | { type: "group-create" }
-  | { type: "group-edit"; groupId: number }
-  | { type: "item-create"; groupId: number }
-  | { type: "item-edit"; codeId: number; groupId: number }
+  | { type: "group-edit"; groupCode: string }
+  | { type: "item-create"; groupCode: string }
+  | { type: "item-edit"; groupCode: string; code: string }
+  | null;
+
+type DeactivateTarget =
+  | { type: "group"; groupCode: string }
+  | { type: "item"; groupCode: string; code: string }
   | null;
 
 /** 공통코드 MAJOR/MINOR 관리 화면 */
@@ -61,13 +67,11 @@ export const CommonCodeManagement = () => {
   const t = useTranslations("admin.codes");
   const tc = useTranslations("common");
 
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [selectedGroupCode, setSelectedGroupCode] = useState<string | null>(null);
   const [groupSearch, setGroupSearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
-  const [deactivateTarget, setDeactivateTarget] = useState<
-    { type: "group"; id: number } | { type: "item"; id: number } | null
-  >(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<DeactivateTarget>(null);
 
   const debouncedGroupSearch = useDebounce(groupSearch, 300);
   const debouncedItemSearch = useDebounce(itemSearch, 300);
@@ -84,22 +88,29 @@ export const CommonCodeManagement = () => {
     isLoading: itemsLoading,
     isError: itemsError,
     refetch: refetchItems,
-  } = useCommonCodeItems(selectedGroupId ?? 0, {
+  } = useCommonCodeItems(selectedGroupCode ?? "", {
     search: debouncedItemSearch,
   });
 
-  const editingGroupId =
-    dialogMode?.type === "group-edit" ? dialogMode.groupId : 0;
-  const editingItemId = dialogMode?.type === "item-edit" ? dialogMode.codeId : 0;
+  const editingGroupCode =
+    dialogMode?.type === "group-edit" ? dialogMode.groupCode : "";
+  const editingItemKey: CommonCodeItemKey | null =
+    dialogMode?.type === "item-edit"
+      ? { groupCode: dialogMode.groupCode, code: dialogMode.code }
+      : null;
 
-  const { data: editingGroupDetail } = useCommonCodeGroup(editingGroupId);
-  const { data: editingItemDetail } = useCommonCodeItem(editingItemId);
+  const { data: editingGroupDetail } = useCommonCodeGroup(editingGroupCode);
+  const { data: editingItemDetail } = useCommonCodeItem(
+    editingItemKey ?? { groupCode: "", code: "" },
+  );
 
   const createGroupMutation = useCreateCommonCodeGroup();
-  const updateGroupMutation = useUpdateCommonCodeGroup(editingGroupId);
+  const updateGroupMutation = useUpdateCommonCodeGroup(editingGroupCode);
   const deactivateGroupMutation = useDeactivateCommonCodeGroup();
-  const createItemMutation = useCreateCommonCodeItem(selectedGroupId ?? 0);
-  const updateItemMutation = useUpdateCommonCodeItem(editingItemId);
+  const createItemMutation = useCreateCommonCodeItem(selectedGroupCode ?? "");
+  const updateItemMutation = useUpdateCommonCodeItem(
+    editingItemKey ?? { groupCode: "", code: "" },
+  );
   const deactivateItemMutation = useDeactivateCommonCodeItem();
 
   const handleGroupSubmit = async (data: UpsertCommonCodeGroupDto) => {
@@ -107,7 +118,7 @@ export const CommonCodeManagement = () => {
       await updateGroupMutation.mutateAsync(data);
     } else {
       const created = await createGroupMutation.mutateAsync(data);
-      setSelectedGroupId(created.groupId);
+      setSelectedGroupCode(created.groupCode);
     }
 
     setDialogMode(null);
@@ -116,7 +127,7 @@ export const CommonCodeManagement = () => {
   const handleItemSubmit = async (data: UpsertCommonCodeItemDto) => {
     if (dialogMode?.type === "item-edit") {
       await updateItemMutation.mutateAsync(data);
-    } else if (selectedGroupId) {
+    } else if (selectedGroupCode) {
       await createItemMutation.mutateAsync(data);
     }
 
@@ -129,12 +140,15 @@ export const CommonCodeManagement = () => {
     }
 
     if (deactivateTarget.type === "group") {
-      await deactivateGroupMutation.mutateAsync(deactivateTarget.id);
-      if (selectedGroupId === deactivateTarget.id) {
-        setSelectedGroupId(null);
+      await deactivateGroupMutation.mutateAsync(deactivateTarget.groupCode);
+      if (selectedGroupCode === deactivateTarget.groupCode) {
+        setSelectedGroupCode(null);
       }
     } else {
-      await deactivateItemMutation.mutateAsync(deactivateTarget.id);
+      await deactivateItemMutation.mutateAsync({
+        groupCode: deactivateTarget.groupCode,
+        code: deactivateTarget.code,
+      });
     }
 
     setDeactivateTarget(null);
@@ -211,7 +225,7 @@ export const CommonCodeManagement = () => {
               onClick={withStop(() =>
                 setDialogMode({
                   type: "group-edit",
-                  groupId: group.groupId,
+                  groupCode: group.groupCode,
                 }),
               )}
             >
@@ -221,7 +235,7 @@ export const CommonCodeManagement = () => {
               size="icon-sm"
               variant="ghost"
               onClick={withStop(() =>
-                setDeactivateTarget({ type: "group", id: group.groupId }),
+                setDeactivateTarget({ type: "group", groupCode: group.groupCode }),
               )}
             >
               <Trash2 className="size-4" />
@@ -282,8 +296,8 @@ export const CommonCodeManagement = () => {
               onClick={() =>
                 setDialogMode({
                   type: "item-edit",
-                  codeId: item.codeId,
-                  groupId: item.groupId,
+                  groupCode: item.groupCode,
+                  code: item.code,
                 })
               }
             >
@@ -293,7 +307,11 @@ export const CommonCodeManagement = () => {
               size="icon-sm"
               variant="ghost"
               onClick={() =>
-                setDeactivateTarget({ type: "item", id: item.codeId })
+                setDeactivateTarget({
+                  type: "item",
+                  groupCode: item.groupCode,
+                  code: item.code,
+                })
               }
             >
               <Trash2 className="size-4" />
@@ -306,7 +324,7 @@ export const CommonCodeManagement = () => {
   );
 
   const renderItemBody = () => {
-    if (!selectedGroupId) {
+    if (!selectedGroupCode) {
       return <EmptyState title={t("selectGroupHint")} className="min-h-[240px]" />;
     }
 
@@ -397,11 +415,11 @@ export const CommonCodeManagement = () => {
                 }
                 columns={groupColumns}
                 data={groups ?? []}
-                rowKey={(group) => group.groupId}
+                rowKey={(group) => group.groupCode}
                 storageKey="pams-common-code-groups-grid"
                 emptyMessage={t("emptyGroups")}
-                selectedRowKey={selectedGroupId ?? undefined}
-                onRowClick={(group) => setSelectedGroupId(group.groupId)}
+                selectedRowKey={selectedGroupCode ?? undefined}
+                onRowClick={(group) => setSelectedGroupCode(group.groupCode)}
               />
 
               <DataGrid
@@ -420,12 +438,12 @@ export const CommonCodeManagement = () => {
                     <Button
                       size="sm"
                       className="h-7 px-2 text-[11px]"
-                      disabled={!selectedGroupId}
+                      disabled={!selectedGroupCode}
                       onClick={() =>
-                        selectedGroupId &&
+                        selectedGroupCode &&
                         setDialogMode({
                           type: "item-create",
-                          groupId: selectedGroupId,
+                          groupCode: selectedGroupCode,
                         })
                       }
                     >
@@ -436,7 +454,7 @@ export const CommonCodeManagement = () => {
                 }
                 columns={itemColumns}
                 data={items ?? []}
-                rowKey={(item) => item.codeId}
+                rowKey={(item) => `${item.groupCode}:${item.code}`}
                 storageKey="pams-common-code-items-grid"
                 emptyMessage={t("emptyItems")}
                 body={renderItemBody()}
@@ -457,22 +475,22 @@ export const CommonCodeManagement = () => {
           )}
           {dialogMode?.type === "group-edit" && editingGroupDetail && (
             <CommonCodeGroupForm
-              key={`group-edit-${editingGroupDetail.groupId}`}
+              key={`group-edit-${editingGroupDetail.groupCode}`}
               initial={editingGroupDetail}
               onSubmit={handleGroupSubmit}
             />
           )}
-          {dialogMode?.type === "item-create" && selectedGroupId && (
+          {dialogMode?.type === "item-create" && selectedGroupCode && (
             <CommonCodeItemForm
-              key={`item-create-${selectedGroupId}`}
-              groupId={selectedGroupId}
+              key={`item-create-${selectedGroupCode}`}
+              groupCode={selectedGroupCode}
               onSubmit={handleItemSubmit}
             />
           )}
           {dialogMode?.type === "item-edit" && editingItemDetail && (
             <CommonCodeItemForm
-              key={`item-edit-${editingItemDetail.codeId}`}
-              groupId={editingItemDetail.groupId}
+              key={`item-edit-${editingItemDetail.groupCode}-${editingItemDetail.code}`}
+              groupCode={editingItemDetail.groupCode}
               initial={editingItemDetail}
               onSubmit={handleItemSubmit}
             />

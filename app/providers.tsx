@@ -19,6 +19,7 @@ function LocaleSync({ locale }: { locale: Locale }) {
   const setCurrentLocale = useUIStore((s) => s.setCurrentLocale);
 
   useEffect(() => {
+    document.documentElement.lang = locale;
     setCurrentLocale(locale);
     setApiClientLocale(() => useUIStore.getState().currentLocale);
   }, [locale, setCurrentLocale]);

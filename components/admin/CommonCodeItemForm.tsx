@@ -15,7 +15,7 @@ import type {
 } from "@/types/common-code";
 
 type CommonCodeItemFormProps = {
-  groupId: number;
+  groupCode: string;
   initial?: CommonCodeItemDto | null;
   onSubmit: (data: UpsertCommonCodeItemDto) => void;
 };
@@ -49,7 +49,7 @@ const buildInitialI18n = (initial?: CommonCodeItemDto | null): CommonCodeItemI18
 
 /** MINOR 공통코드 입력 폼 */
 export const CommonCodeItemForm = ({
-  groupId,
+  groupCode,
   initial,
   onSubmit,
 }: CommonCodeItemFormProps) => {
@@ -66,7 +66,7 @@ export const CommonCodeItemForm = ({
     event.preventDefault();
 
     onSubmit({
-      groupId,
+      groupCode,
       code,
       codeName: i18n.ko?.codeName ?? "",
       description: description || i18n.ko?.description || null,
@@ -79,7 +79,10 @@ export const CommonCodeItemForm = ({
   return (
     <form id="common-code-item-form" className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
-        <Label htmlFor="code">{t("code")}</Label>
+        <Label htmlFor="code">
+          {t("code")}
+          <span className="text-destructive"> *</span>
+        </Label>
         <Input
           id="code"
           value={code}

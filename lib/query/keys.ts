@@ -69,8 +69,14 @@ export const systemKeys = {
   list: (filters: SystemListFilters) => [...systemKeys.lists(), filters] as const,
   detail: (systemId: number) => [...systemKeys.all, "detail", systemId] as const,
   modules: (systemId: number) => [...systemKeys.all, "modules", systemId] as const,
-  screens: (moduleId: number) => [...systemKeys.all, "screens", moduleId] as const,
+  screens: (systemId: number, moduleCode?: string) =>
+    [...systemKeys.all, "screens", systemId, moduleCode ?? ""] as const,
   hierarchy: () => [...systemKeys.all, "hierarchy"] as const,
+  screenCatalog: (filters: Record<string, string | number | undefined>) =>
+    [...systemKeys.all, "screen-catalog", filters] as const,
+  screenCatalogInfinite: (
+    filters: Record<string, string | number | undefined>,
+  ) => [...systemKeys.all, "screen-catalog-infinite", filters] as const,
 };
 
 export const analysisKeys = {
@@ -85,11 +91,12 @@ export const commonCodeKeys = {
   groups: () => [...commonCodeKeys.all, "groups"] as const,
   groupList: (filters: CommonCodeGroupListFilters) =>
     [...commonCodeKeys.groups(), "list", filters] as const,
-  group: (groupId: number) => [...commonCodeKeys.groups(), groupId] as const,
-  items: (groupId: number) => [...commonCodeKeys.all, "items", groupId] as const,
-  itemList: (groupId: number, filters: CommonCodeItemListFilters) =>
-    [...commonCodeKeys.items(groupId), "list", filters] as const,
-  item: (codeId: number) => [...commonCodeKeys.all, "item", codeId] as const,
+  group: (groupCode: string) => [...commonCodeKeys.groups(), groupCode] as const,
+  items: (groupCode: string) => [...commonCodeKeys.all, "items", groupCode] as const,
+  itemList: (groupCode: string, filters: CommonCodeItemListFilters) =>
+    [...commonCodeKeys.items(groupCode), "list", filters] as const,
+  item: (groupCode: string, code: string) =>
+    [...commonCodeKeys.all, "item", groupCode, code] as const,
   lookup: (groupCode: string) =>
     [...commonCodeKeys.all, "lookup", groupCode] as const,
 };

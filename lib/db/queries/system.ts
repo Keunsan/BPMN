@@ -4,16 +4,19 @@ import type { Locale } from "@/lib/i18n/config";
 import type {
   ApplicationSystem,
   ApplicationSystemDto,
+  BatchCreateTaskSystemMappingDto,
   CreateTaskSystemMappingDto,
+  ScreenCatalogFilters,
+  ScreenCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
-  SystemModule,
   SystemModuleDto,
+  SystemModuleOption,
   SystemScreen,
   SystemScreenDto,
+  SystemScreenListFilters,
   TaskSystemMappingDto,
   UpsertApplicationSystemDto,
-  UpsertSystemModuleDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
 
@@ -57,21 +60,12 @@ const mapSystem = (row: Record<string, unknown>): ApplicationSystem => ({
   updatedAt: row.updated_at ? new Date(row.updated_at as string) : null,
 });
 
-/** system_module 행을 도메인 타입으로 변환한다. */
-const mapModule = (row: Record<string, unknown>): SystemModule => ({
-  moduleId: row.module_id as number,
-  systemId: row.system_id as number,
-  moduleCode: row.module_code as string,
-  moduleName: row.module_name as string,
-  description: (row.description as string | null) ?? null,
-  isActive: Boolean(row.is_active),
-  createdAt: new Date(row.created_at as string),
-});
-
 /** system_screen 행을 도메인 타입으로 변환한다. */
 const mapScreen = (row: Record<string, unknown>): SystemScreen => ({
   screenId: row.screen_id as number,
-  moduleId: row.module_id as number,
+  systemId: row.system_id as number,
+  moduleCode: row.module_code as string,
+  menuId: row.menu_id as string,
   screenCode: row.screen_code as string,
   screenName: row.screen_name as string,
   transactionCode: (row.transaction_code as string | null) ?? null,
@@ -81,6 +75,13 @@ const mapScreen = (row: Record<string, unknown>): SystemScreen => ({
   description: (row.description as string | null) ?? null,
   isActive: Boolean(row.is_active),
   createdAt: new Date(row.created_at as string),
+});
+
+const mapScreenDto = (row: Record<string, unknown>): SystemScreenDto => ({
+  ...mapScreen(row),
+  systemCode: row.system_code as string,
+  systemName: row.system_name as string,
+  moduleName: (row.module_name as string | null) ?? row.module_code as string,
 });
 
 /** 시스템 목록을 조회한다. */
@@ -119,29 +120,31 @@ export const listSystems = async (
        s.*,
        COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
        COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
-       (SELECT COUNT(*) FROM system_module m WHERE m.system_id = s.system_id) AS module_count,
+       (
+         SELECT COUNT(DISTINCT sc.module_code)
+         FROM system_screen sc
+         WHERE sc.system_id = s.system_id
+           AND sc.is_active = 1
+       ) AS module_count,
        (
          SELECT COUNT(*)
          FROM system_screen sc
-         INNER JOIN system_module m ON sc.module_id = m.module_id
-         WHERE m.system_id = s.system_id
+         WHERE sc.system_id = s.system_id
        ) AS screen_count
      FROM application_system s
-     LEFT JOIN common_code_group company_group
-       ON company_group.group_code = 'COMPANY_CD'
      LEFT JOIN common_code company_code
-       ON company_code.group_id = company_group.group_id
+       ON company_code.group_code = 'COMPANY_CD'
       AND company_code.code = s.company_code
      LEFT JOIN common_code_i18n company_i18n
-       ON company_i18n.code_id = company_code.code_id
+       ON company_i18n.group_code = company_code.group_code
+      AND company_i18n.code = company_code.code
       AND company_i18n.locale = @locale
-     LEFT JOIN common_code_group bu_group
-       ON bu_group.group_code = 'BU_CD'
      LEFT JOIN common_code bu_code
-       ON bu_code.group_id = bu_group.group_id
+       ON bu_code.group_code = 'BU_CD'
       AND bu_code.code = s.business_unit_code
      LEFT JOIN common_code_i18n bu_i18n
-       ON bu_i18n.code_id = bu_code.code_id
+       ON bu_i18n.group_code = bu_code.group_code
+      AND bu_i18n.code = bu_code.code
       AND bu_i18n.locale = @locale
      WHERE ${conditions.join(" AND ")}
      ORDER BY s.is_active DESC, s.system_code, s.company_code, s.business_unit_code`,
@@ -164,6 +167,24 @@ export const findSystemById = async (
   const row = await queryOne<Record<string, unknown>>(
     "SELECT * FROM application_system WHERE system_id = @systemId",
     { systemId },
+  );
+
+  return row ? mapSystem(row) : null;
+};
+
+/** 법인·사업부·시스템 코드로 시스템 ID를 조회한다. */
+export const findSystemByScope = async (
+  systemCode: string,
+  companyCode: string,
+  businessUnitCode: string,
+): Promise<ApplicationSystem | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT *
+     FROM application_system
+     WHERE system_code = @systemCode
+       AND company_code = @companyCode
+       AND business_unit_code = @businessUnitCode`,
+    { systemCode, companyCode, businessUnitCode },
   );
 
   return row ? mapSystem(row) : null;
@@ -287,175 +308,125 @@ const systemParams = (
   columnApiUrl: input.columnApiUrl ?? null,
 });
 
-/** 시스템 하위 모듈 목록을 조회한다. */
-export const listModules = async (systemId: number): Promise<SystemModuleDto[]> => {
+/** 공통코드(MODULE_CD) 모듈 목록을 조회한다. */
+export const listModuleOptions = async (
+  locale: Locale = "ko",
+  systemId?: number,
+): Promise<SystemModuleOption[]> => {
+  const params: QueryParams = { locale };
+  let screenCountJoin = "";
+
+  if (systemId) {
+    params.systemId = systemId;
+    screenCountJoin = `
+      LEFT JOIN (
+        SELECT module_code, COUNT(*) AS screen_count
+        FROM system_screen
+        WHERE system_id = @systemId AND is_active = 1
+        GROUP BY module_code
+      ) sc ON sc.module_code = cc.code`;
+  }
+
   const rows = await query<Record<string, unknown>>(
     `SELECT
-       m.*,
-       (SELECT COUNT(*) FROM system_screen s WHERE s.module_id = m.module_id) AS screen_count
-     FROM system_module m
-     WHERE m.system_id = @systemId
-     ORDER BY m.is_active DESC, m.module_code`,
-    { systemId },
+       cc.code AS module_code,
+       COALESCE(cci.code_name, cc.code_name) AS module_name,
+       sc.screen_count
+     FROM common_code cc
+     LEFT JOIN common_code_i18n cci
+       ON cci.group_code = cc.group_code
+      AND cci.code = cc.code
+      AND cci.locale = @locale
+     ${screenCountJoin}
+     WHERE cc.group_code = 'MODULE_CD'
+       AND cc.is_active = 1
+     ORDER BY cc.sort_order, cc.code`,
+    params,
   );
 
   return rows.map((row) => ({
-    ...mapModule(row),
-    screenCount: row.screen_count as number,
+    moduleCode: row.module_code as string,
+    moduleName: row.module_name as string,
+    screenCount: systemId ? (row.screen_count as number | null) ?? 0 : undefined,
   }));
 };
 
-export const findModuleById = async (
-  moduleId: number,
-): Promise<SystemModule | null> => {
-  const row = await queryOne<Record<string, unknown>>(
-    "SELECT * FROM system_module WHERE module_id = @moduleId",
-    { moduleId },
-  );
-
-  return row ? mapModule(row) : null;
-};
-
-export const existsModuleCode = async (
+/** 시스템별 화면 목록을 조회한다. */
+export const listScreensBySystem = async (
   systemId: number,
-  moduleCode: string,
-  excludeModuleId?: number,
-): Promise<boolean> => {
-  const params: QueryParams = { systemId, moduleCode };
-  let sql = `SELECT 1 AS found
-             FROM system_module
-             WHERE system_id = @systemId AND module_code = @moduleCode`;
+  filters: SystemScreenListFilters = {},
+  locale: Locale = "ko",
+): Promise<SystemScreenDto[]> => {
+  const conditions = ["sc.system_id = @systemId"];
+  const params: QueryParams = { systemId, locale };
 
-  if (excludeModuleId) {
-    sql += " AND module_id <> @excludeModuleId";
-    params.excludeModuleId = excludeModuleId;
+  if (filters.moduleCode) {
+    conditions.push("sc.module_code = @moduleCode");
+    params.moduleCode = filters.moduleCode;
+  }
+  if (filters.isActive !== undefined) {
+    conditions.push("sc.is_active = @isActive");
+    params.isActive = filters.isActive ? 1 : 0;
   }
 
-  return Boolean(await queryOne<Record<string, unknown>>(sql, params));
-};
-
-export const createModule = async (
-  input: UpsertSystemModuleDto,
-): Promise<SystemModule> => {
-  const row = await queryOne<Record<string, unknown>>(
-    `INSERT INTO system_module (
-       system_id, module_code, module_name, description, is_active
-     )
-     OUTPUT INSERTED.*
-     VALUES (
-       @systemId, @moduleCode, @moduleName, @description, @isActive
-     )`,
-    moduleParams(input),
-  );
-
-  if (!row) {
-    throw new Error("Failed to create module");
-  }
-
-  return mapModule(row);
-};
-
-export const updateModule = async (
-  moduleId: number,
-  input: UpsertSystemModuleDto,
-): Promise<SystemModule | null> => {
-  const row = await queryOne<Record<string, unknown>>(
-    `UPDATE system_module
-     SET system_id = @systemId,
-         module_code = @moduleCode,
-         module_name = @moduleName,
-         description = @description,
-         is_active = @isActive
-     OUTPUT INSERTED.*
-     WHERE module_id = @moduleId`,
-    { moduleId, ...moduleParams(input) },
-  );
-
-  return row ? mapModule(row) : null;
-};
-
-export const deactivateModule = async (moduleId: number): Promise<void> => {
-  await execute(
-    "UPDATE system_module SET is_active = 0 WHERE module_id = @moduleId",
-    { moduleId },
-  );
-};
-
-const moduleParams = (input: UpsertSystemModuleDto): QueryParams => ({
-  systemId: input.systemId,
-  moduleCode: input.moduleCode,
-  moduleName: input.moduleName,
-  description: input.description ?? null,
-  isActive: input.isActive === false ? 0 : 1,
-});
-
-/** 모듈 하위 화면 목록을 조회한다. */
-export const listScreens = async (moduleId: number): Promise<SystemScreenDto[]> => {
   const rows = await query<Record<string, unknown>>(
     `SELECT
        sc.*,
-       m.system_id,
-       m.module_code,
-       m.module_name,
        s.system_code,
-       s.system_name
+       s.system_name,
+       COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
      FROM system_screen sc
-     INNER JOIN system_module m ON sc.module_id = m.module_id
-     INNER JOIN application_system s ON m.system_id = s.system_id
-     WHERE sc.module_id = @moduleId
-     ORDER BY sc.is_active DESC, sc.screen_code`,
-    { moduleId },
+     INNER JOIN application_system s ON sc.system_id = s.system_id
+     LEFT JOIN common_code cc
+       ON cc.group_code = 'MODULE_CD'
+      AND cc.code = sc.module_code
+     LEFT JOIN common_code_i18n cci
+       ON cci.group_code = cc.group_code
+      AND cci.code = cc.code
+      AND cci.locale = @locale
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY sc.is_active DESC, sc.module_code, sc.menu_id`,
+    params,
   );
 
-  return rows.map((row) => ({
-    ...mapScreen(row),
-    systemId: row.system_id as number,
-    systemCode: row.system_code as string,
-    systemName: row.system_name as string,
-    moduleCode: row.module_code as string,
-    moduleName: row.module_name as string,
-  }));
+  return rows.map(mapScreenDto);
 };
 
 export const findScreenById = async (
   screenId: number,
+  locale: Locale = "ko",
 ): Promise<SystemScreenDto | null> => {
   const row = await queryOne<Record<string, unknown>>(
     `SELECT
        sc.*,
-       m.system_id,
-       m.module_code,
-       m.module_name,
        s.system_code,
-       s.system_name
+       s.system_name,
+       COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
      FROM system_screen sc
-     INNER JOIN system_module m ON sc.module_id = m.module_id
-     INNER JOIN application_system s ON m.system_id = s.system_id
+     INNER JOIN application_system s ON sc.system_id = s.system_id
+     LEFT JOIN common_code cc
+       ON cc.group_code = 'MODULE_CD'
+      AND cc.code = sc.module_code
+     LEFT JOIN common_code_i18n cci
+       ON cci.group_code = cc.group_code
+      AND cci.code = cc.code
+      AND cci.locale = @locale
      WHERE sc.screen_id = @screenId`,
-    { screenId },
+    { screenId, locale },
   );
 
-  return row
-    ? {
-        ...mapScreen(row),
-        systemId: row.system_id as number,
-        systemCode: row.system_code as string,
-        systemName: row.system_name as string,
-        moduleCode: row.module_code as string,
-        moduleName: row.module_name as string,
-      }
-    : null;
+  return row ? mapScreenDto(row) : null;
 };
 
-export const existsScreenCode = async (
-  moduleId: number,
-  screenCode: string,
+export const existsScreenMenu = async (
+  systemId: number,
+  menuId: string,
   excludeScreenId?: number,
 ): Promise<boolean> => {
-  const params: QueryParams = { moduleId, screenCode };
+  const params: QueryParams = { systemId, menuId };
   let sql = `SELECT 1 AS found
              FROM system_screen
-             WHERE module_id = @moduleId AND screen_code = @screenCode`;
+             WHERE system_id = @systemId AND menu_id = @menuId`;
 
   if (excludeScreenId) {
     sql += " AND screen_id <> @excludeScreenId";
@@ -470,13 +441,13 @@ export const createScreen = async (
 ): Promise<SystemScreen> => {
   const row = await queryOne<Record<string, unknown>>(
     `INSERT INTO system_screen (
-       module_id, screen_code, screen_name, transaction_code, menu_path,
-       screen_type, url, description, is_active
+       system_id, module_code, menu_id, screen_code, screen_name,
+       transaction_code, menu_path, screen_type, url, description, is_active
      )
      OUTPUT INSERTED.*
      VALUES (
-       @moduleId, @screenCode, @screenName, @transactionCode, @menuPath,
-       @screenType, @url, @description, @isActive
+       @systemId, @moduleCode, @menuId, @screenCode, @screenName,
+       @transactionCode, @menuPath, @screenType, @url, @description, @isActive
      )`,
     screenParams(input),
   );
@@ -494,7 +465,9 @@ export const updateScreen = async (
 ): Promise<SystemScreen | null> => {
   const row = await queryOne<Record<string, unknown>>(
     `UPDATE system_screen
-     SET module_id = @moduleId,
+     SET system_id = @systemId,
+         module_code = @moduleCode,
+         menu_id = @menuId,
          screen_code = @screenCode,
          screen_name = @screenName,
          transaction_code = @transactionCode,
@@ -511,6 +484,27 @@ export const updateScreen = async (
   return row ? mapScreen(row) : null;
 };
 
+export const upsertScreen = async (
+  input: UpsertSystemScreenDto,
+): Promise<SystemScreen> => {
+  const existing = await queryOne<Record<string, unknown>>(
+    `SELECT screen_id
+     FROM system_screen
+     WHERE system_id = @systemId AND menu_id = @menuId`,
+    { systemId: input.systemId, menuId: input.menuId },
+  );
+
+  if (existing?.screen_id) {
+    const updated = await updateScreen(existing.screen_id as number, input);
+    if (!updated) {
+      throw new Error("Failed to update screen");
+    }
+    return updated;
+  }
+
+  return createScreen(input);
+};
+
 export const deactivateScreen = async (screenId: number): Promise<void> => {
   await execute(
     "UPDATE system_screen SET is_active = 0 WHERE screen_id = @screenId",
@@ -519,10 +513,12 @@ export const deactivateScreen = async (screenId: number): Promise<void> => {
 };
 
 const screenParams = (input: UpsertSystemScreenDto): QueryParams => ({
-  moduleId: input.moduleId,
-  screenCode: input.screenCode,
+  systemId: input.systemId,
+  moduleCode: input.moduleCode,
+  menuId: input.menuId,
+  screenCode: input.screenCode ?? input.menuId,
   screenName: input.screenName,
-  transactionCode: input.transactionCode ?? null,
+  transactionCode: input.transactionCode ?? input.menuId,
   menuPath: input.menuPath ?? null,
   screenType: input.screenType ?? null,
   url: input.url ?? null,
@@ -538,15 +534,22 @@ export const listSystemHierarchy = async (
   const result: SystemHierarchyDto[] = [];
 
   for (const system of systems) {
-    const modules = await listModules(system.systemId);
-    const moduleDtos: SystemHierarchyDto["modules"] = [];
+    const screens = (await listScreensBySystem(system.systemId, { isActive: true }, locale));
+    const moduleMap = new Map<string, SystemScreenDto[]>();
 
-    for (const systemModule of modules.filter((item) => item.isActive)) {
-      const screens = (await listScreens(systemModule.moduleId)).filter(
-        (screen) => screen.isActive,
-      );
-      moduleDtos.push({ ...systemModule, screens });
+    for (const screen of screens) {
+      const bucket = moduleMap.get(screen.moduleCode) ?? [];
+      bucket.push(screen);
+      moduleMap.set(screen.moduleCode, bucket);
     }
+
+    const moduleOptions = await listModuleOptions(locale, system.systemId);
+    const moduleDtos: SystemHierarchyDto["modules"] = moduleOptions
+      .filter((module) => moduleMap.has(module.moduleCode))
+      .map((module) => ({
+        ...module,
+        screens: moduleMap.get(module.moduleCode) ?? [],
+      }));
 
     result.push({ ...system, modules: moduleDtos });
   }
@@ -557,28 +560,53 @@ export const listSystemHierarchy = async (
 /** Task-시스템 매핑 목록을 조회한다. */
 export const listTaskSystemMappings = async (
   nodeId: number,
+  locale: Locale = "ko",
 ): Promise<TaskSystemMappingDto[]> => {
   const rows = await query<Record<string, unknown>>(
     `SELECT
        tsm.*,
        sc.screen_code,
        sc.screen_name,
+       sc.menu_id,
        sc.transaction_code,
        sc.menu_path,
        sc.screen_type,
-       m.module_id,
-       m.module_code,
-       m.module_name,
+       sc.module_code,
        s.system_id,
        s.system_code,
-       s.system_name
+       s.system_name,
+       s.company_code,
+       s.business_unit_code,
+       COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
+       COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
      FROM task_system_mapping tsm
      INNER JOIN system_screen sc ON tsm.screen_id = sc.screen_id
-     INNER JOIN system_module m ON sc.module_id = m.module_id
-     INNER JOIN application_system s ON m.system_id = s.system_id
+     INNER JOIN application_system s ON sc.system_id = s.system_id
+     LEFT JOIN common_code cc
+       ON cc.group_code = 'MODULE_CD'
+      AND cc.code = sc.module_code
+     LEFT JOIN common_code_i18n cci
+       ON cci.group_code = cc.group_code
+      AND cci.code = cc.code
+      AND cci.locale = @locale
+     LEFT JOIN common_code company_code_cc
+       ON company_code_cc.group_code = 'COMPANY_CD'
+      AND company_code_cc.code = s.company_code
+     LEFT JOIN common_code_i18n company_i18n
+       ON company_i18n.group_code = company_code_cc.group_code
+      AND company_i18n.code = company_code_cc.code
+      AND company_i18n.locale = @locale
+     LEFT JOIN common_code bu_code_cc
+       ON bu_code_cc.group_code = 'BU_CD'
+      AND bu_code_cc.code = s.business_unit_code
+     LEFT JOIN common_code_i18n bu_i18n
+       ON bu_i18n.group_code = bu_code_cc.group_code
+      AND bu_i18n.code = bu_code_cc.code
+      AND bu_i18n.locale = @locale
      WHERE tsm.node_id = @nodeId
-     ORDER BY tsm.is_primary DESC, s.system_code, m.module_code, sc.screen_code`,
-    { nodeId },
+     ORDER BY tsm.is_primary DESC, s.system_code, sc.module_code, sc.menu_id`,
+    { nodeId, locale },
   );
 
   return rows.map((row) => ({
@@ -593,9 +621,13 @@ export const listTaskSystemMappings = async (
     systemId: row.system_id as number,
     systemCode: row.system_code as string,
     systemName: row.system_name as string,
-    moduleId: row.module_id as number,
+    companyCode: (row.company_code as string | null) ?? null,
+    businessUnitCode: (row.business_unit_code as string | null) ?? null,
+    companyName: (row.company_name as string | null) ?? null,
+    businessUnitName: (row.business_unit_name as string | null) ?? null,
     moduleCode: row.module_code as string,
     moduleName: row.module_name as string,
+    menuId: row.menu_id as string,
     screenCode: row.screen_code as string,
     screenName: row.screen_name as string,
     transactionCode: (row.transaction_code as string | null) ?? null,
@@ -658,3 +690,178 @@ export const deleteTaskSystemMapping = async (
     { nodeId, mappingId },
   );
 };
+
+/** 연결 후보 화면 카탈로그를 페이지 단위로 조회한다. */
+export const listScreenCatalog = async (
+  filters: ScreenCatalogFilters = {},
+  locale: Locale = "ko",
+): Promise<{ items: ScreenCatalogItem[]; total: number }> => {
+  const conditions = ["sc.is_active = 1"];
+  const params: QueryParams = { locale };
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
+  params.offset = (page - 1) * pageSize;
+  params.pageSize = pageSize;
+
+  if (filters.systemId) {
+    conditions.push("sc.system_id = @systemId");
+    params.systemId = filters.systemId;
+  }
+  if (filters.moduleCode) {
+    conditions.push("sc.module_code = @moduleCode");
+    params.moduleCode = filters.moduleCode;
+  }
+  if (filters.search?.trim()) {
+    conditions.push(
+      "(sc.screen_name LIKE @search OR sc.menu_id LIKE @search OR sc.menu_path LIKE @search OR sc.transaction_code LIKE @search)",
+    );
+    params.search = `%${filters.search.trim()}%`;
+  }
+  if (filters.excludeNodeId) {
+    conditions.push(`sc.screen_id NOT IN (
+      SELECT tsm.screen_id
+      FROM task_system_mapping tsm
+      WHERE tsm.node_id = @excludeNodeId
+    )`);
+    params.excludeNodeId = filters.excludeNodeId;
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  const countRow = await queryOne<Record<string, unknown>>(
+    `SELECT COUNT(*) AS total
+     FROM system_screen sc
+     INNER JOIN application_system s ON sc.system_id = s.system_id
+     WHERE ${whereClause}`,
+    params,
+  );
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       sc.*,
+       s.system_code,
+       s.system_name,
+       s.company_code,
+       s.business_unit_code,
+       COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
+       COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
+     FROM system_screen sc
+     INNER JOIN application_system s ON sc.system_id = s.system_id
+     LEFT JOIN common_code company_code
+       ON company_code.group_code = 'COMPANY_CD'
+      AND company_code.code = s.company_code
+     LEFT JOIN common_code_i18n company_i18n
+       ON company_i18n.group_code = company_code.group_code
+      AND company_i18n.code = company_code.code
+      AND company_i18n.locale = @locale
+     LEFT JOIN common_code bu_code
+       ON bu_code.group_code = 'BU_CD'
+      AND bu_code.code = s.business_unit_code
+     LEFT JOIN common_code_i18n bu_i18n
+       ON bu_i18n.group_code = bu_code.group_code
+      AND bu_i18n.code = bu_code.code
+      AND bu_i18n.locale = @locale
+     LEFT JOIN common_code cc
+       ON cc.group_code = 'MODULE_CD'
+      AND cc.code = sc.module_code
+     LEFT JOIN common_code_i18n cci
+       ON cci.group_code = cc.group_code
+      AND cci.code = cc.code
+      AND cci.locale = @locale
+     WHERE ${whereClause}
+     ORDER BY s.system_code, s.company_code, s.business_unit_code, sc.module_code, sc.menu_id
+     OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
+    params,
+  );
+
+  return {
+    items: rows.map((row) => ({
+      ...mapScreenDto(row),
+      companyCode: (row.company_code as string | null) ?? null,
+      businessUnitCode: (row.business_unit_code as string | null) ?? null,
+      companyName: (row.company_name as string | null) ?? null,
+      businessUnitName: (row.business_unit_name as string | null) ?? null,
+    })),
+    total: (countRow?.total as number) ?? 0,
+  };
+};
+
+/** Task-시스템 매핑을 일괄 생성한다. */
+export const createTaskSystemMappingsBatch = async (
+  nodeId: number,
+  input: BatchCreateTaskSystemMappingDto,
+  userId: number | null,
+): Promise<number> => {
+  const uniqueScreenIds = [...new Set(input.screenIds.filter((id) => id > 0))];
+  if (uniqueScreenIds.length === 0) {
+    return 0;
+  }
+
+  if (input.isPrimary) {
+    await execute(
+      "UPDATE task_system_mapping SET is_primary = 0 WHERE node_id = @nodeId",
+      { nodeId },
+    );
+  }
+
+  let createdCount = 0;
+
+  for (const screenId of uniqueScreenIds) {
+    const exists = await queryOne<Record<string, unknown>>(
+      `SELECT 1 AS found
+       FROM task_system_mapping
+       WHERE node_id = @nodeId AND screen_id = @screenId`,
+      { nodeId, screenId },
+    );
+
+    if (exists) {
+      continue;
+    }
+
+    await execute(
+      `INSERT INTO task_system_mapping (
+         node_id, screen_id, usage_type, usage_description, is_primary, created_by
+       )
+       VALUES (
+         @nodeId, @screenId, @usageType, @usageDescription, @isPrimary, @createdBy
+       )`,
+      {
+        nodeId,
+        screenId,
+        usageType: input.usageType ?? "EXECUTE",
+        usageDescription: input.usageDescription ?? null,
+        isPrimary: input.isPrimary && createdCount === 0 ? 1 : 0,
+        createdBy: userId,
+      },
+    );
+    createdCount += 1;
+  }
+
+  return createdCount;
+};
+
+/** 공통코드(MODULE_CD) 항목을 upsert한다. */
+export const upsertModuleCode = async (
+  moduleCode: string,
+  moduleName?: string,
+  sortOrder = 0,
+): Promise<void> => {
+  await execute(
+    `IF NOT EXISTS (
+       SELECT 1 FROM common_code
+       WHERE group_code = 'MODULE_CD' AND code = @moduleCode
+     )
+     BEGIN
+       INSERT INTO common_code (group_code, code, code_name, sort_order, is_active)
+       VALUES ('MODULE_CD', @moduleCode, @moduleName, @sortOrder, 1);
+     END`,
+    {
+      moduleCode,
+      moduleName: moduleName ?? moduleCode,
+      sortOrder,
+    },
+  );
+};
+
+export type { SystemModuleDto };

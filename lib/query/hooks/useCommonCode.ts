@@ -10,6 +10,7 @@ import type {
   CommonCodeGroupDto,
   CommonCodeGroupListFilters,
   CommonCodeItemDto,
+  CommonCodeItemKey,
   CommonCodeItemListFilters,
   CommonCodeLookupItem,
   UpsertCommonCodeGroupDto,
@@ -29,6 +30,8 @@ const buildQueryString = (filters: Record<string, string | boolean | undefined>)
   return query ? `?${query}` : "";
 };
 
+const encodePath = (value: string) => encodeURIComponent(value);
+
 /** MAJOR 코드 그룹 목록 조회 */
 export const useCommonCodeGroups = (filters: CommonCodeGroupListFilters = {}) =>
   useQuery({
@@ -40,35 +43,39 @@ export const useCommonCodeGroups = (filters: CommonCodeGroupListFilters = {}) =>
   });
 
 /** MAJOR 코드 그룹 상세 조회 */
-export const useCommonCodeGroup = (groupId: number) =>
+export const useCommonCodeGroup = (groupCode: string) =>
   useQuery({
-    queryKey: commonCodeKeys.group(groupId),
+    queryKey: commonCodeKeys.group(groupCode),
     queryFn: () =>
-      apiGet<CommonCodeGroupDto>(`/api/admin/codes/groups/${groupId}`),
-    enabled: groupId > 0,
+      apiGet<CommonCodeGroupDto>(
+        `/api/admin/codes/groups/${encodePath(groupCode)}`,
+      ),
+    enabled: Boolean(groupCode),
   });
 
 /** MINOR 코드 목록 조회 */
 export const useCommonCodeItems = (
-  groupId: number,
+  groupCode: string,
   filters: CommonCodeItemListFilters = {},
 ) =>
   useQuery({
-    queryKey: commonCodeKeys.itemList(groupId, filters),
+    queryKey: commonCodeKeys.itemList(groupCode, filters),
     queryFn: () =>
       apiGet<CommonCodeItemDto[]>(
-        `/api/admin/codes/groups/${groupId}/items${buildQueryString(filters)}`,
+        `/api/admin/codes/groups/${encodePath(groupCode)}/items${buildQueryString(filters)}`,
       ),
-    enabled: groupId > 0,
+    enabled: Boolean(groupCode),
   });
 
 /** MINOR 코드 상세 조회 */
-export const useCommonCodeItem = (codeId: number) =>
+export const useCommonCodeItem = (key: CommonCodeItemKey) =>
   useQuery({
-    queryKey: commonCodeKeys.item(codeId),
+    queryKey: commonCodeKeys.item(key.groupCode, key.code),
     queryFn: () =>
-      apiGet<CommonCodeItemDto>(`/api/admin/codes/items/${codeId}`),
-    enabled: codeId > 0,
+      apiGet<CommonCodeItemDto>(
+        `/api/admin/codes/groups/${encodePath(key.groupCode)}/items/${encodePath(key.code)}`,
+      ),
+    enabled: Boolean(key.groupCode) && Boolean(key.code),
   });
 
 /** 공통코드 lookup 조회 */
@@ -99,12 +106,15 @@ export const useCreateCommonCodeGroup = () => {
 };
 
 /** MAJOR 코드 그룹 수정 */
-export const useUpdateCommonCodeGroup = (groupId: number) => {
+export const useUpdateCommonCodeGroup = (groupCode: string) => {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (data: Partial<UpsertCommonCodeGroupDto>) =>
-      apiPut<CommonCodeGroupDto>(`/api/admin/codes/groups/${groupId}`, data),
+      apiPut<CommonCodeGroupDto>(
+        `/api/admin/codes/groups/${encodePath(groupCode)}`,
+        data,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: commonCodeKeys.all });
     },
@@ -119,8 +129,10 @@ export const useDeactivateCommonCodeGroup = () => {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: (groupId: number) =>
-      apiDelete<{ groupId: number }>(`/api/admin/codes/groups/${groupId}`),
+    mutationFn: (groupCode: string) =>
+      apiDelete<{ groupCode: string }>(
+        `/api/admin/codes/groups/${encodePath(groupCode)}`,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: commonCodeKeys.all });
     },
@@ -131,13 +143,13 @@ export const useDeactivateCommonCodeGroup = () => {
 };
 
 /** MINOR 코드 생성 */
-export const useCreateCommonCodeItem = (groupId: number) => {
+export const useCreateCommonCodeItem = (groupCode: string) => {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (data: UpsertCommonCodeItemDto) =>
       apiPost<CommonCodeItemDto>(
-        `/api/admin/codes/groups/${groupId}/items`,
+        `/api/admin/codes/groups/${encodePath(groupCode)}/items`,
         data,
       ),
     onSuccess: () => {
@@ -150,12 +162,15 @@ export const useCreateCommonCodeItem = (groupId: number) => {
 };
 
 /** MINOR 코드 수정 */
-export const useUpdateCommonCodeItem = (codeId: number) => {
+export const useUpdateCommonCodeItem = (key: CommonCodeItemKey) => {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (data: Partial<UpsertCommonCodeItemDto>) =>
-      apiPut<CommonCodeItemDto>(`/api/admin/codes/items/${codeId}`, data),
+      apiPut<CommonCodeItemDto>(
+        `/api/admin/codes/groups/${encodePath(key.groupCode)}/items/${encodePath(key.code)}`,
+        data,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: commonCodeKeys.all });
     },
@@ -170,8 +185,10 @@ export const useDeactivateCommonCodeItem = () => {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: (codeId: number) =>
-      apiDelete<{ codeId: number }>(`/api/admin/codes/items/${codeId}`),
+    mutationFn: (key: CommonCodeItemKey) =>
+      apiDelete<{ groupCode: string; code: string }>(
+        `/api/admin/codes/groups/${encodePath(key.groupCode)}/items/${encodePath(key.code)}`,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: commonCodeKeys.all });
     },

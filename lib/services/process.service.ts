@@ -3,11 +3,21 @@ import "server-only";
 import { ApiError } from "@/lib/api/error-handler";
 import type { Locale } from "@/lib/i18n/config";
 import {
-  buildOverlayProcessTree,
-  buildProcessTree,
+  ENTERPRISE_BUSINESS_UNIT_CODE,
+  ENTERPRISE_COMPANY_CODE,
+} from "@/lib/constants/process-scope";
+import {
+  buildHybridProcessTree,
   bumpVersion,
   getNextLevel,
+  resolveProcessTreeViewMode,
 } from "@/lib/utils/process";
+import {
+  isEnterpriseScope,
+  isSameScope,
+  normalizeProcessScope,
+  type ProcessScopePair,
+} from "@/lib/utils/process-scope";
 import type {
   CreateProcessDto,
   CreateVariantDto,
@@ -16,8 +26,10 @@ import type {
   ProcessFilters,
   ProcessHistoryDto,
   ProcessI18nMap,
+  ProcessLevel,
   ProcessNodeDto,
   ProcessNodeTree,
+  ProcessScopeMode,
   ProcessStatus,
   StandardVariantCompareDto,
   UpdateProcessDto,
@@ -109,47 +121,90 @@ const toProcessTreeNodes = async (
   return dtos;
 };
 
+/** 등록 시 scope를 결정한다 — L4는 부모 상속, L3는 전사/특정 조직 선택 */
+const resolveCreateScope = (
+  level: ProcessLevel,
+  parent: Awaited<ReturnType<typeof processQueries.findProcessById>> | null,
+  dto: CreateProcessDto,
+): ProcessScopePair => {
+  if (level === "L1" || level === "L2") {
+    return {
+      companyCode: ENTERPRISE_COMPANY_CODE,
+      businessUnitCode: ENTERPRISE_BUSINESS_UNIT_CODE,
+    };
+  }
+
+  if (parent && level === "L4") {
+    return normalizeProcessScope(parent.companyCode, parent.businessUnitCode);
+  }
+
+  if (parent && level === "L3") {
+    const scopeMode: ProcessScopeMode = dto.scopeMode ?? "enterprise";
+    if (scopeMode === "scoped") {
+      const companyCode = dto.companyCode?.trim();
+      const businessUnitCode = dto.businessUnitCode?.trim();
+      if (!companyCode || !businessUnitCode) {
+        throw new ApiError(
+          "E001",
+          "Company and business unit are required for scoped process",
+          400,
+          undefined,
+          "companyCode",
+        );
+      }
+      return { companyCode, businessUnitCode };
+    }
+    return {
+      companyCode: ENTERPRISE_COMPANY_CODE,
+      businessUnitCode: ENTERPRISE_BUSINESS_UNIT_CODE,
+    };
+  }
+
+  return {
+    companyCode: ENTERPRISE_COMPANY_CODE,
+    businessUnitCode: ENTERPRISE_BUSINESS_UNIT_CODE,
+  };
+};
+
 /** 프로세스 트리 조회 */
 export const getProcessTree = async (
   locale: Locale,
   filters: ProcessFilters = {},
 ): Promise<ProcessNodeTree[]> => {
   const search = filters.search;
+  const viewMode =
+    filters.viewMode ??
+    resolveProcessTreeViewMode(filters.companyCode, filters.businessUnitCode);
   const scopeLookup = await loadScopeNameLookup(locale);
-  const standardNodes = await processQueries.listProcessNodes({ search });
-  const standardDtos = await toProcessTreeNodes(standardNodes, locale, {
+  const baseNodes = await processQueries.listProcessNodes({ search });
+  const variantCounts = await processQueries.countVariantsByStandardIds(
+    baseNodes
+      .filter((node) => node.level === "L3" || node.level === "L4")
+      .map((node) => node.nodeId),
+  );
+  const baseDtos = await toProcessTreeNodes(baseNodes, locale, {
     scopeLookup,
+    variantCounts,
   });
 
-  const hasOverlayScope = Boolean(
-    filters.companyCode?.trim() && filters.businessUnitCode?.trim(),
-  );
-
-  if (!hasOverlayScope) {
-    const variantCounts = await processQueries.countVariantsByStandardIds(
-      standardNodes
-        .filter((node) => node.level === "L3" || node.level === "L4")
-        .map((node) => node.nodeId),
+  let variantDtos: ProcessNodeTree[] = [];
+  if (viewMode === "organization") {
+    const variantNodes = await processQueries.listVariantsByScope(
+      filters.companyCode!.trim(),
+      filters.businessUnitCode!.trim(),
+      search,
     );
-
-    const withCounts = standardDtos.map((node) => ({
-      ...node,
-      variantCount: variantCounts.get(node.nodeId) ?? 0,
-    }));
-
-    return buildProcessTree(withCounts);
+    variantDtos = await toProcessTreeNodes(variantNodes, locale, { scopeLookup });
   }
 
-  const variantNodes = await processQueries.listVariantsByScope(
-    filters.companyCode!.trim(),
-    filters.businessUnitCode!.trim(),
-    search,
+  return buildHybridProcessTree(
+    baseDtos,
+    variantDtos,
+    viewMode,
+    viewMode === "organization"
+      ? normalizeProcessScope(filters.companyCode, filters.businessUnitCode)
+      : undefined,
   );
-  const variantDtos = await toProcessTreeNodes(variantNodes, locale, {
-    scopeLookup,
-  });
-
-  return buildOverlayProcessTree(standardDtos, variantDtos);
 };
 
 /** 프로세스 상세 */
@@ -209,14 +264,22 @@ export const createProcess = async (
   }
 
   let level = dto.level;
+  let parent = null;
   if (!level) {
     if (dto.parentNodeId) {
-      const parent = await processQueries.findProcessById(dto.parentNodeId);
+      parent = await processQueries.findProcessById(dto.parentNodeId);
       level = parent ? getNextLevel(parent.level) : "L1";
     } else {
       level = "L1";
     }
+  } else if (dto.parentNodeId) {
+    parent = await processQueries.findProcessById(dto.parentNodeId);
   }
+
+  const scope = resolveCreateScope(level, parent, dto);
+  const isStandard =
+    dto.isStandard ??
+    isEnterpriseScope(scope.companyCode, scope.businessUnitCode);
 
   const node = await processQueries.createProcess({
     parentNodeId: dto.parentNodeId,
@@ -229,7 +292,9 @@ export const createProcess = async (
     version: dto.version ?? "1.0.0",
     validFrom: dto.validFrom ?? null,
     validTo: dto.validTo ?? null,
-    isStandard: dto.isStandard ?? true,
+    isStandard,
+    companyCode: scope.companyCode,
+    businessUnitCode: scope.businessUnitCode,
     sortOrder: dto.sortOrder ?? 0,
     createdBy: userId ?? null,
   });
@@ -350,10 +415,10 @@ export const createVariantFromStandard = async (
     throw new ApiError("E302", "Process not found", 404);
   }
 
-  if (!standard.isStandard || standard.variantOf != null) {
+  if (standard.variantOf != null) {
     throw new ApiError(
       "E405",
-      "Only standard processes can create variants",
+      "Variants cannot be created from another variant",
       400,
     );
   }
@@ -378,11 +443,25 @@ export const createVariantFromStandard = async (
     );
   }
 
+  const baseScope = normalizeProcessScope(
+    standard.companyCode,
+    standard.businessUnitCode,
+  );
+  const targetScope = normalizeProcessScope(companyCode, businessUnitCode);
+
+  if (isSameScope(baseScope, targetScope)) {
+    throw new ApiError(
+      "E405",
+      "Variant scope must differ from the base process scope",
+      400,
+    );
+  }
+
   if (
     await processQueries.existsVariantScope(
       standardNodeId,
-      companyCode,
-      businessUnitCode,
+      targetScope.companyCode,
+      targetScope.businessUnitCode,
     )
   ) {
     throw new ApiError(
@@ -394,8 +473,8 @@ export const createVariantFromStandard = async (
 
   const code = processQueries.generateVariantCode(
     standard.code,
-    companyCode,
-    businessUnitCode,
+    targetScope.companyCode,
+    targetScope.businessUnitCode,
   );
 
   const existingCode = await processQueries.findProcessByCode(code);
@@ -407,8 +486,8 @@ export const createVariantFromStandard = async (
   if (standard.level === "L4" && standard.parentNodeId) {
     const parentVariant = await processQueries.findVariantByScope(
       standard.parentNodeId,
-      companyCode,
-      businessUnitCode,
+      targetScope.companyCode,
+      targetScope.businessUnitCode,
     );
     if (parentVariant) {
       parentNodeId = parentVariant.nodeId;
@@ -433,8 +512,8 @@ export const createVariantFromStandard = async (
       : null,
     isStandard: false,
     variantOf: standardNodeId,
-    companyCode,
-    businessUnitCode,
+    companyCode: targetScope.companyCode,
+    businessUnitCode: targetScope.businessUnitCode,
     sortOrder: standard.sortOrder,
     createdBy: userId ?? null,
   });

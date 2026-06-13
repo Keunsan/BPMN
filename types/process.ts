@@ -86,6 +86,10 @@ export interface UpdateProcessInput {
   updatedBy?: number | null;
 }
 
+export type ProcessScopeMode = "enterprise" | "scoped";
+
+export type ProcessTreeViewMode = "catalog" | "enterprise" | "organization";
+
 export interface ProcessFilters {
   level?: ProcessLevel;
   status?: ProcessStatus;
@@ -95,6 +99,7 @@ export interface ProcessFilters {
   businessUnitCode?: string;
   /** true면 변형 노드도 포함한다 */
   includeVariants?: boolean;
+  viewMode?: ProcessTreeViewMode;
 }
 
 /** locale별 프로세스명/설명 */
@@ -146,6 +151,10 @@ export interface CreateProcessDto {
   isStandard?: boolean;
   sortOrder?: number;
   i18n?: ProcessI18nMap;
+  /** L3 등록 시 전사 공통 또는 특정 법인·사업부 */
+  scopeMode?: ProcessScopeMode;
+  companyCode?: string | null;
+  businessUnitCode?: string | null;
 }
 
 export interface UpdateProcessDto {

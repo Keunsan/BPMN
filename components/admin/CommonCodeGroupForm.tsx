@@ -76,7 +76,10 @@ export const CommonCodeGroupForm = ({
   return (
     <form id="common-code-group-form" className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
-        <Label htmlFor="groupCode">{t("groupCode")}</Label>
+        <Label htmlFor="groupCode">
+          {t("groupCode")}
+          <span className="text-destructive"> *</span>
+        </Label>
         <Input
           id="groupCode"
           value={groupCode}

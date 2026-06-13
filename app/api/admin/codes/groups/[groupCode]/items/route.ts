@@ -9,9 +9,9 @@ import type {
   UpsertCommonCodeItemDto,
 } from "@/types/common-code";
 
-/** GET /api/admin/codes/groups/[groupId]/items — MINOR 코드 목록 */
+/** GET /api/admin/codes/groups/[groupCode]/items — MINOR 코드 목록 */
 export const GET = withApiHandler(async ({ request, locale, params }) => {
-  const groupId = Number(params.groupId);
+  const groupCode = params.groupCode as string;
   const { searchParams } = new URL(request.url);
   const isActiveParam = searchParams.get("isActive");
 
@@ -25,17 +25,17 @@ export const GET = withApiHandler(async ({ request, locale, params }) => {
           : undefined,
   };
 
-  const data = await listCommonCodeItems(groupId, locale, filters);
+  const data = await listCommonCodeItems(groupCode, locale, filters);
   return { data };
 });
 
-/** POST /api/admin/codes/groups/[groupId]/items — MINOR 코드 생성 */
+/** POST /api/admin/codes/groups/[groupCode]/items — MINOR 코드 생성 */
 export const POST = withApiHandler(async ({ request, locale, params }) => {
   const auth = await requireAuth();
-  const groupId = Number(params.groupId);
+  const groupCode = params.groupCode as string;
   const body = (await request.json()) as UpsertCommonCodeItemDto;
   const data = await createCommonCodeItem(
-    { ...body, groupId },
+    { ...body, groupCode },
     locale,
     auth.userId,
   );

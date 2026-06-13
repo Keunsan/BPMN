@@ -179,7 +179,7 @@ export const countChildProcesses = async (nodeId: number): Promise<number> => {
   const row = await queryOne<{ cnt: number }>(
     `SELECT COUNT(*) AS cnt
      FROM process_node
-     WHERE parent_node_id = @nodeId AND variant_of IS NULL`,
+     WHERE parent_node_id = @nodeId`,
     { nodeId },
   );
   return row?.cnt ?? 0;

@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { showErrorToast } from "@/components/common/ErrorToast";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
@@ -8,16 +13,17 @@ import { ApiError } from "@/lib/api/error-handler";
 import { systemKeys, metadataKeys } from "@/lib/query/keys";
 import type {
   ApplicationSystemDto,
+  BatchCreateTaskSystemMappingDto,
   CreateTaskSystemMappingDto,
+  ScreenCatalogFilters,
+  ScreenCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
-  SystemModule,
-  SystemModuleDto,
+  SystemModuleOption,
   SystemScreen,
   SystemScreenDto,
   TaskSystemMappingDto,
   UpsertApplicationSystemDto,
-  UpsertSystemModuleDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
 
@@ -66,24 +72,27 @@ export const useSystemHierarchy = () =>
     queryFn: () => apiGet<SystemHierarchyDto[]>("/api/admin/systems/hierarchy"),
   });
 
-/** 시스템 하위 모듈 조회 */
+/** 시스템별 공통 모듈(MODULE_CD) 조회 */
 export const useSystemModules = (systemId: number) =>
   useQuery({
     queryKey: systemKeys.modules(systemId),
     queryFn: () =>
-      apiGet<SystemModuleDto[]>(`/api/admin/systems/${systemId}/modules`),
+      apiGet<SystemModuleOption[]>(`/api/admin/systems/${systemId}/modules`),
     enabled: systemId > 0,
   });
 
-/** 모듈 하위 화면 조회 */
-export const useModuleScreens = (moduleId: number) =>
+/** 시스템·모듈별 화면 조회 */
+export const useSystemScreens = (systemId: number, moduleCode = "") =>
   useQuery({
-    queryKey: systemKeys.screens(moduleId),
+    queryKey: systemKeys.screens(systemId, moduleCode),
     queryFn: () =>
       apiGet<SystemScreenDto[]>(
-        `/api/admin/systems/modules/${moduleId}/screens`,
+        `/api/admin/systems/${systemId}/screens${buildQueryString({
+          moduleCode,
+          isActive: true,
+        })}`,
       ),
-    enabled: moduleId > 0,
+    enabled: systemId > 0 && moduleCode.length > 0,
   });
 
 const onMutationError = (error: unknown) => {
@@ -125,50 +134,12 @@ export const useDeactivateSystem = () => {
   });
 };
 
-/** 모듈 생성 */
-export const useCreateModule = (systemId: number) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpsertSystemModuleDto) =>
-      apiPost<SystemModule>(`/api/admin/systems/${systemId}/modules`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: systemKeys.all }),
-    onError: onMutationError,
-  });
-};
-
-/** 모듈 수정 */
-export const useUpdateModule = (moduleId: number) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UpsertSystemModuleDto) =>
-      apiPut<SystemModule>(`/api/admin/systems/modules/${moduleId}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: systemKeys.all }),
-    onError: onMutationError,
-  });
-};
-
-/** 모듈 비활성화 */
-export const useDeactivateModule = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (moduleId: number) =>
-      apiDelete<{ moduleId: number }>(
-        `/api/admin/systems/modules/${moduleId}`,
-      ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: systemKeys.all }),
-    onError: onMutationError,
-  });
-};
-
 /** 화면 생성 */
-export const useCreateScreen = (moduleId: number) => {
+export const useCreateScreen = (systemId: number) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpsertSystemScreenDto) =>
-      apiPost<SystemScreen>(
-        `/api/admin/systems/modules/${moduleId}/screens`,
-        data,
-      ),
+      apiPost<SystemScreen>(`/api/admin/systems/${systemId}/screens`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: systemKeys.all }),
     onError: onMutationError,
   });
@@ -218,6 +189,23 @@ export const useCreateTaskSystemMapping = (nodeId: number) => {
   });
 };
 
+/** Task 시스템 매핑 일괄 생성 */
+export const useCreateTaskSystemMappingsBatch = (nodeId: number) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BatchCreateTaskSystemMappingDto) =>
+      apiPost<{ createdCount: number }>(
+        `/api/metadata/tasks/${nodeId}/systems/batch`,
+        data,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
+      qc.invalidateQueries({ queryKey: systemKeys.all });
+    },
+    onError: onMutationError,
+  });
+};
+
 /** Task 시스템 매핑 삭제 */
 export const useDeleteTaskSystemMapping = (nodeId: number) => {
   const qc = useQueryClient();
@@ -228,7 +216,117 @@ export const useDeleteTaskSystemMapping = (nodeId: number) => {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
+      qc.invalidateQueries({ queryKey: systemKeys.all });
     },
     onError: onMutationError,
   });
 };
+
+/** 연결 후보 화면 카탈로그 */
+export const useScreenCatalog = (
+  filters: ScreenCatalogFilters,
+  locale: string,
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: systemKeys.screenCatalog({
+      ...filters,
+      locale,
+    }),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.systemId) params.set("systemId", String(filters.systemId));
+      if (filters.moduleCode) params.set("moduleCode", filters.moduleCode);
+      if (filters.search) params.set("search", filters.search);
+      if (filters.excludeNodeId) {
+        params.set("excludeNodeId", String(filters.excludeNodeId));
+      }
+      params.set("page", String(filters.page ?? 1));
+      params.set("pageSize", String(filters.pageSize ?? 50));
+
+      const response = await fetch(`/api/metadata/screens?${params.toString()}`, {
+        headers: { "Accept-Language": locale },
+      });
+      const body = (await response.json()) as {
+        success: boolean;
+        data?: ScreenCatalogItem[];
+        meta?: { total?: number; page?: number; pageSize?: number };
+        error?: { code: string; message: string };
+      };
+
+      if (!response.ok || !body.success) {
+        throw new ApiError(
+          body.error?.code ?? "E502",
+          body.error?.message ?? "Failed to load screens",
+          response.status,
+        );
+      }
+
+      return {
+        items: body.data ?? [],
+        total: body.meta?.total ?? 0,
+        page: body.meta?.page ?? filters.page ?? 1,
+        pageSize: body.meta?.pageSize ?? filters.pageSize ?? 50,
+      };
+    },
+    enabled,
+  });
+
+/** 연결 후보 화면 카탈로그 — 무한 스크롤 */
+export const useScreenCatalogInfinite = (
+  filters: Omit<ScreenCatalogFilters, "page">,
+  locale: string,
+  enabled = true,
+) =>
+  useInfiniteQuery({
+    queryKey: systemKeys.screenCatalogInfinite({
+      systemId: filters.systemId,
+      moduleCode: filters.moduleCode,
+      search: filters.search,
+      excludeNodeId: filters.excludeNodeId,
+      pageSize: filters.pageSize,
+      locale,
+    }),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (filters.systemId) params.set("systemId", String(filters.systemId));
+      if (filters.moduleCode) params.set("moduleCode", filters.moduleCode);
+      if (filters.search) params.set("search", filters.search);
+      if (filters.excludeNodeId) {
+        params.set("excludeNodeId", String(filters.excludeNodeId));
+      }
+      params.set("page", String(pageParam));
+      params.set("pageSize", String(filters.pageSize ?? 50));
+
+      const response = await fetch(`/api/metadata/screens?${params.toString()}`, {
+        headers: { "Accept-Language": locale },
+      });
+      const body = (await response.json()) as {
+        success: boolean;
+        data?: ScreenCatalogItem[];
+        meta?: { total?: number; page?: number; pageSize?: number };
+        error?: { code: string; message: string };
+      };
+
+      if (!response.ok || !body.success) {
+        throw new ApiError(
+          body.error?.code ?? "E502",
+          body.error?.message ?? "Failed to load screens",
+          response.status,
+        );
+      }
+
+      return {
+        items: body.data ?? [],
+        total: body.meta?.total ?? 0,
+        page: body.meta?.page ?? (pageParam as number),
+        pageSize: body.meta?.pageSize ?? filters.pageSize ?? 50,
+      };
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
+    enabled,
+  });

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:test": "tsx scripts/test-db.ts",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:import-screens": "tsx scripts/import-system-screens.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -17,6 +18,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-table": "^8.21.3",
     "bpmn-js": "^18.17.1",
     "bpmn-js-properties-panel": "^5.58.0",
     "camunda-bpmn-moddle": "^7.0.1",
@@ -50,6 +52,7 @@
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "xlsx": "^0.18.5"
   }
 }

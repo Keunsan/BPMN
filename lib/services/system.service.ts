@@ -6,16 +6,18 @@ import * as processQueries from "@/lib/db/queries/process";
 import * as systemQueries from "@/lib/db/queries/system";
 import type {
   ApplicationSystemDto,
+  BatchCreateTaskSystemMappingDto,
   CreateTaskSystemMappingDto,
+  ScreenCatalogFilters,
+  ScreenCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
-  SystemModule,
-  SystemModuleDto,
+  SystemModuleOption,
   SystemScreen,
   SystemScreenDto,
+  SystemScreenListFilters,
   TaskSystemMappingDto,
   UpsertApplicationSystemDto,
-  UpsertSystemModuleDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
 
@@ -81,13 +83,12 @@ export const getSystem = async (systemId: number): Promise<ApplicationSystemDto>
     throw new ApiError("E301", "System not found", 404);
   }
 
-  const [modules] = await Promise.all([systemQueries.listModules(systemId)]);
-  const screenCount = modules.reduce(
-    (sum, module) => sum + (module.screenCount ?? 0),
-    0,
-  );
+  const [systems] = await Promise.all([
+    systemQueries.listSystems({ isActive: undefined }, "ko"),
+  ]);
+  const dto = systems.find((item) => item.systemId === systemId);
 
-  return { ...system, moduleCount: modules.length, screenCount };
+  return dto ?? { ...system, moduleCount: 0, screenCount: 0 };
 };
 
 /** 시스템을 생성한다. */
@@ -176,101 +177,44 @@ const normalizeSystemDto = (
   columnApiUrl: dto.columnApiUrl?.trim() || null,
 });
 
-/** 모듈 목록을 조회한다. */
-export const listModules = async (systemId: number): Promise<SystemModuleDto[]> => {
+/** 공통 모듈 목록을 조회한다. */
+export const listModules = async (
+  systemId: number,
+  locale: Locale = "ko",
+): Promise<SystemModuleOption[]> => {
   if (!(await systemQueries.findSystemById(systemId))) {
     throw new ApiError("E301", "System not found", 404);
   }
-  return systemQueries.listModules(systemId);
+
+  const modules = await systemQueries.listModuleOptions(locale, systemId);
+  return modules.filter((module) => (module.screenCount ?? 0) > 0);
 };
-
-export const createModule = async (
-  dto: UpsertSystemModuleDto,
-): Promise<SystemModule> => {
-  if (!(await systemQueries.findSystemById(dto.systemId))) {
-    throw new ApiError("E301", "System not found", 404, undefined, "systemId");
-  }
-
-  const normalized = normalizeModuleDto(dto);
-  if (
-    await systemQueries.existsModuleCode(
-      normalized.systemId,
-      normalized.moduleCode,
-    )
-  ) {
-    throw new ApiError("E304", "Duplicate module code", 409, undefined, "moduleCode");
-  }
-
-  return systemQueries.createModule(normalized);
-};
-
-export const updateModule = async (
-  moduleId: number,
-  dto: UpsertSystemModuleDto,
-): Promise<SystemModule> => {
-  const existing = await systemQueries.findModuleById(moduleId);
-  if (!existing) {
-    throw new ApiError("E301", "Module not found", 404);
-  }
-
-  const normalized = normalizeModuleDto(dto);
-  if (
-    await systemQueries.existsModuleCode(
-      normalized.systemId,
-      normalized.moduleCode,
-      moduleId,
-    )
-  ) {
-    throw new ApiError("E304", "Duplicate module code", 409, undefined, "moduleCode");
-  }
-
-  const updated = await systemQueries.updateModule(moduleId, normalized);
-  if (!updated) {
-    throw new ApiError("E301", "Module not found", 404);
-  }
-
-  return updated;
-};
-
-export const deactivateModule = async (moduleId: number): Promise<void> => {
-  if (!(await systemQueries.findModuleById(moduleId))) {
-    throw new ApiError("E301", "Module not found", 404);
-  }
-  await systemQueries.deactivateModule(moduleId);
-};
-
-const normalizeModuleDto = (
-  dto: UpsertSystemModuleDto,
-): UpsertSystemModuleDto => ({
-  ...dto,
-  moduleCode: assertCode(dto.moduleCode, "moduleCode"),
-  moduleName: assertName(dto.moduleName, "moduleName"),
-  description: dto.description?.trim() || null,
-});
 
 /** 화면 목록을 조회한다. */
-export const listScreens = async (moduleId: number): Promise<SystemScreenDto[]> => {
-  if (!(await systemQueries.findModuleById(moduleId))) {
-    throw new ApiError("E301", "Module not found", 404);
+export const listScreens = async (
+  systemId: number,
+  filters: SystemScreenListFilters = {},
+  locale: Locale = "ko",
+): Promise<SystemScreenDto[]> => {
+  if (!(await systemQueries.findSystemById(systemId))) {
+    throw new ApiError("E301", "System not found", 404);
   }
-  return systemQueries.listScreens(moduleId);
+
+  return systemQueries.listScreensBySystem(systemId, filters, locale);
 };
 
 export const createScreen = async (
   dto: UpsertSystemScreenDto,
 ): Promise<SystemScreen> => {
-  if (!(await systemQueries.findModuleById(dto.moduleId))) {
-    throw new ApiError("E301", "Module not found", 404, undefined, "moduleId");
+  if (!(await systemQueries.findSystemById(dto.systemId))) {
+    throw new ApiError("E301", "System not found", 404, undefined, "systemId");
   }
 
   const normalized = normalizeScreenDto(dto);
   if (
-    await systemQueries.existsScreenCode(
-      normalized.moduleId,
-      normalized.screenCode,
-    )
+    await systemQueries.existsScreenMenu(normalized.systemId, normalized.menuId)
   ) {
-    throw new ApiError("E304", "Duplicate screen code", 409, undefined, "screenCode");
+    throw new ApiError("E304", "Duplicate menu id", 409, undefined, "menuId");
   }
 
   return systemQueries.createScreen(normalized);
@@ -287,13 +231,13 @@ export const updateScreen = async (
 
   const normalized = normalizeScreenDto(dto);
   if (
-    await systemQueries.existsScreenCode(
-      normalized.moduleId,
-      normalized.screenCode,
+    await systemQueries.existsScreenMenu(
+      normalized.systemId,
+      normalized.menuId,
       screenId,
     )
   ) {
-    throw new ApiError("E304", "Duplicate screen code", 409, undefined, "screenCode");
+    throw new ApiError("E304", "Duplicate menu id", 409, undefined, "menuId");
   }
 
   const updated = await systemQueries.updateScreen(screenId, normalized);
@@ -313,15 +257,22 @@ export const deactivateScreen = async (screenId: number): Promise<void> => {
 
 const normalizeScreenDto = (
   dto: UpsertSystemScreenDto,
-): UpsertSystemScreenDto => ({
-  ...dto,
-  screenCode: assertCode(dto.screenCode, "screenCode"),
-  screenName: assertName(dto.screenName, "screenName"),
-  transactionCode: dto.transactionCode?.trim() || null,
-  menuPath: dto.menuPath?.trim() || null,
-  url: dto.url?.trim() || null,
-  description: dto.description?.trim() || null,
-});
+): UpsertSystemScreenDto => {
+  const menuId = assertCode(dto.menuId, "menuId");
+  const moduleCode = assertCode(dto.moduleCode, "moduleCode");
+
+  return {
+    ...dto,
+    menuId,
+    moduleCode,
+    screenCode: dto.screenCode ? assertCode(dto.screenCode, "screenCode") : menuId,
+    screenName: assertName(dto.screenName, "screenName"),
+    transactionCode: dto.transactionCode?.trim() || menuId,
+    menuPath: dto.menuPath?.trim() || null,
+    url: dto.url?.trim() || null,
+    description: dto.description?.trim() || null,
+  };
+};
 
 /** 활성 시스템 계층을 조회한다. */
 export const listSystemHierarchy = async (
@@ -331,9 +282,10 @@ export const listSystemHierarchy = async (
 /** Task별 시스템 매핑을 조회한다. */
 export const listTaskSystemMappings = async (
   nodeId: number,
+  locale: Locale = "ko",
 ): Promise<TaskSystemMappingDto[]> => {
   await assertTaskNode(nodeId);
-  return systemQueries.listTaskSystemMappings(nodeId);
+  return systemQueries.listTaskSystemMappings(nodeId, locale);
 };
 
 /** Task-시스템 매핑을 생성한다. */
@@ -366,3 +318,74 @@ export const deleteTaskSystemMapping = async (
   await assertTaskNode(nodeId);
   await systemQueries.deleteTaskSystemMapping(nodeId, mappingId);
 };
+
+/** 연결 후보 화면 카탈로그를 조회한다. */
+export const listScreenCatalog = async (
+  filters: ScreenCatalogFilters,
+  locale: Locale = "ko",
+): Promise<{ items: ScreenCatalogItem[]; total: number }> => {
+  if (filters.excludeNodeId) {
+    await assertTaskNode(filters.excludeNodeId);
+  }
+
+  return systemQueries.listScreenCatalog(filters, locale);
+};
+
+/** Task-시스템 매핑을 일괄 생성한다. */
+export const createTaskSystemMappingsBatch = async (
+  nodeId: number,
+  dto: BatchCreateTaskSystemMappingDto,
+  userId: number,
+): Promise<{ createdCount: number }> => {
+  await assertTaskNode(nodeId);
+
+  if (!dto.screenIds.length) {
+    throw new ApiError("E001", "Screen ids are required", 400, undefined, "screenIds");
+  }
+
+  const createdCount = await systemQueries.createTaskSystemMappingsBatch(
+    nodeId,
+    {
+      screenIds: dto.screenIds,
+      usageType: dto.usageType ?? "EXECUTE",
+      usageDescription: dto.usageDescription?.trim() || null,
+      isPrimary: dto.isPrimary ?? false,
+    },
+    userId,
+  );
+
+  return { createdCount };
+};
+
+/** 화면을 upsert한다. (마이그레이션/동기화용) */
+export const upsertScreen = async (
+  dto: UpsertSystemScreenDto,
+): Promise<SystemScreen> => {
+  const normalized = normalizeScreenDto(dto);
+  return systemQueries.upsertScreen(normalized);
+};
+
+/** MODULE_CD 공통코드를 upsert한다. */
+export const upsertModuleCode = async (
+  moduleCode: string,
+  moduleName?: string,
+  sortOrder = 0,
+): Promise<void> => {
+  await systemQueries.upsertModuleCode(
+    assertCode(moduleCode, "moduleCode"),
+    moduleName?.trim() || moduleCode,
+    sortOrder,
+  );
+};
+
+/** 법인·사업부·시스템 코드로 시스템을 조회한다. */
+export const findSystemByScope = async (
+  systemCode: string,
+  companyCode: string,
+  businessUnitCode: string,
+) =>
+  systemQueries.findSystemByScope(
+    assertCode(systemCode, "systemCode"),
+    assertCode(companyCode, "companyCode"),
+    assertCode(businessUnitCode, "businessUnitCode"),
+  );

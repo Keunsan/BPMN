@@ -34,11 +34,7 @@ const flattenL3L4Standards = (nodes: ProcessNodeTree[]): ProcessNodeTree[] => {
 
   const walk = (items: ProcessNodeTree[]) => {
     for (const item of items) {
-      if (
-        item.isStandard &&
-        !item.variantOf &&
-        (item.level === "L3" || item.level === "L4")
-      ) {
+      if (!item.variantOf && (item.level === "L3" || item.level === "L4")) {
         result.push(item);
       }
       if (item.children?.length) {

@@ -7,6 +7,7 @@ import type {
   CommonCodeGroupListFilters,
   CommonCodeItem,
   CommonCodeItemI18nMap,
+  CommonCodeItemKey,
   CommonCodeItemListFilters,
   CommonCodeLookupItem,
   UpsertCommonCodeGroupDto,
@@ -17,7 +18,6 @@ import { query, queryOne, transaction, type QueryParams } from "../pool";
 
 /** DB 행을 CommonCodeGroup으로 변환한다. */
 const mapCommonCodeGroup = (row: Record<string, unknown>): CommonCodeGroup => ({
-  groupId: row.group_id as number,
   groupCode: row.group_code as string,
   groupName: row.group_name as string,
   description: (row.description as string | null) ?? null,
@@ -31,8 +31,7 @@ const mapCommonCodeGroup = (row: Record<string, unknown>): CommonCodeGroup => ({
 
 /** DB 행을 CommonCodeItem으로 변환한다. */
 const mapCommonCodeItem = (row: Record<string, unknown>): CommonCodeItem => ({
-  codeId: row.code_id as number,
-  groupId: row.group_id as number,
+  groupCode: row.group_code as string,
   code: row.code as string,
   codeName: row.code_name as string,
   description: (row.description as string | null) ?? null,
@@ -112,11 +111,11 @@ export const listCommonCodeGroups = async (
        (
          SELECT COUNT(*)
          FROM common_code cc
-         WHERE cc.group_id = ccg.group_id
+         WHERE cc.group_code = ccg.group_code
        ) AS item_count
      FROM common_code_group ccg
      LEFT JOIN common_code_group_i18n ccgi
-       ON ccg.group_id = ccgi.group_id AND ccgi.locale = @locale
+       ON ccg.group_code = ccgi.group_code AND ccgi.locale = @locale
      WHERE ${conditions.join(" AND ")}
      ORDER BY ccg.sort_order, ccg.group_code`,
     params,
@@ -127,18 +126,6 @@ export const listCommonCodeGroups = async (
     displayName: row.display_name as string,
     itemCount: row.item_count as number,
   }));
-};
-
-/** 공통코드 그룹 상세를 조회한다. */
-export const findCommonCodeGroupById = async (
-  groupId: number,
-): Promise<CommonCodeGroup | null> => {
-  const row = await queryOne<Record<string, unknown>>(
-    `SELECT * FROM common_code_group WHERE group_id = @groupId`,
-    { groupId },
-  );
-
-  return row ? mapCommonCodeGroup(row) : null;
 };
 
 /** 공통코드 그룹 코드로 조회한다. */
@@ -155,13 +142,13 @@ export const findCommonCodeGroupByCode = async (
 
 /** 그룹 i18n을 조회한다. */
 export const findCommonCodeGroupI18n = async (
-  groupId: number,
+  groupCode: string,
 ): Promise<CommonCodeGroupI18nMap> => {
   const rows = await query<Record<string, unknown>>(
     `SELECT locale, group_name, description
      FROM common_code_group_i18n
-     WHERE group_id = @groupId`,
-    { groupId },
+     WHERE group_code = @groupCode`,
+    { groupCode },
   );
 
   return mapCommonCodeGroupI18n(rows);
@@ -170,14 +157,14 @@ export const findCommonCodeGroupI18n = async (
 /** 그룹 코드 중복 여부를 확인한다. */
 export const existsCommonCodeGroupCode = async (
   groupCode: string,
-  excludeGroupId?: number,
+  excludeGroupCode?: string,
 ): Promise<boolean> => {
   const params: QueryParams = { groupCode };
   let sql = `SELECT 1 AS found FROM common_code_group WHERE group_code = @groupCode`;
 
-  if (excludeGroupId) {
-    sql += " AND group_id <> @excludeGroupId";
-    params.excludeGroupId = excludeGroupId;
+  if (excludeGroupCode) {
+    sql += " AND group_code <> @excludeGroupCode";
+    params.excludeGroupCode = excludeGroupCode;
   }
 
   const row = await queryOne<Record<string, unknown>>(sql, params);
@@ -216,16 +203,16 @@ export const createCommonCodeGroup = async (
 
 /** 공통코드 그룹을 수정한다. */
 export const updateCommonCodeGroup = async (
-  groupId: number,
+  groupCode: string,
   input: Partial<UpsertCommonCodeGroupDto>,
   userId: number | null,
 ): Promise<CommonCodeGroup | null> => {
   const sets: string[] = ["updated_at = GETDATE()", "updated_by = @updatedBy"];
-  const params: QueryParams = { groupId, updatedBy: userId };
+  const params: QueryParams = { groupCode, updatedBy: userId };
 
   if (input.groupCode !== undefined) {
-    sets.push("group_code = @groupCode");
-    params.groupCode = input.groupCode;
+    sets.push("group_code = @newGroupCode");
+    params.newGroupCode = input.groupCode;
   }
   if (input.groupName !== undefined) {
     sets.push("group_name = @groupName");
@@ -248,7 +235,7 @@ export const updateCommonCodeGroup = async (
     `UPDATE common_code_group
      SET ${sets.join(", ")}
      OUTPUT INSERTED.*
-     WHERE group_id = @groupId`,
+     WHERE group_code = @groupCode`,
     params,
   );
 
@@ -257,7 +244,7 @@ export const updateCommonCodeGroup = async (
 
 /** 그룹 i18n을 upsert한다. */
 export const upsertCommonCodeGroupI18n = async (
-  groupId: number,
+  groupCode: string,
   i18n: CommonCodeGroupI18nMap,
 ): Promise<void> => {
   for (const [locale, value] of Object.entries(i18n)) {
@@ -267,15 +254,15 @@ export const upsertCommonCodeGroupI18n = async (
 
     await queryOne(
       `MERGE common_code_group_i18n AS target
-       USING (SELECT @groupId AS group_id, @locale AS locale) AS source
-       ON target.group_id = source.group_id AND target.locale = source.locale
+       USING (SELECT @groupCode AS group_code, @locale AS locale) AS source
+       ON target.group_code = source.group_code AND target.locale = source.locale
        WHEN MATCHED THEN
          UPDATE SET group_name = @groupName, description = @description
        WHEN NOT MATCHED THEN
-         INSERT (group_id, locale, group_name, description)
-         VALUES (@groupId, @locale, @groupName, @description);`,
+         INSERT (group_code, locale, group_name, description)
+         VALUES (@groupCode, @locale, @groupName, @description);`,
       {
-        groupId,
+        groupCode,
         locale,
         groupName: value.groupName,
         description: value.description ?? null,
@@ -286,41 +273,40 @@ export const upsertCommonCodeGroupI18n = async (
 
 /** 그룹 비활성화 시 하위 코드도 함께 비활성화한다. */
 export const deactivateCommonCodeGroupWithItems = async (
-  groupId: number,
+  groupCode: string,
   userId: number | null,
 ): Promise<void> => {
   await transaction(async (txRequest) => {
     await txRequest(
       `UPDATE common_code_group
        SET is_active = 0, updated_at = GETDATE(), updated_by = @updatedBy
-       WHERE group_id = @groupId`,
-      { groupId, updatedBy: userId },
+       WHERE group_code = @groupCode`,
+      { groupCode, updatedBy: userId },
     );
 
     await txRequest(
       `UPDATE common_code
        SET is_active = 0, updated_at = GETDATE(), updated_by = @updatedBy
-       WHERE group_id = @groupId`,
-      { groupId, updatedBy: userId },
+       WHERE group_code = @groupCode`,
+      { groupCode, updatedBy: userId },
     );
   });
 };
 
 /** 그룹별 공통코드 목록을 조회한다. */
 export const listCommonCodeItems = async (
-  groupId: number,
+  groupCode: string,
   locale: Locale,
   filters: CommonCodeItemListFilters = {},
 ): Promise<
   Array<
     CommonCodeItem & {
       displayName: string;
-      groupCode: string;
     }
   >
 > => {
-  const conditions = ["cc.group_id = @groupId"];
-  const params: QueryParams = { groupId, locale };
+  const conditions = ["cc.group_code = @groupCode"];
+  const params: QueryParams = { groupCode, locale };
 
   if (filters.search) {
     conditions.push(
@@ -337,12 +323,12 @@ export const listCommonCodeItems = async (
   const rows = await query<Record<string, unknown>>(
     `SELECT
        cc.*,
-       ccg.group_code,
        COALESCE(cci.code_name, cc.code_name) AS display_name
      FROM common_code cc
-     INNER JOIN common_code_group ccg ON cc.group_id = ccg.group_id
      LEFT JOIN common_code_i18n cci
-       ON cc.code_id = cci.code_id AND cci.locale = @locale
+       ON cc.group_code = cci.group_code
+      AND cc.code = cci.code
+      AND cci.locale = @locale
      WHERE ${conditions.join(" AND ")}
      ORDER BY cc.sort_order, cc.code`,
     params,
@@ -350,18 +336,18 @@ export const listCommonCodeItems = async (
 
   return rows.map((row) => ({
     ...mapCommonCodeItem(row),
-    groupCode: row.group_code as string,
     displayName: row.display_name as string,
   }));
 };
 
 /** 공통코드 상세를 조회한다. */
-export const findCommonCodeItemById = async (
-  codeId: number,
+export const findCommonCodeItem = async (
+  key: CommonCodeItemKey,
 ): Promise<CommonCodeItem | null> => {
   const row = await queryOne<Record<string, unknown>>(
-    `SELECT * FROM common_code WHERE code_id = @codeId`,
-    { codeId },
+    `SELECT * FROM common_code
+     WHERE group_code = @groupCode AND code = @code`,
+    { groupCode: key.groupCode, code: key.code },
   );
 
   return row ? mapCommonCodeItem(row) : null;
@@ -369,13 +355,13 @@ export const findCommonCodeItemById = async (
 
 /** 코드 i18n을 조회한다. */
 export const findCommonCodeItemI18n = async (
-  codeId: number,
+  key: CommonCodeItemKey,
 ): Promise<CommonCodeItemI18nMap> => {
   const rows = await query<Record<string, unknown>>(
     `SELECT locale, code_name, description
      FROM common_code_i18n
-     WHERE code_id = @codeId`,
-    { codeId },
+     WHERE group_code = @groupCode AND code = @code`,
+    { groupCode: key.groupCode, code: key.code },
   );
 
   return mapCommonCodeItemI18n(rows);
@@ -383,16 +369,16 @@ export const findCommonCodeItemI18n = async (
 
 /** 코드 중복 여부를 확인한다. */
 export const existsCommonCodeItemCode = async (
-  groupId: number,
+  groupCode: string,
   code: string,
-  excludeCodeId?: number,
+  excludeCode?: string,
 ): Promise<boolean> => {
-  const params: QueryParams = { groupId, code };
-  let sql = `SELECT 1 AS found FROM common_code WHERE group_id = @groupId AND code = @code`;
+  const params: QueryParams = { groupCode, code };
+  let sql = `SELECT 1 AS found FROM common_code WHERE group_code = @groupCode AND code = @code`;
 
-  if (excludeCodeId) {
-    sql += " AND code_id <> @excludeCodeId";
-    params.excludeCodeId = excludeCodeId;
+  if (excludeCode) {
+    sql += " AND code <> @excludeCode";
+    params.excludeCode = excludeCode;
   }
 
   const row = await queryOne<Record<string, unknown>>(sql, params);
@@ -406,14 +392,14 @@ export const createCommonCodeItem = async (
 ): Promise<CommonCodeItem> => {
   const row = await queryOne<Record<string, unknown>>(
     `INSERT INTO common_code (
-       group_id, code, code_name, description, sort_order, is_active, created_by
+       group_code, code, code_name, description, sort_order, is_active, created_by
      )
      OUTPUT INSERTED.*
      VALUES (
-       @groupId, @code, @codeName, @description, @sortOrder, @isActive, @createdBy
+       @groupCode, @code, @codeName, @description, @sortOrder, @isActive, @createdBy
      )`,
     {
-      groupId: input.groupId,
+      groupCode: input.groupCode,
       code: input.code,
       codeName: input.codeName ?? input.code,
       description: input.description ?? null,
@@ -432,16 +418,20 @@ export const createCommonCodeItem = async (
 
 /** 공통코드를 수정한다. */
 export const updateCommonCodeItem = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   input: Partial<UpsertCommonCodeItemDto>,
   userId: number | null,
 ): Promise<CommonCodeItem | null> => {
   const sets: string[] = ["updated_at = GETDATE()", "updated_by = @updatedBy"];
-  const params: QueryParams = { codeId, updatedBy: userId };
+  const params: QueryParams = {
+    groupCode: key.groupCode,
+    code: key.code,
+    updatedBy: userId,
+  };
 
   if (input.code !== undefined) {
-    sets.push("code = @code");
-    params.code = input.code;
+    sets.push("code = @newCode");
+    params.newCode = input.code;
   }
   if (input.codeName !== undefined) {
     sets.push("code_name = @codeName");
@@ -464,7 +454,7 @@ export const updateCommonCodeItem = async (
     `UPDATE common_code
      SET ${sets.join(", ")}
      OUTPUT INSERTED.*
-     WHERE code_id = @codeId`,
+     WHERE group_code = @groupCode AND code = @code`,
     params,
   );
 
@@ -473,7 +463,7 @@ export const updateCommonCodeItem = async (
 
 /** 코드 i18n을 upsert한다. */
 export const upsertCommonCodeItemI18n = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   i18n: CommonCodeItemI18nMap,
 ): Promise<void> => {
   for (const [locale, value] of Object.entries(i18n)) {
@@ -483,15 +473,20 @@ export const upsertCommonCodeItemI18n = async (
 
     await queryOne(
       `MERGE common_code_i18n AS target
-       USING (SELECT @codeId AS code_id, @locale AS locale) AS source
-       ON target.code_id = source.code_id AND target.locale = source.locale
+       USING (
+         SELECT @groupCode AS group_code, @code AS code, @locale AS locale
+       ) AS source
+       ON target.group_code = source.group_code
+        AND target.code = source.code
+        AND target.locale = source.locale
        WHEN MATCHED THEN
          UPDATE SET code_name = @codeName, description = @description
        WHEN NOT MATCHED THEN
-         INSERT (code_id, locale, code_name, description)
-         VALUES (@codeId, @locale, @codeName, @description);`,
+         INSERT (group_code, code, locale, code_name, description)
+         VALUES (@groupCode, @code, @locale, @codeName, @description);`,
       {
-        codeId,
+        groupCode: key.groupCode,
+        code: key.code,
         locale,
         codeName: value.codeName,
         description: value.description ?? null,
@@ -502,14 +497,14 @@ export const upsertCommonCodeItemI18n = async (
 
 /** 공통코드를 비활성화한다. */
 export const deactivateCommonCodeItem = async (
-  codeId: number,
+  key: CommonCodeItemKey,
   userId: number | null,
 ): Promise<void> => {
   await queryOne(
     `UPDATE common_code
      SET is_active = 0, updated_at = GETDATE(), updated_by = @updatedBy
-     WHERE code_id = @codeId`,
-    { codeId, updatedBy: userId },
+     WHERE group_code = @groupCode AND code = @code`,
+    { groupCode: key.groupCode, code: key.code, updatedBy: userId },
   );
 };
 
@@ -525,9 +520,11 @@ export const lookupCommonCodesByGroupCode = async (
        COALESCE(cci.code_name, cc.code_name) AS display_name,
        cc.sort_order
      FROM common_code cc
-     INNER JOIN common_code_group ccg ON cc.group_id = ccg.group_id
+     INNER JOIN common_code_group ccg ON cc.group_code = ccg.group_code
      LEFT JOIN common_code_i18n cci
-       ON cc.code_id = cci.code_id AND cci.locale = @locale
+       ON cc.group_code = cci.group_code
+      AND cc.code = cci.code
+      AND cci.locale = @locale
      WHERE ccg.group_code = @groupCode
        AND ccg.is_active = 1
        AND cc.is_active = 1

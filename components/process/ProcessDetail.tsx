@@ -20,6 +20,7 @@ import {
 } from "@/lib/query/hooks/useProcess";
 import { Link, useRouter } from "@/lib/i18n/navigation";
 import { formatProcessScope } from "@/lib/utils/process-label";
+import { isEnterpriseScope } from "@/lib/utils/process-scope";
 import type { BpmnModelDto } from "@/types/bpmn";
 import type { TaskAttributeListItem } from "@/types/metadata";
 import type { ProcessHistoryDto, ProcessNodeDto } from "@/types/process";
@@ -83,7 +84,7 @@ export const ProcessDetail = ({
   const { data: history } = useProcessHistory(nodeId);
   const { data: variants } = useProcessVariants(
     nodeId,
-    Boolean(node?.isStandard && !node.variantOf),
+    Boolean(node && !node.variantOf && (node.level === "L3" || node.level === "L4")),
   );
   const { data: bpmnModels, isLoading: isBpmnLoading } = useBpmnList({
     nodeId: node?.level === "L4" ? undefined : nodeId,
@@ -267,9 +268,9 @@ export const ProcessDetail = ({
                     <dd>
                       {node.variantOf
                         ? t("variant.label")
-                        : node.isStandard
-                          ? t("yes")
-                          : t("no")}
+                        : isEnterpriseScope(node.companyCode, node.businessUnitCode)
+                          ? t("scope.enterpriseCommon")
+                          : t("scope.scopedDedicated")}
                     </dd>
                   </div>
                   {node.variantOf && node.standardProcess && (
@@ -295,7 +296,7 @@ export const ProcessDetail = ({
                   )}
                 </dl>
 
-                {node.isStandard && !node.variantOf && (variants?.length ?? 0) > 0 && (
+                {!node.variantOf && (variants?.length ?? 0) > 0 && (
                   <div className="space-y-2 border-t pt-3">
                     <h4 className="text-sm font-medium">{t("variant.listTitle")}</h4>
                     <ul className="space-y-2 text-sm">
@@ -325,8 +326,7 @@ export const ProcessDetail = ({
                   </div>
                 )}
 
-                {node.isStandard &&
-                  !node.variantOf &&
+                {!node.variantOf &&
                   (node.variantCount ?? 0) > 0 &&
                   (node.level === "L3" || node.level === "L4") && (
                     <p className="text-xs text-muted-foreground">

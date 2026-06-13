@@ -272,7 +272,6 @@ export const linkOrCreateBpmnTaskProcess = async (
       description: null,
       status: "DRAFT",
       version: "1.0.0",
-      isStandard: true,
       i18n: {
         ko: {
           name: taskName,

@@ -182,8 +182,28 @@
     @apply relative h-[30px] border-r border-b border-slate-200/90 bg-slate-50 px-2 align-middle text-[11px] font-semibold text-slate-700 dark:border-slate-600/60 dark:bg-slate-800/60 dark:text-slate-200;
   }
 
+  .pams-data-grid-header-cell[data-sorted] {
+    @apply bg-sky-50/80 text-slate-900 dark:bg-sky-950/30 dark:text-slate-50;
+  }
+
+  .pams-data-grid-header-inner {
+    @apply flex w-full min-w-0 items-center gap-1;
+  }
+
   .pams-data-grid-header-label {
-    @apply block truncate text-center;
+    @apply min-w-0 truncate;
+  }
+
+  .pams-data-grid-sort-btn {
+    @apply inline-flex min-w-0 cursor-pointer items-center gap-0.5 select-none hover:text-slate-900 dark:hover:text-slate-50;
+  }
+
+  .pams-data-grid-filter-btn {
+    @apply inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-slate-400 transition-colors outline-none hover:bg-slate-200/70 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700/60 dark:hover:text-slate-300;
+  }
+
+  .pams-data-grid-filter-btn-active {
+    @apply bg-sky-100/70 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300;
   }
 
   .pams-data-grid-resizer {
