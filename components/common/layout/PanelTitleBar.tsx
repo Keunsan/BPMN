@@ -1,5 +1,7 @@
 "use client";
 
+import { panelTitleBarClass } from "@/components/common/layout/panel-styles";
+
 type PanelTitleBarProps = {
   title?: string;
   count?: number;
@@ -23,7 +25,7 @@ export const PanelTitleBar = ({
   }
 
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-3 py-2 dark:border-slate-600/60">
+    <div className={panelTitleBarClass}>
       <div className="flex min-w-0 items-center gap-2">
         {icon ? (
           <span className="inline-flex size-2.5 shrink-0 rounded-[3px] bg-primary" />

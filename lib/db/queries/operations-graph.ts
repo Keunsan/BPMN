@@ -298,6 +298,18 @@ export const collectProcessNeighbors = async (
     }
   }
 
+  if (level === "L4") {
+    const current = await findGraphProcessNode(nodeId);
+    if (current?.parentNodeId) {
+      const parent = await findGraphProcessNode(current.parentNodeId);
+      if (parent?.level === "L3") {
+        const parentNode = toProcessNode(parent);
+        addNode(parentNode);
+        addEdge(parentNode.id, centerId, "CONTAINS");
+      }
+    }
+  }
+
   const predecessors = await listTaskPredecessors(nodeId);
   for (const pred of predecessors) {
     const predNode: OperationsGraphNode = {

@@ -2,10 +2,8 @@
 
 import { useTranslations } from "next-intl";
 
-import { FilterField } from "@/components/common/layout/FilterField";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ProcessTree } from "@/components/process/ProcessTree";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -16,12 +14,15 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   GraphNodeKind,
+  OperationsGraphNode,
   OperationsGraphSummary,
 } from "@/types/operations-graph";
 import { GRAPH_NODE_KINDS } from "@/types/operations-graph";
 
 type GraphExplorerPanelProps = {
   centerNodeId: number | null;
+  centerNode?: OperationsGraphNode;
+  centerKind?: GraphNodeKind;
   onSelectCenter: (nodeId: number, level: "L3" | "L4") => void;
   depth: 1 | 2;
   onDepthChange: (depth: 1 | 2) => void;
@@ -31,17 +32,34 @@ type GraphExplorerPanelProps = {
   isLoading?: boolean;
 };
 
-const legendSwatchClass: Record<GraphNodeKind, string> = {
-  L3: "pams-operations-graph-legend-swatch--l3",
-  TASK: "pams-operations-graph-legend-swatch--task",
-  APPLICATION: "pams-operations-graph-legend-swatch--application",
-  TABLE: "pams-operations-graph-legend-swatch--table",
-  INTERFACE: "pams-operations-graph-legend-swatch--interface",
+const kindMarkClass: Record<GraphNodeKind, string> = {
+  L3: "pams-graph-explorer__kind-mark--l3",
+  TASK: "pams-graph-explorer__kind-mark--task",
+  APPLICATION: "pams-graph-explorer__kind-mark--application",
+  TABLE: "pams-graph-explorer__kind-mark--table",
+  INTERFACE: "pams-graph-explorer__kind-mark--interface",
 };
 
-/** 좌측 탐색·필터·범례·요약 패널 */
+const ExplorerSection = ({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <section className={cn("pams-graph-explorer__section", className)}>
+    <h3 className="pams-graph-explorer__section-title">{title}</h3>
+    {children}
+  </section>
+);
+
+/** 좌측 프로세스 탐색·필터 패널 */
 export const GraphExplorerPanel = ({
   centerNodeId,
+  centerNode,
+  centerKind,
   onSelectCenter,
   depth,
   onDepthChange,
@@ -53,9 +71,38 @@ export const GraphExplorerPanel = ({
   const t = useTranslations("operationsGraph");
 
   return (
-    <div className="flex flex-col gap-4 p-3">
-      <FilterField label={t("explorer.processSelect")}>
-        <div className="max-h-[220px] overflow-auto rounded-md border border-slate-200/80 dark:border-slate-600/60">
+    <div className="pams-graph-explorer">
+      <div className="pams-graph-explorer__context">
+        <span className="pams-graph-explorer__context-label">
+          {t("explorer.contextLabel")}
+        </span>
+        {!centerNodeId ? (
+          <p className="pams-graph-explorer__context-empty">
+            {t("explorer.contextEmpty")}
+          </p>
+        ) : isLoading && !centerNode ? (
+          <p className="pams-graph-explorer__context-meta">
+            {t("explorer.contextLoading")}
+          </p>
+        ) : (
+          <>
+            <p className="pams-graph-explorer__context-title">
+              {centerNode?.label ?? t("explorer.contextLoading")}
+            </p>
+            <p className="pams-graph-explorer__context-meta">
+              {centerNode?.code ? `${centerNode.code} · ` : ""}
+              {centerKind
+                ? t(`nodeKindShort.${centerKind}`)
+                : t("explorer.contextLoading")}
+              {" · "}
+              {depth === 1 ? t("explorer.depth1") : t("explorer.depth2")}
+            </p>
+          </>
+        )}
+      </div>
+
+      <ExplorerSection title={t("explorer.scope")}>
+        <div className="pams-graph-explorer__tree-shell">
           <ProcessTree
             variant="picker"
             selectedId={centerNodeId ?? undefined}
@@ -67,107 +114,115 @@ export const GraphExplorerPanel = ({
             }}
           />
         </div>
-      </FilterField>
-
-      <FilterField label={t("explorer.depth")}>
-        <Select
-          value={String(depth)}
-          onValueChange={(value) => onDepthChange(value === "1" ? 1 : 2)}
-        >
-          <SelectTrigger variant="filter" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">{t("explorer.depth1")}</SelectItem>
-            <SelectItem value="2">{t("explorer.depth2")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </FilterField>
-
-      <div className="space-y-2">
-        <p className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-          {t("explorer.nodeTypeFilter")}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {GRAPH_NODE_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => onNodeKindChange(kind, !nodeKinds[kind])}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors",
-                nodeKinds[kind]
-                  ? "border-primary/30 bg-primary/8 text-foreground"
-                  : "border-border bg-background text-muted-foreground",
-              )}
-            >
-              {t(`nodeKind.${kind}`)}
-            </button>
-          ))}
+        <div className="pams-graph-explorer__depth">
+          <span className="pams-graph-explorer__field-label">
+            {t("explorer.depth")}
+          </span>
+          <Select
+            value={String(depth)}
+            onValueChange={(value) => onDepthChange(value === "1" ? 1 : 2)}
+          >
+            <SelectTrigger variant="filter" className="h-8 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">{t("explorer.depth1")}</SelectItem>
+              <SelectItem value="2">{t("explorer.depth2")}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </div>
+      </ExplorerSection>
 
-      <div className="space-y-2">
-        <p className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-          {t("explorer.legend")}
-        </p>
-        <ul className="space-y-1.5">
-          {GRAPH_NODE_KINDS.map((kind) => (
-            <li key={kind} className="flex items-center gap-2 text-[11px] text-foreground">
-              <span
-                className={cn(
-                  "pams-operations-graph-legend-swatch",
-                  legendSwatchClass[kind],
-                )}
-              />
-              <span>{t(`nodeKind.${kind}`)}</span>
-            </li>
-          ))}
+      <ExplorerSection
+        title={t("explorer.nodeTypeFilter")}
+        className="pams-graph-explorer__section--filters"
+      >
+        <ul className="pams-graph-explorer__filter-list">
+          {GRAPH_NODE_KINDS.map((kind) => {
+            const active = nodeKinds[kind];
+            return (
+              <li key={kind}>
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onNodeKindChange(kind, !active)}
+                  className={cn(
+                    "pams-graph-explorer__filter-row",
+                    active && "pams-graph-explorer__filter-row--active",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pams-graph-explorer__kind-mark",
+                      kindMarkClass[kind],
+                    )}
+                    aria-hidden
+                  />
+                  <span className="pams-graph-explorer__filter-label">
+                    {t(`nodeKind.${kind}`)}
+                  </span>
+                  <span
+                    className={cn(
+                      "pams-graph-explorer__filter-state",
+                      active && "pams-graph-explorer__filter-state--on",
+                    )}
+                    aria-hidden
+                  />
+                </button>
+              </li>
+            );
+          })}
         </ul>
-      </div>
+      </ExplorerSection>
 
-      <div className="space-y-2">
-        <p className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-          {t("explorer.summary")}
-        </p>
-        {isLoading ? (
-          <LoadingSpinner className="py-4" />
+      <ExplorerSection
+        title={t("explorer.summary")}
+        className="pams-graph-explorer__section--summary"
+      >
+        {!centerNodeId ? (
+          <p className="pams-graph-explorer__empty">{t("explorer.summaryEmpty")}</p>
+        ) : isLoading ? (
+          <LoadingSpinner className="py-3" />
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="pams-operations-graph-metric">
-              <span className="text-[10px] text-muted-foreground">
-                {t("explorer.nodeCount")}
-              </span>
-              <span className="text-[14px] font-semibold tabular-nums">
-                {summary?.nodeCount ?? 0}
-              </span>
-            </div>
-            <div className="pams-operations-graph-metric">
-              <span className="text-[10px] text-muted-foreground">
-                {t("explorer.edgeCount")}
-              </span>
-              <span className="text-[14px] font-semibold tabular-nums">
-                {summary?.edgeCount ?? 0}
-              </span>
-            </div>
-            {GRAPH_NODE_KINDS.map((kind) => (
-              <div key={kind} className="pams-operations-graph-metric">
-                <span className="text-[10px] text-muted-foreground">
-                  {t(`nodeKind.${kind}`)}
+          <>
+            <div className="pams-graph-explorer__metric-primary">
+              <div className="pams-graph-explorer__metric-cell">
+                <span className="pams-graph-explorer__metric-label">
+                  {t("explorer.nodeCount")}
                 </span>
-                <span className="text-[13px] font-semibold tabular-nums">
-                  {summary?.countsByKind[kind] ?? 0}
+                <span className="pams-graph-explorer__metric-value">
+                  {summary?.nodeCount ?? 0}
                 </span>
               </div>
-            ))}
-          </div>
+              <div className="pams-graph-explorer__metric-cell">
+                <span className="pams-graph-explorer__metric-label">
+                  {t("explorer.edgeCount")}
+                </span>
+                <span className="pams-graph-explorer__metric-value">
+                  {summary?.edgeCount ?? 0}
+                </span>
+              </div>
+            </div>
+            <div className="pams-graph-explorer__metric-grid">
+              {GRAPH_NODE_KINDS.map((kind) => (
+                <div key={kind} className="pams-graph-explorer__metric-cell">
+                  <span className="pams-graph-explorer__metric-label">
+                    {t(`nodeKindShort.${kind}`)}
+                  </span>
+                  <span className="pams-graph-explorer__metric-value pams-graph-explorer__metric-value--sm">
+                    {summary?.countsByKind[kind] ?? 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {summary?.truncated ? (
+              <p className="pams-graph-explorer__truncated">
+                {t("explorer.truncated")}
+              </p>
+            ) : null}
+          </>
         )}
-        {summary?.truncated ? (
-          <Badge variant="secondary" className="text-[10px]">
-            {t("explorer.truncated")}
-          </Badge>
-        ) : null}
-      </div>
+      </ExplorerSection>
     </div>
   );
 };

@@ -687,6 +687,7 @@
   },
   "operationsGraph": {
     "title": "운영 지식그래프",
+    "description": "프로세스·시스템·데이터 간 운영 관계를 시각적으로 탐색합니다.",
     "panel": {
       "explorer": "탐색",
       "inspector": "상세",
@@ -702,19 +703,35 @@
       "TABLE": "Table",
       "INTERFACE": "Interface"
     },
+    "nodeKindShort": {
+      "L3": "L3",
+      "TASK": "Task",
+      "APPLICATION": "App",
+      "TABLE": "Table",
+      "INTERFACE": "IF"
+    },
+    "nodeCriticalShort": "Critical",
     "explorer": {
+      "contextLabel": "기준 노드",
+      "contextEmpty": "아래 목록에서 L3 또는 Task를 선택하세요.",
+      "contextLoading": "불러오는 중…",
+      "scope": "탐색 범위",
       "processSelect": "프로세스 선택",
       "depth": "탐색 깊이",
       "depth1": "1-hop",
       "depth2": "2-hop",
       "nodeTypeFilter": "노드 유형",
+      "filterHint": "{count}개 유형 표시 중",
       "legend": "범례",
-      "summary": "요약",
+      "summary": "그래프 요약",
+      "summaryEmpty": "프로세스 선택 후 요약이 표시됩니다.",
       "nodeCount": "노드",
       "edgeCount": "엣지",
       "truncated": "일부 노드가 생략되었습니다"
     },
     "toolbar": {
+      "filterGroup": "표시 레이어",
+      "viewGroup": "레이아웃",
       "searchPlaceholder": "노드 검색",
       "toggleGraph": "그래프 표시",
       "graph": "그래프",
@@ -733,22 +750,45 @@
       "emptyTitle": "표시할 그래프가 없습니다",
       "emptyDescription": "좌측에서 L3 또는 Task 프로세스를 선택하세요.",
       "hiddenTitle": "그래프가 숨겨져 있습니다",
-      "hiddenDescription": "툴바에서 그래프 표시를 켜세요."
+      "hiddenDescription": "툴바에서 그래프 표시를 켜세요.",
+      "metaSummary": "노드 {nodes} · 엣지 {edges}"
     },
     "inspector": {
       "emptyTitle": "노드를 선택하세요",
       "emptyDescription": "캔버스에서 노드를 클릭하면 상세 정보가 표시됩니다.",
       "notFound": "선택한 노드를 찾을 수 없습니다.",
       "critical": "Critical",
+      "status": "상태",
+      "importance": "중요도",
+      "importanceCritical": "Critical",
+      "importanceNormal": "일반",
+      "connections": "연결",
+      "connectionSummary": "총 {total} · ↓{incoming} ↑{outgoing}",
+      "noValue": "—",
       "description": "설명",
       "descriptionPlaceholder": "등록된 설명이 없습니다.",
       "relatedNodes": "관련 노드",
       "noRelated": "연결된 노드가 없습니다.",
+      "predecessor": "선행",
+      "successor": "후행",
+      "directionIn": "유입",
+      "directionOut": "유출",
+      "operationsGroup": "운영 정보",
       "impact": "영향도",
       "crud": "CRUD",
       "usage": "사용 현황",
       "incident": "인시던트",
+      "change": "변경 이력",
+      "noData": "연결된 운영 데이터가 없습니다.",
       "placeholderHint": "향후 운영 데이터가 연결됩니다."
+    },
+    "edgeKindShort": {
+      "CONTAINS": "포함",
+      "PRECEDES": "선후행",
+      "USES_SCREEN": "화면",
+      "READS_TABLE": "조회",
+      "WRITES_TABLE": "기록",
+      "INTERFACE": "IF"
     }
   }
 }

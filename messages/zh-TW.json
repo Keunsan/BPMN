@@ -687,6 +687,7 @@
   },
   "operationsGraph": {
     "title": "營運知識圖譜",
+    "description": "視覺化探索流程、系統與資料之間的營運關聯。",
     "panel": {
       "explorer": "探索",
       "inspector": "詳情",
@@ -702,19 +703,35 @@
       "TABLE": "Table",
       "INTERFACE": "Interface"
     },
+    "nodeKindShort": {
+      "L3": "L3",
+      "TASK": "Task",
+      "APPLICATION": "App",
+      "TABLE": "Table",
+      "INTERFACE": "IF"
+    },
+    "nodeCriticalShort": "Critical",
     "explorer": {
+      "contextLabel": "基準節點",
+      "contextEmpty": "請從下方清單選擇 L3 或 Task。",
+      "contextLoading": "載入中…",
+      "scope": "探索範圍",
       "processSelect": "流程選擇",
       "depth": "探索深度",
       "depth1": "1-hop",
       "depth2": "2-hop",
       "nodeTypeFilter": "節點類型",
+      "filterHint": "顯示 {count} 種類型",
       "legend": "圖例",
-      "summary": "摘要",
+      "summary": "圖譜摘要",
+      "summaryEmpty": "選擇流程後顯示摘要。",
       "nodeCount": "節點",
       "edgeCount": "邊",
       "truncated": "部分節點已省略"
     },
     "toolbar": {
+      "filterGroup": "顯示圖層",
+      "viewGroup": "版面配置",
       "searchPlaceholder": "搜尋節點",
       "toggleGraph": "顯示圖譜",
       "graph": "圖譜",
@@ -733,22 +750,45 @@
       "emptyTitle": "沒有可顯示的圖譜",
       "emptyDescription": "請在左側選擇 L3 或 Task 流程。",
       "hiddenTitle": "圖譜已隱藏",
-      "hiddenDescription": "請從工具列開啟圖譜顯示。"
+      "hiddenDescription": "請從工具列開啟圖譜顯示。",
+      "metaSummary": "節點 {nodes} · 邊 {edges}"
     },
     "inspector": {
       "emptyTitle": "請選擇節點",
       "emptyDescription": "點擊畫布上的節點以查看詳情。",
       "notFound": "找不到所選節點。",
       "critical": "Critical",
+      "status": "狀態",
+      "importance": "重要度",
+      "importanceCritical": "Critical",
+      "importanceNormal": "一般",
+      "connections": "連接",
+      "connectionSummary": "共 {total} · ↓{incoming} ↑{outgoing}",
+      "noValue": "—",
       "description": "說明",
       "descriptionPlaceholder": "尚未登錄說明。",
       "relatedNodes": "相關節點",
       "noRelated": "沒有連接的節點。",
+      "predecessor": "前置",
+      "successor": "後續",
+      "directionIn": "流入",
+      "directionOut": "流出",
+      "operationsGroup": "營運資訊",
       "impact": "影響度",
       "crud": "CRUD",
       "usage": "使用現況",
       "incident": "事件",
+      "change": "變更紀錄",
+      "noData": "尚未連接營運資料。",
       "placeholderHint": "後續將連接營運資料。"
+    },
+    "edgeKindShort": {
+      "CONTAINS": "包含",
+      "PRECEDES": "前後",
+      "USES_SCREEN": "畫面",
+      "READS_TABLE": "讀取",
+      "WRITES_TABLE": "寫入",
+      "INTERFACE": "IF"
     }
   }
 }

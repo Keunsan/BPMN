@@ -17,7 +17,9 @@ import { GraphToolbar } from "@/components/analysis/operations-graph/GraphToolba
 import {
   CollapsibleSidePanel,
   PanelSplitter,
+  pamsContentPanelClass,
 } from "@/components/common/layout";
+import { cn } from "@/lib/utils";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useOperationsGraph } from "@/lib/query/hooks/useOperationsGraph";
 import type {
@@ -101,6 +103,7 @@ export const OperationsGraphWorkspace = () => {
     minWidth: 220,
     maxWidth: 480,
     enabled: !rightCollapsed,
+    side: "right",
   });
 
   const graphQuery = useMemo<OperationsGraphQuery | null>(() => {
@@ -146,7 +149,7 @@ export const OperationsGraphWorkspace = () => {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 gap-1.5">
+    <div className="pams-ops-graph-workspace flex min-h-0 flex-1 overflow-hidden">
       <CollapsibleSidePanel
         side="left"
         collapsed={leftCollapsed}
@@ -154,9 +157,12 @@ export const OperationsGraphWorkspace = () => {
         width={leftPanel.width}
         title={t("panel.explorer")}
         bodyClassName="p-0"
+        className="pams-ops-graph-side-panel"
       >
         <GraphExplorerPanel
           centerNodeId={centerNodeId}
+          centerNode={graph?.nodes.find((node) => node.id === graph.centerNodeId)}
+          centerKind={centerKind as GraphNodeKind}
           onSelectCenter={handleSelectCenter}
           depth={depth === 1 ? 1 : 2}
           onDepthChange={(value) => void setDepth(value)}
@@ -178,7 +184,12 @@ export const OperationsGraphWorkspace = () => {
         />
       ) : null}
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        className={cn(
+          pamsContentPanelClass,
+          "pams-ops-graph-center-panel flex min-h-0 min-w-0 flex-1 flex-col",
+        )}
+      >
         <GraphToolbar
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
@@ -225,6 +236,7 @@ export const OperationsGraphWorkspace = () => {
         width={rightPanel.width}
         title={t("panel.inspector")}
         bodyClassName="p-0"
+        className="pams-ops-graph-side-panel"
       >
         <GraphInspectorPanel
           graph={graph}

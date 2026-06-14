@@ -687,6 +687,7 @@
   },
   "operationsGraph": {
     "title": "Operations Knowledge Graph",
+    "description": "Visually explore operational relationships across processes, systems, and data.",
     "panel": {
       "explorer": "Explorer",
       "inspector": "Inspector",
@@ -702,19 +703,35 @@
       "TABLE": "Table",
       "INTERFACE": "Interface"
     },
+    "nodeKindShort": {
+      "L3": "L3",
+      "TASK": "Task",
+      "APPLICATION": "App",
+      "TABLE": "Table",
+      "INTERFACE": "IF"
+    },
+    "nodeCriticalShort": "Critical",
     "explorer": {
+      "contextLabel": "Center node",
+      "contextEmpty": "Select an L3 or Task from the list below.",
+      "contextLoading": "Loading…",
+      "scope": "Traversal scope",
       "processSelect": "Process selection",
       "depth": "Traversal depth",
       "depth1": "1-hop",
       "depth2": "2-hop",
       "nodeTypeFilter": "Node types",
+      "filterHint": "Showing {count} types",
       "legend": "Legend",
-      "summary": "Summary",
+      "summary": "Graph summary",
+      "summaryEmpty": "Summary appears after a process is selected.",
       "nodeCount": "Nodes",
       "edgeCount": "Edges",
       "truncated": "Some nodes were omitted"
     },
     "toolbar": {
+      "filterGroup": "Display layers",
+      "viewGroup": "Layout",
       "searchPlaceholder": "Search nodes",
       "toggleGraph": "Toggle graph",
       "graph": "Graph",
@@ -733,22 +750,45 @@
       "emptyTitle": "No graph to display",
       "emptyDescription": "Select an L3 or Task process on the left.",
       "hiddenTitle": "Graph is hidden",
-      "hiddenDescription": "Enable graph display from the toolbar."
+      "hiddenDescription": "Enable graph display from the toolbar.",
+      "metaSummary": "{nodes} nodes · {edges} edges"
     },
     "inspector": {
       "emptyTitle": "Select a node",
       "emptyDescription": "Click a node on the canvas to view details.",
       "notFound": "Selected node was not found.",
       "critical": "Critical",
+      "status": "Status",
+      "importance": "Priority",
+      "importanceCritical": "Critical",
+      "importanceNormal": "Normal",
+      "connections": "Links",
+      "connectionSummary": "{total} total · ↓{incoming} ↑{outgoing}",
+      "noValue": "—",
       "description": "Description",
       "descriptionPlaceholder": "No description registered.",
       "relatedNodes": "Related nodes",
       "noRelated": "No connected nodes.",
+      "predecessor": "Predecessor",
+      "successor": "Successor",
+      "directionIn": "Inbound",
+      "directionOut": "Outbound",
+      "operationsGroup": "Operations",
       "impact": "Impact",
       "crud": "CRUD",
       "usage": "Usage",
       "incident": "Incident",
+      "change": "Change history",
+      "noData": "No operational data linked.",
       "placeholderHint": "Operational data will be connected later."
+    },
+    "edgeKindShort": {
+      "CONTAINS": "Contains",
+      "PRECEDES": "Flow",
+      "USES_SCREEN": "Screen",
+      "READS_TABLE": "Read",
+      "WRITES_TABLE": "Write",
+      "INTERFACE": "IF"
     }
   }
 }

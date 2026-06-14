@@ -1,15 +1,10 @@
 "use client";
 
-import {
-  Download,
-  GitBranch,
-  LayoutGrid,
-  Search,
-} from "lucide-react";
+import { Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { panelTitleBarShellClass } from "@/components/common/layout/panel-styles";
 import { SearchBar } from "@/components/common/SearchBar";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -19,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { GraphViewMode } from "@/types/operations-graph";
+
+import "./operations-graph.css";
 
 type GraphToolbarProps = {
   searchTerm: string;
@@ -37,31 +34,28 @@ type GraphToolbarProps = {
   exportDisabled?: boolean;
 };
 
-const ToggleButton = ({
-  pressed,
-  onClick,
-  children,
-  title,
-}: {
+type LayerToggleProps = {
   pressed: boolean;
   onClick: () => void;
   children: React.ReactNode;
   title: string;
-}) => (
-  <Button
+};
+
+const LayerToggle = ({
+  pressed,
+  onClick,
+  children,
+  title,
+}: LayerToggleProps) => (
+  <button
     type="button"
-    variant="outline"
-    size="sm"
-    className={cn(
-      "pams-page-action-outline",
-      pressed && "border-primary/40 bg-primary/8 text-foreground",
-    )}
+    className="pams-graph-toolbar__toggle"
     aria-pressed={pressed}
-    onClick={onClick}
     title={title}
+    onClick={onClick}
   >
     {children}
-  </Button>
+  </button>
 );
 
 /** 중앙 캔버스 상단 도구바 */
@@ -84,81 +78,96 @@ export const GraphToolbar = ({
   const t = useTranslations("operationsGraph");
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200/80 px-3 py-2 dark:border-slate-600/60">
-      <SearchBar
-        value={searchTerm}
-        onChange={onSearchChange}
-        placeholder={t("toolbar.searchPlaceholder")}
-        variant="filter"
-        className="w-[200px]"
-      />
+    <div className={cn(panelTitleBarShellClass, "pams-graph-toolbar")}>
+      <div className="pams-graph-toolbar__track">
+        <div className="pams-graph-toolbar__group">
+          <SearchBar
+            value={searchTerm}
+            onChange={onSearchChange}
+            placeholder={t("toolbar.searchPlaceholder")}
+            variant="filter"
+            className="pams-graph-toolbar__search"
+          />
+        </div>
 
-      <div className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+        <div className="pams-graph-toolbar__divider" aria-hidden />
 
-      <ToggleButton
-        pressed={showGraph}
-        onClick={() => onShowGraphChange(!showGraph)}
-        title={t("toolbar.toggleGraph")}
-      >
-        <LayoutGrid />
-        {t("toolbar.graph")}
-      </ToggleButton>
+        <div
+          className="pams-graph-toolbar__segment"
+          role="group"
+          aria-label={t("toolbar.filterGroup")}
+        >
+          <LayerToggle
+            pressed={showGraph}
+            onClick={() => onShowGraphChange(!showGraph)}
+            title={t("toolbar.toggleGraph")}
+          >
+            {t("toolbar.graph")}
+          </LayerToggle>
+          <LayerToggle
+            pressed={showInterfaces}
+            onClick={() => onShowInterfacesChange(!showInterfaces)}
+            title={t("toolbar.toggleInterfaces")}
+          >
+            {t("toolbar.interfaces")}
+          </LayerToggle>
+          <LayerToggle
+            pressed={showTables}
+            onClick={() => onShowTablesChange(!showTables)}
+            title={t("toolbar.toggleTables")}
+          >
+            {t("toolbar.tables")}
+          </LayerToggle>
+          <LayerToggle
+            pressed={highlightCritical}
+            onClick={() => onHighlightCriticalChange(!highlightCritical)}
+            title={t("toolbar.toggleCritical")}
+          >
+            {t("toolbar.critical")}
+          </LayerToggle>
+        </div>
 
-      <ToggleButton
-        pressed={showInterfaces}
-        onClick={() => onShowInterfacesChange(!showInterfaces)}
-        title={t("toolbar.toggleInterfaces")}
-      >
-        <GitBranch />
-        {t("toolbar.interfaces")}
-      </ToggleButton>
+        <div className="pams-graph-toolbar__divider" aria-hidden />
 
-      <ToggleButton
-        pressed={showTables}
-        onClick={() => onShowTablesChange(!showTables)}
-        title={t("toolbar.toggleTables")}
-      >
-        <Search className="size-3.5" />
-        {t("toolbar.tables")}
-      </ToggleButton>
+        <div
+          className="pams-graph-toolbar__group"
+          aria-label={t("toolbar.viewGroup")}
+        >
+          <Select
+            value={viewMode}
+            onValueChange={(value) =>
+              onViewModeChange(value as GraphViewMode)
+            }
+          >
+            <SelectTrigger
+              variant="filter"
+              className="pams-graph-toolbar__select"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent variant="filter">
+              <SelectItem variant="filter" value="hierarchical">
+                {t("toolbar.viewHierarchical")}
+              </SelectItem>
+              <SelectItem variant="filter" value="radial">
+                {t("toolbar.viewRadial")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-      <ToggleButton
-        pressed={highlightCritical}
-        onClick={() => onHighlightCriticalChange(!highlightCritical)}
-        title={t("toolbar.toggleCritical")}
-      >
-        {t("toolbar.critical")}
-      </ToggleButton>
-
-      <Select
-        value={viewMode}
-        onValueChange={(value) =>
-          onViewModeChange(value as GraphViewMode)
-        }
-      >
-        <SelectTrigger variant="filter" size="sm" className="w-[132px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="hierarchical">
-            {t("toolbar.viewHierarchical")}
-          </SelectItem>
-          <SelectItem value="radial">{t("toolbar.viewRadial")}</SelectItem>
-        </SelectContent>
-      </Select>
-
-      <div className="ml-auto flex items-center gap-1.5">
-        <Button
+      <div className="pams-graph-toolbar__actions">
+        <button
           type="button"
-          variant="outline"
-          size="sm"
-          className="pams-page-action-outline"
+          className="pams-graph-toolbar__export"
           onClick={onExport}
           disabled={exportDisabled}
+          title={t("toolbar.export")}
         >
-          <Download />
+          <Download aria-hidden />
           {t("toolbar.export")}
-        </Button>
+        </button>
       </div>
     </div>
   );

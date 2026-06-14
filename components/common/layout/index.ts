@@ -12,6 +12,8 @@ export { PanelTitleBar } from "@/components/common/layout/PanelTitleBar";
 export {
   filterPanelFieldStackClass,
   listPageContentBodyClass,
+  panelTitleBarClass,
+  panelTitleBarShellClass,
   pamsContentPanelClass,
   pamsPanelCardClass,
 } from "@/components/common/layout/panel-styles";

@@ -74,6 +74,15 @@ const toText = (value: unknown): string | null => {
   return text.length > 0 ? text : null;
 };
 
+/** 엑셀 헤더 접두사로 컬럼 값을 조회한다 (줄바꿈·CR/LF 차이 허용) */
+const resolveColumn = (
+  row: Record<string, unknown>,
+  prefix: string,
+): string | null => {
+  const key = Object.keys(row).find((name) => name.startsWith(prefix));
+  return key ? toText(row[key]) : null;
+};
+
 /** 엑셀 파일을 파싱한다 */
 const loadExcelRows = (): { sheet1: Sheet1Row[]; sheet2: Sheet2Row[] } => {
   const buffer = readFileSync(EXCEL_PATH);
@@ -113,8 +122,8 @@ const loadExcelRows = (): { sheet1: Sheet1Row[]; sheet2: Sheet2Row[] } => {
         l3: toText(row.L3) ?? "",
         l4: toText(row.L4) ?? "",
         definition: toText(row["정의"]),
-        inputInfo: toText(row["Input 정보\n(산출물, 주요 Data 등)"]),
-        outputInfo: toText(row["Output 정보\n(산출물, 주요 Data 등)"]),
+        inputInfo: resolveColumn(row, "Input 정보"),
+        outputInfo: resolveColumn(row, "Output 정보"),
         sortOrder,
         l3Seq,
       };
@@ -228,7 +237,7 @@ const insertTaskAttribute = async (
 ): Promise<void> => {
   const result = await tx(
     `INSERT INTO task_attribute (
-      node_id, definition, input_data_desc, output_deliverable, version
+      node_id, definition, input_deliverable, output_deliverable, version
     )
     OUTPUT INSERTED.attr_id
     VALUES (
@@ -251,7 +260,7 @@ const insertTaskAttribute = async (
 
   await tx(
     `INSERT INTO task_attribute_i18n (
-      attr_id, locale, definition, input_data_desc, output_deliverable
+      attr_id, locale, definition, input_deliverable, output_deliverable
     )
     VALUES (
       @attrId, 'ko', @definition, @inputInfo, @outputInfo
@@ -276,7 +285,7 @@ const insertTaskPredecessor = async (
       node_id, predecessor_node_id, condition_desc, is_mandatory
     )
     VALUES (
-      @nodeId, @predecessorNodeId, N'SEQ 직전 Task', 1
+      @nodeId, @predecessorNodeId, NULL, 1
     )`,
     { nodeId, predecessorNodeId },
   );

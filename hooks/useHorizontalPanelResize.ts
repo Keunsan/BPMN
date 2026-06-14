@@ -16,6 +16,8 @@ type UseHorizontalPanelResizeOptions = {
   minWidth: number;
   maxWidth: number;
   enabled?: boolean;
+  /** left — 분할선이 패널 오른쪽, right — 분할선이 패널 왼쪽 */
+  side?: "left" | "right";
 };
 
 const readStoredWidth = (
@@ -42,6 +44,7 @@ export const useHorizontalPanelResize = ({
   minWidth,
   maxWidth,
   enabled = true,
+  side = "left",
 }: UseHorizontalPanelResizeOptions) => {
   const [width, setWidth] = useState(() =>
     readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth),
@@ -69,9 +72,11 @@ export const useHorizontalPanelResize = ({
         return;
       }
       const delta = event.clientX - resizeRef.current.startX;
-      setWidth(
-        clamp(resizeRef.current.startW + delta, minWidth, maxWidth),
-      );
+      const nextWidth =
+        side === "right"
+          ? resizeRef.current.startW - delta
+          : resizeRef.current.startW + delta;
+      setWidth(clamp(nextWidth, minWidth, maxWidth));
     };
 
     const handlePointerUp = () => {
@@ -95,7 +100,7 @@ export const useHorizontalPanelResize = ({
       document.body.style.removeProperty("user-select");
       document.body.style.removeProperty("cursor");
     };
-  }, [isResizing, maxWidth, minWidth, storageKey]);
+  }, [isResizing, maxWidth, minWidth, side, storageKey]);
 
   const handleResizePointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,

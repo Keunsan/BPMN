@@ -3,8 +3,9 @@ import type { Edge, Node } from "@xyflow/react";
 
 import type { GraphViewMode } from "@/types/operations-graph";
 
-const NODE_WIDTH = 148;
-const NODE_HEIGHT = 52;
+/** 노드 카드 실측 크기 — dagre 배치 기준 */
+export const GRAPH_NODE_WIDTH = 168;
+export const GRAPH_NODE_HEIGHT = 64;
 
 /** dagre 기반 노드 좌표 계산 */
 export const layoutGraphElements = (
@@ -16,14 +17,17 @@ export const layoutGraphElements = (
   graph.setDefaultEdgeLabel(() => ({}));
   graph.setGraph({
     rankdir: viewMode === "hierarchical" ? "LR" : "TB",
-    nodesep: 48,
-    ranksep: 72,
-    marginx: 32,
-    marginy: 32,
+    nodesep: 52,
+    ranksep: 80,
+    marginx: 40,
+    marginy: 40,
   });
 
   for (const node of nodes) {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    graph.setNode(node.id, {
+      width: GRAPH_NODE_WIDTH,
+      height: GRAPH_NODE_HEIGHT,
+    });
   }
 
   for (const edge of edges) {
@@ -37,8 +41,8 @@ export const layoutGraphElements = (
     return {
       ...node,
       position: {
-        x: position.x - NODE_WIDTH / 2,
-        y: position.y - NODE_HEIGHT / 2,
+        x: position.x - GRAPH_NODE_WIDTH / 2,
+        y: position.y - GRAPH_NODE_HEIGHT / 2,
       },
     };
   });

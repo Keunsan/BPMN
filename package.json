@@ -12,6 +12,7 @@
     "db:import-screens": "tsx scripts/import-system-screens.ts",
     "db:reset-operational": "tsx scripts/reset-operational-data.ts",
     "db:migrate-process-task": "tsx scripts/migrate-process-task.ts",
+    "db:update-process-task": "tsx scripts/update-process-task-migration.ts",
     "db:generate-bpmn-svg": "tsx scripts/generate-bpmn-svg.ts"
   },
   "dependencies": {

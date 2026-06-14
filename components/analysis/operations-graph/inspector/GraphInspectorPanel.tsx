@@ -1,14 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 
 import { EmptyState } from "@/components/common/EmptyState";
-import { StatusBadge } from "@/components/common/StatusBadge";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ProcessStatus } from "@/types/process";
 import type {
   GraphNodeKind,
+  OperationsGraphEdge,
   OperationsGraphNode,
   OperationsGraphResult,
 } from "@/types/operations-graph";
@@ -24,137 +24,301 @@ const PROCESS_STATUSES: ProcessStatus[] = [
 const isProcessStatus = (value: string): value is ProcessStatus =>
   PROCESS_STATUSES.includes(value as ProcessStatus);
 
+const kindAccentClass: Record<GraphNodeKind, string> = {
+  L3: "pams-graph-inspector__kind-mark--l3",
+  TASK: "pams-graph-inspector__kind-mark--task",
+  APPLICATION: "pams-graph-inspector__kind-mark--application",
+  TABLE: "pams-graph-inspector__kind-mark--table",
+  INTERFACE: "pams-graph-inspector__kind-mark--interface",
+};
+
 type GraphInspectorPanelProps = {
   graph?: OperationsGraphResult;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 };
 
+type RelatedEntry = {
+  node: OperationsGraphNode;
+  edgeKind: OperationsGraphEdge["kind"];
+  direction: "in" | "out";
+};
+
+const findRelatedEntries = (
+  graph: OperationsGraphResult,
+  nodeId: string,
+): RelatedEntry[] => {
+  const entries: RelatedEntry[] = [];
+
+  for (const edge of graph.edges) {
+    if (edge.source === nodeId) {
+      const node = graph.nodes.find((item) => item.id === edge.target);
+      if (node) {
+        entries.push({ node, edgeKind: edge.kind, direction: "out" });
+      }
+    }
+    if (edge.target === nodeId) {
+      const node = graph.nodes.find((item) => item.id === edge.source);
+      if (node) {
+        entries.push({ node, edgeKind: edge.kind, direction: "in" });
+      }
+    }
+  }
+
+  return entries.sort((a, b) => {
+    if (a.direction !== b.direction) {
+      return a.direction === "in" ? -1 : 1;
+    }
+    if (a.edgeKind !== b.edgeKind) {
+      const rank = (entry: RelatedEntry) => {
+        if (entry.edgeKind === "CONTAINS" && entry.direction === "in") {
+          return 0;
+        }
+        if (entry.edgeKind === "PRECEDES") {
+          return 1;
+        }
+        return 2;
+      };
+      return rank(a) - rank(b);
+    }
+    return a.node.label.localeCompare(b.node.label, "ko");
+  });
+};
+
+const getRelationLabel = (
+  edgeKind: OperationsGraphEdge["kind"],
+  direction: "in" | "out",
+  t: (key: string) => string,
+): string => {
+  if (edgeKind === "PRECEDES") {
+    return direction === "in"
+      ? t("inspector.predecessor")
+      : t("inspector.successor");
+  }
+
+  const directionLabel =
+    direction === "in"
+      ? t("inspector.directionIn")
+      : t("inspector.directionOut");
+
+  return `${t(`edgeKindShort.${edgeKind}`)} · ${directionLabel}`;
+};
+
+const countConnections = (graph: OperationsGraphResult, nodeId: string) => {
+  let incoming = 0;
+  let outgoing = 0;
+
+  for (const edge of graph.edges) {
+    if (edge.source === nodeId) {
+      outgoing += 1;
+    }
+    if (edge.target === nodeId) {
+      incoming += 1;
+    }
+  }
+
+  return { incoming, outgoing, total: incoming + outgoing };
+};
+
 const InspectorSection = ({
   title,
+  count,
   children,
+  className,
 }: {
   title: string;
+  count?: number;
   children: React.ReactNode;
+  className?: string;
 }) => (
-  <section className="pams-operations-graph-inspector-section px-3 py-3">
-    <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-      {title}
-    </h3>
+  <section className={cn("pams-graph-inspector__section", className)}>
+    <div className="pams-graph-inspector__section-head">
+      <h3 className="pams-graph-inspector__section-title">{title}</h3>
+      {count !== undefined ? (
+        <span className="pams-graph-inspector__section-count">
+          {count.toLocaleString()}
+        </span>
+      ) : null}
+    </div>
     {children}
   </section>
 );
 
-const PlaceholderRows = ({ count = 2 }: { count?: number }) => (
-  <div className="space-y-1.5">
-    {Array.from({ length: count }).map((_, index) => (
-      <div
-        key={index}
-        className="h-7 rounded-md border border-dashed border-slate-200/80 bg-slate-50/50 dark:border-slate-600/50 dark:bg-slate-900/30"
-      />
-    ))}
+const MetricItem = ({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: "default" | "critical" | "muted";
+}) => (
+  <div className="pams-graph-inspector__metric">
+    <dt className="pams-graph-inspector__metric-label">{label}</dt>
+    <dd
+      className={cn(
+        "pams-graph-inspector__metric-value",
+        tone === "critical" && "pams-graph-inspector__metric-value--critical",
+        tone === "muted" && "pams-graph-inspector__metric-value--muted",
+      )}
+    >
+      {value}
+    </dd>
   </div>
 );
 
-const findRelatedNodes = (
-  graph: OperationsGraphResult,
-  nodeId: string,
-): OperationsGraphNode[] => {
-  const relatedIds = new Set<string>();
-  for (const edge of graph.edges) {
-    if (edge.source === nodeId) {
-      relatedIds.add(edge.target);
-    }
-    if (edge.target === nodeId) {
-      relatedIds.add(edge.source);
-    }
-  }
-  return graph.nodes.filter((node) => relatedIds.has(node.id));
-};
+const ExtensionPlaceholder = ({ hint }: { hint: string }) => (
+  <p className="pams-graph-inspector__empty">{hint}</p>
+);
 
-/** 우측 노드 상세·관련 정보 패널 */
+/** 우측 노드 Inspector — 선택 노드 상세·운영 메타 */
 export const GraphInspectorPanel = ({
   graph,
   selectedNodeId,
   onSelectNode,
 }: GraphInspectorPanelProps) => {
   const t = useTranslations("operationsGraph");
+  const ts = useTranslations("status");
+
+  const node = useMemo(
+    () => graph?.nodes.find((item) => item.id === selectedNodeId),
+    [graph, selectedNodeId],
+  );
+
+  const relatedEntries = useMemo(
+    () =>
+      graph && selectedNodeId
+        ? findRelatedEntries(graph, selectedNodeId)
+        : [],
+    [graph, selectedNodeId],
+  );
+
+  const connections = useMemo(
+    () =>
+      graph && selectedNodeId
+        ? countConnections(graph, selectedNodeId)
+        : { incoming: 0, outgoing: 0, total: 0 },
+    [graph, selectedNodeId],
+  );
 
   if (!selectedNodeId || !graph) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
+      <div className="pams-graph-inspector pams-graph-inspector--empty">
         <EmptyState
           title={t("inspector.emptyTitle")}
           description={t("inspector.emptyDescription")}
+          className="py-10"
         />
       </div>
     );
   }
 
-  const node = graph.nodes.find((item) => item.id === selectedNodeId);
   if (!node) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
-        <EmptyState title={t("inspector.notFound")} />
+      <div className="pams-graph-inspector pams-graph-inspector--empty">
+        <EmptyState title={t("inspector.notFound")} className="py-10" />
       </div>
     );
   }
 
-  const relatedNodes = findRelatedNodes(graph, selectedNodeId);
+  const showStatus = node.status ? isProcessStatus(node.status) : false;
+  const description = node.meta?.description
+    ? String(node.meta.description)
+    : null;
 
   return (
-    <div className="flex flex-col">
-      <div className="border-b border-slate-200/80 px-3 py-3 dark:border-slate-600/60">
-        <div className="mb-2 flex items-center gap-2">
-          <Badge variant="secondary" className="text-[10px]">
+    <div className="pams-graph-inspector">
+      <header className="pams-graph-inspector__hero">
+        <div className="pams-graph-inspector__hero-top">
+          <span
+            className={cn(
+              "pams-graph-inspector__kind-mark",
+              kindAccentClass[node.kind as GraphNodeKind],
+            )}
+            aria-hidden
+          />
+          <span className="pams-graph-inspector__kind-label">
             {t(`nodeKind.${node.kind as GraphNodeKind}`)}
-          </Badge>
-          {node.status && isProcessStatus(node.status) ? (
-            <StatusBadge status={node.status} />
-          ) : null}
-          {node.isCritical ? (
-            <Badge variant="destructive" className="text-[10px]">
-              {t("inspector.critical")}
-            </Badge>
-          ) : null}
+          </span>
         </div>
-        <h2 className="text-[14px] font-semibold leading-snug text-foreground">
-          {node.label}
-        </h2>
+
+        <h2 className="pams-graph-inspector__title">{node.label}</h2>
+
         {node.code ? (
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            {node.code}
-          </p>
+          <p className="pams-graph-inspector__code">{node.code}</p>
         ) : null}
-      </div>
+
+        <dl className="pams-graph-inspector__metrics">
+          <MetricItem
+            label={t("inspector.status")}
+            value={
+              showStatus ? ts(node.status as ProcessStatus) : t("inspector.noValue")
+            }
+            tone={showStatus ? "default" : "muted"}
+          />
+          <MetricItem
+            label={t("inspector.importance")}
+            value={
+              node.isCritical
+                ? t("inspector.importanceCritical")
+                : t("inspector.importanceNormal")
+            }
+            tone={node.isCritical ? "critical" : "muted"}
+          />
+          <MetricItem
+            label={t("inspector.connections")}
+            value={t("inspector.connectionSummary", {
+              total: connections.total,
+              incoming: connections.incoming,
+              outgoing: connections.outgoing,
+            })}
+          />
+        </dl>
+      </header>
 
       <InspectorSection title={t("inspector.description")}>
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          {node.meta?.description
-            ? String(node.meta.description)
-            : t("inspector.descriptionPlaceholder")}
+        <p
+          className={cn(
+            "pams-graph-inspector__description",
+            !description && "pams-graph-inspector__description--empty",
+          )}
+        >
+          {description ?? t("inspector.descriptionPlaceholder")}
         </p>
       </InspectorSection>
 
-      <InspectorSection title={t("inspector.relatedNodes")}>
-        {relatedNodes.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">
-            {t("inspector.noRelated")}
-          </p>
+      <InspectorSection
+        title={t("inspector.relatedNodes")}
+        count={relatedEntries.length}
+      >
+        {relatedEntries.length === 0 ? (
+          <p className="pams-graph-inspector__empty">{t("inspector.noRelated")}</p>
         ) : (
-          <ul className="space-y-1">
-            {relatedNodes.map((related) => (
-              <li key={related.id}>
+          <ul className="pams-graph-inspector__related-list">
+            {relatedEntries.map(({ node: related, edgeKind, direction }) => (
+              <li key={`${related.id}-${direction}-${edgeKind}`}>
                 <button
                   type="button"
                   onClick={() => onSelectNode(related.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-md border border-slate-200/80 px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-muted/50 dark:border-slate-600/60",
-                  )}
+                  className="pams-graph-inspector__related-row"
                 >
-                  <span className="truncate font-medium">{related.label}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {t(`nodeKind.${related.kind}`)}
+                  <span
+                    className={cn(
+                      "pams-graph-inspector__kind-mark pams-graph-inspector__kind-mark--sm",
+                      kindAccentClass[related.kind],
+                    )}
+                    aria-hidden
+                  />
+                  <span className="pams-graph-inspector__related-body">
+                    <span className="pams-graph-inspector__related-label">
+                      {related.label}
+                    </span>
+                    <span className="pams-graph-inspector__related-meta">
+                      {t(`nodeKindShort.${related.kind}`)}
+                      {related.code ? ` · ${related.code}` : ""}
+                      {" · "}
+                      {getRelationLabel(edgeKind, direction, t)}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -163,23 +327,28 @@ export const GraphInspectorPanel = ({
         )}
       </InspectorSection>
 
-      <InspectorSection title={t("inspector.impact")}>
-        <PlaceholderRows />
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          {t("inspector.placeholderHint")}
-        </p>
-      </InspectorSection>
+      <div className="pams-graph-inspector__group-label">
+        {t("inspector.operationsGroup")}
+      </div>
 
-      <InspectorSection title={t("inspector.crud")}>
-        <PlaceholderRows count={3} />
+      <InspectorSection title={t("inspector.impact")}>
+        <ExtensionPlaceholder hint={t("inspector.noData")} />
       </InspectorSection>
 
       <InspectorSection title={t("inspector.usage")}>
-        <PlaceholderRows count={2} />
+        <ExtensionPlaceholder hint={t("inspector.noData")} />
+      </InspectorSection>
+
+      <InspectorSection title={t("inspector.crud")}>
+        <ExtensionPlaceholder hint={t("inspector.noData")} />
       </InspectorSection>
 
       <InspectorSection title={t("inspector.incident")}>
-        <PlaceholderRows count={1} />
+        <ExtensionPlaceholder hint={t("inspector.noData")} />
+      </InspectorSection>
+
+      <InspectorSection title={t("inspector.change")}>
+        <ExtensionPlaceholder hint={t("inspector.noData")} />
       </InspectorSection>
     </div>
   );

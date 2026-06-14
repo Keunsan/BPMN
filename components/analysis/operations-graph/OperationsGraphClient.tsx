@@ -12,7 +12,11 @@ export const OperationsGraphClient = () => {
 
   return (
     <ListPageLayout>
-      <PageHeader title={t("title")} icon={Network} />
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        icon={Network}
+      />
       <OperationsGraphWorkspace />
     </ListPageLayout>
   );
