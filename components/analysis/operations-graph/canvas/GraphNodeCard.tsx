@@ -37,8 +37,9 @@ const taskKindClassMap: Record<"TASK", string> = {
   TASK: "pams-operations-graph-node-card--kind-task",
 };
 
-const l3KindClassMap: Record<"L3", string> = {
+const l3KindClassMap: Record<"L3" | "E2E", string> = {
   L3: "pams-operations-graph-node-card--kind-l3",
+  E2E: "pams-operations-graph-node-card--kind-e2e",
 };
 
 const resourceKindClassMap: Record<
@@ -139,8 +140,8 @@ const GraphProcessFlowNodeCard = ({
   kind,
   kindClassMap,
 }: NodeProps<Node<GraphNodeData>> & {
-  kind: "TASK" | "L3";
-  kindClassMap: Record<"TASK" | "L3", string>;
+  kind: "TASK" | "L3" | "E2E";
+  kindClassMap: Record<"TASK" | "L3" | "E2E", string>;
 }) => {
   const t = useTranslations("operationsGraph");
   const ts = useTranslations("status");
@@ -225,9 +226,21 @@ const GraphL3FlowNodeCard = (props: NodeProps<Node<GraphNodeData>>) => (
   />
 );
 
+const GraphE2eFlowNodeCard = (props: NodeProps<Node<GraphNodeData>>) => (
+  <GraphProcessFlowNodeCard
+    {...props}
+    kind="E2E"
+    kindClassMap={l3KindClassMap}
+  />
+);
+
 /** 운영 지식그래프 노드 — Task 흐름과 리소스 칩을 구분해 렌더 */
 export const GraphNodeCard = (props: NodeProps<Node<GraphNodeData>>) => {
   const { data } = props;
+
+  if (data.kind === "E2E") {
+    return <GraphE2eFlowNodeCard {...props} />;
+  }
 
   if (data.kind === "L3") {
     return <GraphL3FlowNodeCard {...props} />;

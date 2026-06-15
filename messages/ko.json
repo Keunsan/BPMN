@@ -50,6 +50,7 @@
     "dashboardActivity": "최근 활동",
     "process": "프로세스 관리",
     "processMap": "전사 프로세스 관리",
+    "e2eProcess": "E2E 프로세스",
     "processNew": "프로세스 등록/수정",
     "processCompare": "표준/변형 비교",
     "bpmn": "BPMN 모델링",
@@ -260,6 +261,12 @@
     "saveNewVersion": "새 버전 저장",
     "saving": "저장 중...",
     "saved": "저장되었습니다.",
+    "drilldownTitle": "L4 상세",
+    "drilldownDesc": "연결된 L3 BPMN의 L4 Task 흐름입니다 (읽기 전용).",
+    "drilldownEmpty": "표시할 L4 Task가 없습니다.",
+    "openL3Process": "L3 프로세스 보기",
+    "modelKindE2e": "E2E",
+    "modelKindL3": "L3",
     "undo": "실행 취소",
     "redo": "다시 실행",
     "zoomIn": "확대",
@@ -688,6 +695,31 @@
       "RUD": "조회/수정/삭제"
     }
   },
+  "e2eProcess": {
+    "sectionTitle": "E2E 프로세스",
+    "listDesc": "전사 cross-domain E2E 실행 흐름을 관리합니다.",
+    "detailTitle": "E2E 프로세스 상세",
+    "new": "E2E 등록",
+    "edit": "수정",
+    "editFlow": "E2E 흐름 편집",
+    "delete": "삭제",
+    "deleteConfirmTitle": "E2E 프로세스 삭제",
+    "deleteConfirmDesc": "이 E2E 프로세스를 삭제하시겠습니까?",
+    "code": "코드",
+    "name": "명칭",
+    "description": "설명",
+    "tags": "관련 도메인",
+    "tagsPlaceholder": "영업, 구매, 생산 (쉼표 구분)",
+    "status": "상태",
+    "participants": "참여 L3",
+    "basicInfo": "기본 정보",
+    "noDescription": "설명이 없습니다.",
+    "participantL3Count": "참여 L3 {count}개",
+    "empty": "등록된 E2E 프로세스가 없습니다.",
+    "loadError": "E2E 프로세스를 불러오지 못했습니다.",
+    "selectTitle": "E2E 프로세스 선택",
+    "selectDesc": "탐색 기준이 될 E2E 프로세스를 선택하세요."
+  },
   "governance": {
     "approvalTitle": "승인 대기함",
     "approvalDesc": "검토 중인 프로세스 변경 요청을 승인하거나 반려합니다.",
@@ -711,6 +743,7 @@
       "expandRight": "상세 패널 펼치기"
     },
     "nodeKind": {
+      "E2E": "E2E 프로세스",
       "L3": "L3 프로세스",
       "TASK": "Task",
       "APPLICATION": "Application",
@@ -718,6 +751,7 @@
       "INTERFACE": "Interface"
     },
     "nodeKindShort": {
+      "E2E": "E2E",
       "L1": "L1",
       "L2": "L2",
       "L3": "L3",
@@ -735,6 +769,7 @@
       "processSelectDesc": "탐색 기준이 될 L1~L3 프로세스를 선택하세요.",
       "processSelectHint": "L1, L2, L3만 선택할 수 있습니다. L4(Task)는 선택할 수 없습니다.",
       "processSelectConfirm": "선택",
+      "e2eSelect": "E2E 선택",
       "nodeTypeFilter": "노드 유형",
       "filterHint": "{count}개 유형 표시 중",
       "centerKindExcluded": "탐색 기준({kind})은 노드 유형에서 제외됩니다.",

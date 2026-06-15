@@ -50,6 +50,14 @@ export const GET = withApiHandler(async ({ request }) => {
 
     sort: (searchParams.get("sort") as BpmnFilters["sort"]) ?? "updated",
 
+    modelKind: (searchParams.get("modelKind") as BpmnFilters["modelKind"]) ?? undefined,
+
+    e2eProcessId: searchParams.get("e2eProcessId")
+
+      ? Number(searchParams.get("e2eProcessId"))
+
+      : undefined,
+
   };
 
 

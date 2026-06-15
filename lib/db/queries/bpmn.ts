@@ -6,6 +6,7 @@ import type {
   BpmnElementType,
   BpmnFilters,
   BpmnModel,
+  BpmnModelKind,
   BpmnModelStatus,
 } from "@/types/bpmn";
 
@@ -14,7 +15,9 @@ import { query, queryOne, transaction } from "../pool";
 /** DB snake_case → BpmnModel */
 const mapBpmnModel = (row: Record<string, unknown>): BpmnModel => ({
   modelId: row.model_id as number,
-  nodeId: row.node_id as number,
+  nodeId: (row.node_id as number | null) ?? null,
+  e2eProcessId: (row.e2e_process_id as number | null) ?? null,
+  modelKind: (row.model_kind as BpmnModel["modelKind"]) ?? "L3_PROCESS",
   modelName: row.model_name as string,
   version: row.version as string,
   bpmnXml: (row.bpmn_xml as string | null) ?? null,
@@ -69,6 +72,32 @@ export const findCurrentBpmnModelByNodeId = async (
   return fallback ? mapBpmnModel(fallback) : null;
 };
 
+export const findCurrentBpmnModelByE2eProcessId = async (
+  e2eProcessId: number,
+): Promise<BpmnModel | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT TOP 1 *
+     FROM bpmn_model
+     WHERE e2e_process_id = @e2eProcessId AND is_current = 1
+     ORDER BY updated_at DESC, model_id DESC`,
+    { e2eProcessId },
+  );
+
+  if (row) {
+    return mapBpmnModel(row);
+  }
+
+  const fallback = await queryOne<Record<string, unknown>>(
+    `SELECT TOP 1 *
+     FROM bpmn_model
+     WHERE e2e_process_id = @e2eProcessId
+     ORDER BY is_current DESC, updated_at DESC, model_id DESC`,
+    { e2eProcessId },
+  );
+
+  return fallback ? mapBpmnModel(fallback) : null;
+};
+
 export const findBpmnModelById = async (
   modelId: number,
 ): Promise<BpmnModel | null> => {
@@ -84,8 +113,10 @@ export const listBpmnModels = async (
 ): Promise<
   Array<
     BpmnModel & {
-      processCode: string;
-      processName: string;
+      processCode: string | null;
+      processName: string | null;
+      e2eProcessCode: string | null;
+      e2eProcessName: string | null;
     }
   >
 > => {
@@ -95,6 +126,16 @@ export const listBpmnModels = async (
   if (filters.nodeId !== undefined) {
     conditions.push("m.node_id = @nodeId");
     params.nodeId = filters.nodeId;
+  }
+
+  if (filters.e2eProcessId !== undefined) {
+    conditions.push("m.e2e_process_id = @e2eProcessId");
+    params.e2eProcessId = filters.e2eProcessId;
+  }
+
+  if (filters.modelKind) {
+    conditions.push("m.model_kind = @modelKind");
+    params.modelKind = filters.modelKind;
   }
 
   if (filters.linkedNodeId !== undefined) {
@@ -120,18 +161,18 @@ export const listBpmnModels = async (
   }
 
   if (filters.companyCode) {
-    conditions.push("p.company_code = @companyCode");
+    conditions.push("(p.node_id IS NULL OR p.company_code = @companyCode)");
     params.companyCode = filters.companyCode;
   }
 
   if (filters.businessUnitCode) {
-    conditions.push("p.business_unit_code = @businessUnitCode");
+    conditions.push("(p.node_id IS NULL OR p.business_unit_code = @businessUnitCode)");
     params.businessUnitCode = filters.businessUnitCode;
   }
 
   if (filters.search?.trim()) {
     conditions.push(
-      "(m.model_name LIKE @search OR p.name LIKE @search OR p.code LIKE @search)",
+      "(m.model_name LIKE @search OR p.name LIKE @search OR p.code LIKE @search OR e.name LIKE @search OR e.code LIKE @search)",
     );
     params.search = `%${filters.search.trim()}%`;
   }
@@ -142,9 +183,14 @@ export const listBpmnModels = async (
       : "COALESCE(m.updated_at, m.created_at) DESC";
 
   const rows = await query<Record<string, unknown>>(
-    `SELECT m.*, p.code AS process_code, p.name AS process_name
+    `SELECT m.*,
+            p.code AS process_code,
+            p.name AS process_name,
+            e.code AS e2e_process_code,
+            e.name AS e2e_process_name
      FROM bpmn_model m
-     INNER JOIN process_node p ON p.node_id = m.node_id
+     LEFT JOIN process_node p ON p.node_id = m.node_id
+     LEFT JOIN e2e_process e ON e.e2e_process_id = m.e2e_process_id
      WHERE ${conditions.join(" AND ")}
      ORDER BY ${orderBy}`,
     params,
@@ -152,8 +198,10 @@ export const listBpmnModels = async (
 
   return rows.map((row) => ({
     ...mapBpmnModel(row),
-    processCode: row.process_code as string,
-    processName: row.process_name as string,
+    processCode: (row.process_code as string | null) ?? null,
+    processName: (row.process_name as string | null) ?? null,
+    e2eProcessCode: (row.e2e_process_code as string | null) ?? null,
+    e2eProcessName: (row.e2e_process_name as string | null) ?? null,
   }));
 };
 
@@ -196,7 +244,9 @@ export const listBpmnElements = async (
 };
 
 export const insertBpmnModel = async (input: {
-  nodeId: number;
+  nodeId?: number | null;
+  e2eProcessId?: number | null;
+  modelKind?: BpmnModelKind;
   modelName: string;
   version?: string;
   bpmnXml?: string | null;
@@ -205,16 +255,19 @@ export const insertBpmnModel = async (input: {
   isCurrent?: boolean;
   createdBy?: number | null;
 }): Promise<number> => {
+  const modelKind = input.modelKind ?? "L3_PROCESS";
   const row = await queryOne<{ model_id: number }>(
     `INSERT INTO bpmn_model (
-       node_id, model_name, version, bpmn_xml, svg_content, status, is_current, created_by
+       node_id, e2e_process_id, model_kind, model_name, version, bpmn_xml, svg_content, status, is_current, created_by
      )
      OUTPUT INSERTED.model_id
      VALUES (
-       @nodeId, @modelName, @version, @bpmnXml, @svgContent, @status, @isCurrent, @createdBy
+       @nodeId, @e2eProcessId, @modelKind, @modelName, @version, @bpmnXml, @svgContent, @status, @isCurrent, @createdBy
      )`,
     {
-      nodeId: input.nodeId,
+      nodeId: input.nodeId ?? null,
+      e2eProcessId: input.e2eProcessId ?? null,
+      modelKind,
       modelName: input.modelName,
       version: input.version ?? "1.0.0",
       bpmnXml: input.bpmnXml ?? null,
@@ -284,6 +337,15 @@ export const clearCurrentFlagForNode = async (nodeId: number): Promise<void> => 
   );
 };
 
+export const clearCurrentFlagForE2eProcess = async (
+  e2eProcessId: number,
+): Promise<void> => {
+  await queryOne(
+    `UPDATE bpmn_model SET is_current = 0 WHERE e2e_process_id = @e2eProcessId AND is_current = 1`,
+    { e2eProcessId },
+  );
+};
+
 export const deleteBpmnModel = async (modelId: number): Promise<void> => {
   await transaction(async (txRequest) => {
     await txRequest(
@@ -310,7 +372,9 @@ export const syncBpmnElements = async (
 export const insertBpmnModelVersion = async (
   existingModelId: number,
   input: {
-    nodeId: number;
+    nodeId?: number | null;
+    e2eProcessId?: number | null;
+    modelKind?: BpmnModelKind;
     modelName: string;
     version: string;
     bpmnXml: string | null;
@@ -320,22 +384,32 @@ export const insertBpmnModelVersion = async (
     elements: BpmnElementLinkDto[];
   },
 ): Promise<number> => {
+  const modelKind = input.modelKind ?? "L3_PROCESS";
   return transaction(async (txRequest) => {
-    await txRequest(
-      `UPDATE bpmn_model SET is_current = 0 WHERE node_id = @nodeId AND is_current = 1`,
-      { nodeId: input.nodeId },
-    );
+    if (input.nodeId != null) {
+      await txRequest(
+        `UPDATE bpmn_model SET is_current = 0 WHERE node_id = @nodeId AND is_current = 1`,
+        { nodeId: input.nodeId },
+      );
+    } else if (input.e2eProcessId != null) {
+      await txRequest(
+        `UPDATE bpmn_model SET is_current = 0 WHERE e2e_process_id = @e2eProcessId AND is_current = 1`,
+        { e2eProcessId: input.e2eProcessId },
+      );
+    }
 
     const insertResult = await txRequest(
       `INSERT INTO bpmn_model (
-         node_id, model_name, version, bpmn_xml, svg_content, status, is_current, created_by
+         node_id, e2e_process_id, model_kind, model_name, version, bpmn_xml, svg_content, status, is_current, created_by
        )
        OUTPUT INSERTED.model_id AS model_id
        VALUES (
-         @nodeId, @modelName, @version, @bpmnXml, @svgContent, @status, 1, @createdBy
+         @nodeId, @e2eProcessId, @modelKind, @modelName, @version, @bpmnXml, @svgContent, @status, 1, @createdBy
        )`,
       {
-        nodeId: input.nodeId,
+        nodeId: input.nodeId ?? null,
+        e2eProcessId: input.e2eProcessId ?? null,
+        modelKind,
         modelName: input.modelName,
         version: input.version,
         bpmnXml: input.bpmnXml,

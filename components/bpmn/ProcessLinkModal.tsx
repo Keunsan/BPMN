@@ -17,6 +17,7 @@ type ProcessLinkModalProps = {
   elementName?: string | null;
   elementType?: BpmnElementType | null;
   ownerNodeId: number;
+  e2eMode?: boolean;
   currentLink?: ProcessLinkInfo | null;
   onConfirm: (link: ProcessLinkInfo | null) => void;
 };
@@ -36,6 +37,7 @@ export const ProcessLinkModal = ({
   elementName,
   elementType,
   ownerNodeId,
+  e2eMode = false,
   currentLink,
   onConfirm,
 }: ProcessLinkModalProps) => {
@@ -57,7 +59,7 @@ export const ProcessLinkModal = ({
             : t("linkProcessDescGeneric")
       }
       allowedLevels={isCallActivity ? ["L3"] : ["L4"]}
-      excludeNodeIds={isCallActivity ? [ownerNodeId] : []}
+      excludeNodeIds={isCallActivity && !e2eMode ? [ownerNodeId] : []}
       currentProcess={
         currentLink
           ? {

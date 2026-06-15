@@ -47,7 +47,7 @@ export const OperationsGraphWorkspace = () => {
   );
   const [centerKind, setCenterKind] = useQueryState(
     "centerKind",
-    parseAsStringLiteral(["L3", "TASK", "APPLICATION", "TABLE", "INTERFACE"]).withDefault(
+    parseAsStringLiteral(["E2E", "L3", "TASK", "APPLICATION", "TABLE", "INTERFACE"]).withDefault(
       "L3",
     ),
   );
@@ -110,6 +110,9 @@ export const OperationsGraphWorkspace = () => {
   });
 
   const excludedGraphKind = useMemo((): GraphNodeKind | undefined => {
+    if (centerKind === "E2E") {
+      return "E2E";
+    }
     if (centerLevel === "L3") {
       return "L3";
     }
@@ -127,8 +130,10 @@ export const OperationsGraphWorkspace = () => {
       (kind) => kind !== excludedGraphKind && nodeKinds[kind],
     );
     const processLevel =
-      centerLevel ??
-      (centerKind === "L3" ? ("L3" as const) : undefined);
+      centerKind === "E2E"
+        ? undefined
+        : centerLevel ??
+          (centerKind === "L3" ? ("L3" as const) : undefined);
     return {
       centerKind: centerKind as GraphNodeKind,
       centerId: centerNodeId,
@@ -153,6 +158,22 @@ export const OperationsGraphWorkspace = () => {
   const { data: graph, isLoading, isFetching } = useOperationsGraph(
     graphQuery,
     Boolean(centerNodeId),
+  );
+
+  const handleSelectE2eCenter = useCallback(
+    (e2eProcessId: number) => {
+      void setCenterNodeId(e2eProcessId);
+      void setCenterKind("E2E");
+      void setCenterLevel(null);
+      void setSelectedNodeId(null);
+      setNodeKinds((prev) => ({
+        ...prev,
+        E2E: false,
+        L3: true,
+        TASK: true,
+      }));
+    },
+    [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId],
   );
 
   const handleSelectCenter = useCallback(
@@ -191,6 +212,7 @@ export const OperationsGraphWorkspace = () => {
           centerKind={centerKind as GraphNodeKind}
           centerProcessLevel={centerLevel ?? undefined}
           onSelectCenter={handleSelectCenter}
+          onSelectE2eCenter={handleSelectE2eCenter}
           nodeKinds={nodeKinds}
           onNodeKindChange={(kind, enabled) =>
             setNodeKinds((prev) => ({ ...prev, [kind]: enabled }))

@@ -50,6 +50,7 @@
     "dashboardActivity": "最近活動",
     "process": "流程管理",
     "processMap": "企業流程地圖",
+    "e2eProcess": "E2E 流程",
     "processNew": "流程新增/修改",
     "processCompare": "標準/變體比較",
     "bpmn": "BPMN建模",
@@ -260,6 +261,12 @@
     "saveNewVersion": "儲存為新版本",
     "saving": "儲存中...",
     "saved": "已儲存。",
+    "drilldownTitle": "L4 詳情",
+    "drilldownDesc": "連結 L3 BPMN 的 L4 Task 流程（唯讀）。",
+    "drilldownEmpty": "沒有可顯示的 L4 Task。",
+    "openL3Process": "檢視 L3 流程",
+    "modelKindE2e": "E2E",
+    "modelKindL3": "L3",
     "undo": "復原",
     "redo": "重做",
     "zoomIn": "放大",
@@ -688,6 +695,31 @@
       "RUD": "讀取 / 更新 / 刪除"
     }
   },
+  "e2eProcess": {
+    "sectionTitle": "E2E 流程",
+    "listDesc": "管理企業跨領域 E2E 執行流程。",
+    "detailTitle": "E2E 流程詳情",
+    "new": "新增 E2E",
+    "edit": "編輯",
+    "editFlow": "編輯 E2E 流程",
+    "delete": "刪除",
+    "deleteConfirmTitle": "刪除 E2E 流程",
+    "deleteConfirmDesc": "確定要刪除此 E2E 流程嗎？",
+    "code": "代碼",
+    "name": "名稱",
+    "description": "說明",
+    "tags": "相關領域",
+    "tagsPlaceholder": "業務、採購、生產（逗號分隔）",
+    "status": "狀態",
+    "participants": "參與 L3",
+    "basicInfo": "基本資訊",
+    "noDescription": "無說明。",
+    "participantL3Count": "參與 L3 {count} 個",
+    "empty": "尚無 E2E 流程。",
+    "loadError": "無法載入 E2E 流程。",
+    "selectTitle": "選擇 E2E 流程",
+    "selectDesc": "選擇作為探索基準的 E2E 流程。"
+  },
   "governance": {
     "approvalTitle": "核准待辦",
     "approvalDesc": "核准或退回待審核的流程變更請求。",
@@ -711,6 +743,7 @@
       "expandRight": "展開詳情面板"
     },
     "nodeKind": {
+      "E2E": "E2E 流程",
       "L3": "L3 流程",
       "TASK": "Task",
       "APPLICATION": "Application",
@@ -718,6 +751,7 @@
       "INTERFACE": "Interface"
     },
     "nodeKindShort": {
+      "E2E": "E2E",
       "L1": "L1",
       "L2": "L2",
       "L3": "L3",
@@ -735,6 +769,7 @@
       "processSelectDesc": "選擇作為探索基準的 L1~L3 流程。",
       "processSelectHint": "僅可選擇 L1、L2、L3 節點，無法選擇 L4（Task）。",
       "processSelectConfirm": "選擇",
+      "e2eSelect": "E2E 選擇",
       "nodeTypeFilter": "節點類型",
       "filterHint": "顯示 {count} 種類型",
       "centerKindExcluded": "探索基準（{kind}）已從節點類型中排除。",

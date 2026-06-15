@@ -4,6 +4,8 @@ import type { ProcessStatus } from "./process";
 
 export type BpmnModelStatus = ProcessStatus;
 
+export type BpmnModelKind = "L3_PROCESS" | "E2E";
+
 
 
 export type BpmnElementType =
@@ -61,7 +63,11 @@ export interface BpmnModel {
 
   modelId: number;
 
-  nodeId: number;
+  nodeId: number | null;
+
+  e2eProcessId: number | null;
+
+  modelKind: BpmnModelKind;
 
   modelName: string;
 
@@ -115,6 +121,10 @@ export interface BpmnFilters {
 
   nodeId?: number;
 
+  e2eProcessId?: number;
+
+  modelKind?: BpmnModelKind;
+
   linkedNodeId?: number;
 
   status?: BpmnModelStatus;
@@ -149,6 +159,10 @@ export interface BpmnModelDto extends BpmnModel {
 
   processCode?: string;
 
+  e2eProcessCode?: string;
+
+  e2eProcessName?: string;
+
   elements?: BpmnElementDto[];
 
 }
@@ -157,7 +171,11 @@ export interface BpmnModelDto extends BpmnModel {
 
 export interface CreateBpmnDto {
 
-  nodeId: number;
+  nodeId?: number;
+
+  e2eProcessId?: number;
+
+  modelKind?: BpmnModelKind;
 
   modelName: string;
 

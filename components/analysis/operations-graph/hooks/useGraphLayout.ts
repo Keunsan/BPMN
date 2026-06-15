@@ -41,7 +41,7 @@ type Position = { x: number; y: number };
 type Dimensions = { width: number; height: number };
 
 const isProcessKind = (kind: GraphNodeKind | undefined): boolean =>
-  kind === "L3" || kind === "TASK";
+  kind === "E2E" || kind === "L3" || kind === "TASK";
 
 const isResourceKind = (kind: GraphNodeKind | undefined): boolean =>
   kind === "APPLICATION" || kind === "TABLE" || kind === "INTERFACE";

@@ -38,6 +38,8 @@ type ProcessLinkSidebarProps = {
   selectedElementId: string | null;
   selectedElementName: string | null;
   onLinkToSelected: (link: ProcessLinkInfo) => void;
+  /** E2E BPMN: L3 탭만, L4 숨김 */
+  e2eMode?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   width?: number;
@@ -86,6 +88,7 @@ export const ProcessLinkSidebar = ({
   selectedElementId,
   selectedElementName,
   onLinkToSelected,
+  e2eMode = false,
   open = true,
   onOpenChange,
   width = 288,
@@ -93,18 +96,20 @@ export const ProcessLinkSidebar = ({
 }: ProcessLinkSidebarProps) => {
   const t = useTranslations("bpmn");
   const [search, setSearch] = useState("");
-  const [browseTab, setBrowseTab] = useState<LinkPanelTab>("L4");
+  const [browseTab, setBrowseTab] = useState<LinkPanelTab>(e2eMode ? "L3" : "L4");
   const scope: ProcessScopeContext = { companyCode, businessUnitCode };
   const { data: tree, isLoading, isError } = useProcessTree({
     companyCode: companyCode ?? undefined,
     businessUnitCode: businessUnitCode ?? undefined,
   });
 
-  const tab: LinkPanelTab = selectedElementType
-    ? isBpmnCallActivityType(selectedElementType)
-      ? "L3"
-      : "L4"
-    : browseTab;
+  const tab: LinkPanelTab = e2eMode
+    ? "L3"
+    : selectedElementType
+      ? isBpmnCallActivityType(selectedElementType)
+        ? "L3"
+        : "L4"
+      : browseTab;
 
   const l4Processes = useMemo(() => {
     if (!tree?.length) {
@@ -118,8 +123,8 @@ export const ProcessLinkSidebar = ({
     if (!tree?.length) {
       return [];
     }
-    return flattenL3Processes(tree, [parentNodeId]);
-  }, [parentNodeId, tree]);
+    return flattenL3Processes(tree, e2eMode ? [] : [parentNodeId]);
+  }, [e2eMode, parentNodeId, tree]);
 
   const buildLinkPayload = (node: ProcessNodeTree, linkTab: LinkPanelTab) => {
     if (linkTab === "L3" && tree?.length) {
@@ -237,20 +242,22 @@ export const ProcessLinkSidebar = ({
       {open && (
         <>
           <div className="flex gap-1 border-b px-2 py-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={tab === "L4" ? "default" : "outline"}
-              className="h-7 flex-1 text-xs"
-              onClick={() => setBrowseTab("L4")}
-            >
-              {t("linkPanelTabL4")}
-            </Button>
+            {!e2eMode ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={tab === "L4" ? "default" : "outline"}
+                className="h-7 flex-1 text-xs"
+                onClick={() => setBrowseTab("L4")}
+              >
+                {t("linkPanelTabL4")}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="sm"
               variant={tab === "L3" ? "default" : "outline"}
-              className="h-7 flex-1 text-xs"
+              className={cn("h-7 text-xs", e2eMode ? "flex-1" : "flex-1")}
               onClick={() => setBrowseTab("L3")}
             >
               {t("linkPanelTabL3")}

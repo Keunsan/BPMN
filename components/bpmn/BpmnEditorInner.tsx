@@ -77,6 +77,7 @@ type BpmnEditorInnerProps = {
     link: ProcessLinkInfo,
     elementType: BpmnElementType | null,
   ) => void;
+  onCallActivityDblClick?: (link: ProcessLinkInfo) => void;
   onReady?: (api: BpmnEditorHandle) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
@@ -90,6 +91,7 @@ export const BpmnEditorInner = ({
   onSelectionChange,
   onTaskHoverChange,
   onProcessLinkDrop,
+  onCallActivityDblClick,
   onReady,
   onDirtyChange,
 }: BpmnEditorInnerProps) => {
@@ -98,6 +100,7 @@ export const BpmnEditorInner = ({
   const modelerRef = useRef<import("bpmn-js/lib/Modeler").default | null>(null);
   const linksRef = useRef(links);
   const onProcessLinkDropRef = useRef(onProcessLinkDrop);
+  const onCallActivityDblClickRef = useRef(onCallActivityDblClick);
   const onDirtyChangeRef = useRef(onDirtyChange);
   const dropHighlightRef = useRef<string | null>(null);
 
@@ -108,6 +111,10 @@ export const BpmnEditorInner = ({
   useEffect(() => {
     onProcessLinkDropRef.current = onProcessLinkDrop;
   }, [onProcessLinkDrop]);
+
+  useEffect(() => {
+    onCallActivityDblClickRef.current = onCallActivityDblClick;
+  }, [onCallActivityDblClick]);
 
   useEffect(() => {
     linksRef.current = links;
@@ -210,6 +217,23 @@ export const BpmnEditorInner = ({
       eventBus.on("element.out", (e) => {
         if (e.element && isLinkableType(e.element.type)) {
           onTaskHoverChange?.(null);
+        }
+      });
+
+      eventBus.on("element.dblclick", (e) => {
+        const element = e.element;
+        if (!element?.id) {
+          return;
+        }
+        const mapped = mapBpmnJsType(
+          element.businessObject?.$type ?? element.type,
+        );
+        if (mapped !== "CALL_ACTIVITY") {
+          return;
+        }
+        const link = linksRef.current[element.id];
+        if (link?.linkKind === "L3_CALL") {
+          onCallActivityDblClickRef.current?.(link);
         }
       });
 

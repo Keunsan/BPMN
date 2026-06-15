@@ -29,6 +29,18 @@ export const bpmnKeys = {
   list: (filters: BpmnFilters) => [...bpmnKeys.lists(), filters] as const,
   details: () => [...bpmnKeys.all, "detail"] as const,
   detail: (id: number) => [...bpmnKeys.details(), id] as const,
+  l4Slice: (nodeId: number) => [...bpmnKeys.all, "l4-slice", nodeId] as const,
+};
+
+export const e2eProcessKeys = {
+  all: ["e2e-process"] as const,
+  lists: () => [...e2eProcessKeys.all, "list"] as const,
+  list: (filters?: Record<string, string | undefined>) =>
+    [...e2eProcessKeys.lists(), filters ?? {}] as const,
+  tree: () => [...e2eProcessKeys.all, "tree"] as const,
+  details: () => [...e2eProcessKeys.all, "detail"] as const,
+  detail: (id: number) => [...e2eProcessKeys.details(), id] as const,
+  byL3: (nodeId: number) => [...e2eProcessKeys.all, "by-l3", nodeId] as const,
 };
 
 import type { TaskAttributeListFilters } from "@/types/metadata";

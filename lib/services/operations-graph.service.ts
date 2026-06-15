@@ -213,7 +213,33 @@ export const buildOperationsGraph = async (
 
     let bundle: graphQueries.GraphNeighborBundle = { nodes: [], edges: [] };
 
-    if (current.kind === "L3" || current.kind === "TASK") {
+    if (current.kind === "E2E") {
+      const e2eProcessId = Number(current.sourceId);
+      if (!Number.isFinite(e2eProcessId)) {
+        throw new ApiError("E001", "Invalid E2E process id", 400);
+      }
+
+      if (current.depth === 0) {
+        const e2e = await graphQueries.findGraphE2eProcess(e2eProcessId);
+        if (!e2e) {
+          throw new ApiError("E404", "E2E process not found", 404);
+        }
+        centerNodeMeta = {
+          id: buildGraphNodeId("E2E", e2e.e2eProcessId),
+          kind: "E2E",
+          label: e2e.name,
+          code: e2e.code,
+          status: e2e.status,
+          sourceId: e2e.e2eProcessId,
+        };
+      }
+
+      bundle = await graphQueries.collectE2eGraphNeighbors(e2eProcessId, {
+        showInterfaces,
+        showTables,
+        includeL3Children: current.depth >= 1,
+      });
+    } else if (current.kind === "L3" || current.kind === "TASK") {
       const nodeId = Number(current.sourceId);
       if (!Number.isFinite(nodeId)) {
         throw new ApiError("E001", "Invalid center node id", 400);
@@ -379,7 +405,10 @@ export const getGraphNodeDetail = async (
     }));
 
   let description: string | undefined;
-  if (node.kind === "TASK" || node.kind === "L3") {
+  if (node.kind === "E2E") {
+    const e2e = await graphQueries.findGraphE2eProcess(Number(node.sourceId));
+    description = e2e?.name;
+  } else if (node.kind === "TASK" || node.kind === "L3") {
     const processNode = await graphQueries.findGraphProcessNode(
       Number(node.sourceId),
     );

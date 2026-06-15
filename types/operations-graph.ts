@@ -4,7 +4,7 @@ import type { ProcessLevel } from "@/types/process";
 
 export type GraphCenterProcessLevel = Extract<ProcessLevel, "L1" | "L2" | "L3">;
 
-export type GraphNodeKind = "L3" | "TASK" | "APPLICATION" | "TABLE" | "INTERFACE";
+export type GraphNodeKind = "E2E" | "L3" | "TASK" | "APPLICATION" | "TABLE" | "INTERFACE";
 
 export type GraphEdgeKind =
   | "CONTAINS"
@@ -75,6 +75,7 @@ export type GraphSelectedNodeDetail = OperationsGraphNode & {
 };
 
 export const GRAPH_NODE_KINDS: GraphNodeKind[] = [
+  "E2E",
   "L3",
   "TASK",
   "APPLICATION",

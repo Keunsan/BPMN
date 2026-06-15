@@ -25,6 +25,7 @@ const isProcessStatus = (value: string): value is ProcessStatus =>
   PROCESS_STATUSES.includes(value as ProcessStatus);
 
 const kindAccentClass: Record<GraphNodeKind, string> = {
+  E2E: "pams-graph-inspector__kind-mark--e2e",
   L3: "pams-graph-inspector__kind-mark--l3",
   TASK: "pams-graph-inspector__kind-mark--task",
   APPLICATION: "pams-graph-inspector__kind-mark--application",

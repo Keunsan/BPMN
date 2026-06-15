@@ -35,6 +35,8 @@ export const useBpmnList = (
           businessUnitCode: filters.businessUnitCode,
           search: filters.search,
           sort: filters.sort,
+          modelKind: filters.modelKind,
+          e2eProcessId: filters.e2eProcessId,
         },
       }),
     enabled: options.enabled ?? true,

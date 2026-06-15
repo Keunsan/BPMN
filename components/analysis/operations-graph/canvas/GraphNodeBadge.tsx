@@ -13,6 +13,7 @@ type GraphNodeBadgeProps = {
 };
 
 const kindBadgeClass: Partial<Record<GraphNodeKind, string>> = {
+  E2E: "pams-ops-graph-badge--kind-e2e",
   TASK: "pams-ops-graph-badge--kind-task",
   L3: "pams-ops-graph-badge--kind-l3",
   APPLICATION: "pams-ops-graph-badge--kind-application",

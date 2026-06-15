@@ -34,6 +34,7 @@ export type SidebarIconKey =
   | "dashboardOverview"
   | "dashboardActivity"
   | "processMap"
+  | "e2eProcess"
   | "processNew"
   | "processCompare"
   | "bpmnList"
@@ -64,6 +65,7 @@ export const sidebarNavIcons: Record<SidebarIconKey, LucideIcon> = {
   dashboardOverview: LayoutDashboard,
   dashboardActivity: Activity,
   processMap: Network,
+  e2eProcess: Waypoints,
   processNew: Plus,
   processCompare: GitCompare,
   bpmnList: Workflow,

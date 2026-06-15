@@ -50,6 +50,7 @@
     "dashboardActivity": "Recent Activity",
     "process": "Process Management",
     "processMap": "Enterprise Process Map",
+    "e2eProcess": "E2E Processes",
     "processNew": "Create / Edit Process",
     "processCompare": "Standard / Variant Compare",
     "bpmn": "BPMN Modeling",
@@ -260,6 +261,12 @@
     "saveNewVersion": "Save as new version",
     "saving": "Saving...",
     "saved": "Saved.",
+    "drilldownTitle": "L4 detail",
+    "drilldownDesc": "Read-only L4 task flow from the linked L3 BPMN.",
+    "drilldownEmpty": "No L4 tasks to display.",
+    "openL3Process": "View L3 process",
+    "modelKindE2e": "E2E",
+    "modelKindL3": "L3",
     "undo": "Undo",
     "redo": "Redo",
     "zoomIn": "Zoom in",
@@ -688,6 +695,31 @@
       "RUD": "Read / Update / Delete"
     }
   },
+  "e2eProcess": {
+    "sectionTitle": "E2E processes",
+    "listDesc": "Manage enterprise cross-domain E2E execution flows.",
+    "detailTitle": "E2E process detail",
+    "new": "New E2E",
+    "edit": "Edit",
+    "editFlow": "Edit E2E flow",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete E2E process",
+    "deleteConfirmDesc": "Delete this E2E process?",
+    "code": "Code",
+    "name": "Name",
+    "description": "Description",
+    "tags": "Related domains",
+    "tagsPlaceholder": "Sales, Procurement, Production (comma-separated)",
+    "status": "Status",
+    "participants": "L3 participants",
+    "basicInfo": "Basic info",
+    "noDescription": "No description.",
+    "participantL3Count": "{count} L3 participants",
+    "empty": "No E2E processes registered.",
+    "loadError": "Failed to load E2E processes.",
+    "selectTitle": "Select E2E process",
+    "selectDesc": "Choose an E2E process as the exploration center."
+  },
   "governance": {
     "approvalTitle": "Approval Inbox",
     "approvalDesc": "Approve or reject process change requests awaiting review.",
@@ -711,6 +743,7 @@
       "expandRight": "Expand inspector panel"
     },
     "nodeKind": {
+      "E2E": "E2E Process",
       "L3": "L3 Process",
       "TASK": "Task",
       "APPLICATION": "Application",
@@ -718,6 +751,7 @@
       "INTERFACE": "Interface"
     },
     "nodeKindShort": {
+      "E2E": "E2E",
       "L1": "L1",
       "L2": "L2",
       "L3": "L3",
@@ -735,6 +769,8 @@
       "processSelectDesc": "Choose the L1–L3 process to use as the graph center.",
       "processSelectHint": "Only L1, L2, and L3 nodes can be selected. L4 (Task) is not selectable.",
       "processSelectConfirm": "Select",
+      "e2eSelect": "Select E2E",
+      "e2eSelect": "Select E2E",
       "nodeTypeFilter": "Node types",
       "filterHint": "Showing {count} types",
       "centerKindExcluded": "The exploration center ({kind}) is excluded from node types.",

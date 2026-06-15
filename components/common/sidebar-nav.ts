@@ -34,6 +34,11 @@ export const sidebarNav: SidebarNavItem[] = [
         iconKey: "processMap",
       },
       {
+        labelKey: "menu.e2eProcess",
+        href: "/e2e-process",
+        iconKey: "e2eProcess",
+      },
+      {
         labelKey: "menu.processNew",
         href: "/process/new",
         iconKey: "processNew",

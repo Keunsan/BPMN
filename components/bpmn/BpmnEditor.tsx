@@ -55,6 +55,10 @@ import type {
 import type { BpmnEditorHandle } from "./BpmnEditorInner";
 import { ProcessLinkModal } from "./ProcessLinkModal";
 import { ProcessLinkSidebar } from "./ProcessLinkSidebar";
+import {
+  BpmnDrilldownSheet,
+  type DrilldownTarget,
+} from "./BpmnDrilldownSheet";
 
 const BpmnEditorInner = dynamic(
   () => import("./BpmnEditorInner").then((m) => m.BpmnEditorInner),
@@ -106,7 +110,11 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const [taskHover, setTaskHover] = useState<TaskHoverState | null>(null);
   const [diagramDirty, setDiagramDirty] = useState(false);
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
-  const { data: ownerProcess } = useProcessDetail(model.nodeId);
+  const isE2eMode = model.modelKind === "E2E";
+  const { data: ownerProcess } = useProcessDetail(model.nodeId ?? 0);
+  const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(
+    null,
+  );
   const [savedLinksJson, setSavedLinksJson] = useState(() =>
     JSON.stringify(buildLinksFromModel(model)),
   );
@@ -389,7 +397,9 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <h1 className="truncate text-lg font-semibold">{model.modelName}</h1>
           <p className="shrink-0 text-right text-xs text-muted-foreground">
-            {model.processCode} · v{model.version}
+            {isE2eMode
+              ? `${model.e2eProcessCode ?? "E2E"} · v${model.version}`
+              : `${model.processCode} · v${model.version}`}
           </p>
         </div>
 
@@ -444,7 +454,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         <Button
           variant="outline"
           size="sm"
-          disabled={!selectedElementId}
+          disabled={!selectedElementId || isE2eMode}
           onClick={() => setMetadataOpen(true)}
         >
           <ClipboardList className="mr-1 size-4" />
@@ -462,11 +472,12 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
 
       <div className="flex min-h-0 flex-1">
         <ProcessLinkSidebar
-          parentNodeId={model.nodeId}
-          parentCode={model.processCode}
-          parentName={model.processName}
+          parentNodeId={model.nodeId ?? 0}
+          parentCode={isE2eMode ? model.e2eProcessCode : model.processCode}
+          parentName={isE2eMode ? model.e2eProcessName : model.processName}
           companyCode={ownerProcess?.companyCode}
           businessUnitCode={ownerProcess?.businessUnitCode}
+          e2eMode={isE2eMode}
           selectedElementType={selectedElementType}
           links={links}
           selectedElementId={selectedElementId}
@@ -509,10 +520,25 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
             }}
             onTaskHoverChange={setTaskHover}
             onProcessLinkDrop={handleProcessLinkDrop}
+            onCallActivityDblClick={(link) =>
+              setDrilldownTarget({
+                l3NodeId: link.nodeId,
+                l3Code: link.code,
+                l3Name: link.name,
+                parentLabel: isE2eMode
+                  ? (model.e2eProcessCode ?? model.modelName)
+                  : model.processCode,
+              })
+            }
             onDirtyChange={setDiagramDirty}
           />
         </div>
       </div>
+
+      <BpmnDrilldownSheet
+        target={drilldownTarget}
+        onClose={() => setDrilldownTarget(null)}
+      />
 
       {taskHover && (
         <div
@@ -534,7 +560,8 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         onOpenChange={setLinkModalOpen}
         elementName={selectedElementName}
         elementType={selectedElementType}
-        ownerNodeId={model.nodeId}
+        ownerNodeId={model.nodeId ?? 0}
+        e2eMode={isE2eMode}
         currentLink={selectedLink}
         onConfirm={handleLinkConfirm}
       />

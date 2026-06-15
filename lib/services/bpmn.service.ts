@@ -2,6 +2,7 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
 import * as bpmnQueries from "@/lib/db/queries/bpmn";
+import * as e2eQueries from "@/lib/db/queries/e2e-process";
 import * as metadataQueries from "@/lib/db/queries/metadata";
 import { findProcessById } from "@/lib/db/queries/process";
 import { bumpVersion } from "@/lib/utils/process";
@@ -20,28 +21,58 @@ import type {
   BpmnElementLinkDto,
   BpmnFilters,
   BpmnModelDto,
+  BpmnModelKind,
   CreateBpmnDto,
   LinkOrCreateBpmnTaskDto,
   UpdateBpmnDto,
 } from "@/types/bpmn";
 
+type ModelMeta = {
+  processCode?: string;
+  processName?: string;
+  e2eProcessCode?: string;
+  e2eProcessName?: string;
+};
+
 /** 모델 + 요소 DTO 변환 */
 const toBpmnModelDto = async (
   model: NonNullable<Awaited<ReturnType<typeof bpmnQueries.findBpmnModelById>>>,
-  processMeta?: { processCode: string; processName: string },
+  meta?: ModelMeta,
 ): Promise<BpmnModelDto> => {
   const elements = await bpmnQueries.listBpmnElements(model.modelId);
 
   return {
     ...model,
-    processCode: processMeta?.processCode,
-    processName: processMeta?.processName,
+    processCode: meta?.processCode,
+    processName: meta?.processName,
+    e2eProcessCode: meta?.e2eProcessCode,
+    e2eProcessName: meta?.e2eProcessName,
     elements: elements.map((el) => ({
       ...el,
       linkedProcessCode: el.linkedProcessCode,
       linkedProcessName: el.linkedProcessName,
     })),
   };
+};
+
+const resolveModelMeta = async (
+  model: NonNullable<Awaited<ReturnType<typeof bpmnQueries.findBpmnModelById>>>,
+): Promise<ModelMeta> => {
+  if (model.modelKind === "E2E" && model.e2eProcessId) {
+    const e2e = await e2eQueries.findE2eProcessById(model.e2eProcessId);
+    return e2e
+      ? { e2eProcessCode: e2e.code, e2eProcessName: e2e.name }
+      : {};
+  }
+
+  if (model.nodeId) {
+    const process = await findProcessById(model.nodeId);
+    return process
+      ? { processCode: process.code, processName: process.name }
+      : {};
+  }
+
+  return {};
 };
 
 /** BPMN 모델 목록 */
@@ -51,8 +82,10 @@ export const listBpmnModels = async (
   const rows = await bpmnQueries.listBpmnModels(filters);
   return rows.map((row) => ({
     ...row,
-    processCode: row.processCode,
-    processName: row.processName,
+    processCode: row.processCode ?? undefined,
+    processName: row.processName ?? undefined,
+    e2eProcessCode: row.e2eProcessCode ?? undefined,
+    e2eProcessName: row.e2eProcessName ?? undefined,
   }));
 };
 
@@ -65,13 +98,8 @@ export const getBpmnModelDetail = async (
     throw new ApiError("E303", "BPMN model not found", 404);
   }
 
-  const process = await findProcessById(model.nodeId);
-  return toBpmnModelDto(
-    model,
-    process
-      ? { processCode: process.code, processName: process.name }
-      : undefined,
-  );
+  const meta = await resolveModelMeta(model);
+  return toBpmnModelDto(model, meta);
 };
 
 /** 노드별 버전 이력 */
@@ -102,6 +130,62 @@ export const createBpmnModel = async (
     throw new ApiError("E001", "Model name is required", 400, undefined, "modelName");
   }
 
+  const modelKind: BpmnModelKind =
+    dto.modelKind ?? (dto.e2eProcessId ? "E2E" : "L3_PROCESS");
+
+  if (modelKind === "E2E") {
+    if (!dto.e2eProcessId) {
+      throw new ApiError(
+        "E001",
+        "e2eProcessId is required for E2E BPMN",
+        400,
+        undefined,
+        "e2eProcessId",
+      );
+    }
+
+    const e2e = await e2eQueries.findE2eProcessById(dto.e2eProcessId);
+    if (!e2e) {
+      throw new ApiError("E404", "E2E process not found", 404);
+    }
+
+    await bpmnQueries.clearCurrentFlagForE2eProcess(dto.e2eProcessId);
+
+    const initialElements = mergeElements(dto.bpmnXml ?? EMPTY_BPMN_XML, undefined);
+    if (initialElements.length > 0) {
+      await validateE2eBpmnElements(initialElements);
+    }
+
+    const modelId = await bpmnQueries.insertBpmnModel({
+      e2eProcessId: dto.e2eProcessId,
+      modelKind: "E2E",
+      modelName: dto.modelName.trim(),
+      bpmnXml: dto.bpmnXml ?? EMPTY_BPMN_XML,
+      isCurrent: true,
+      createdBy: userId ?? null,
+    });
+
+    const model = await bpmnQueries.findBpmnModelById(modelId);
+    if (!model) {
+      throw new ApiError("E501", "Failed to create BPMN model", 500);
+    }
+
+    return toBpmnModelDto(model, {
+      e2eProcessCode: e2e.code,
+      e2eProcessName: e2e.name,
+    });
+  }
+
+  if (!dto.nodeId) {
+    throw new ApiError(
+      "E001",
+      "nodeId is required for L3 BPMN",
+      400,
+      undefined,
+      "nodeId",
+    );
+  }
+
   const process = await findProcessById(dto.nodeId);
   if (!process) {
     throw new ApiError("E302", "Process not found", 404);
@@ -111,6 +195,7 @@ export const createBpmnModel = async (
 
   const modelId = await bpmnQueries.insertBpmnModel({
     nodeId: dto.nodeId,
+    modelKind: "L3_PROCESS",
     modelName: dto.modelName.trim(),
     bpmnXml: dto.bpmnXml ?? EMPTY_BPMN_XML,
     isCurrent: true,
@@ -165,11 +250,75 @@ const mergeElements = (
   return merged;
 };
 
-/** BPMN 요소 연결 대상(L3 Call / L4 Task) 유효성을 검사한다 */
-const validateBpmnElementLinks = async (
-  ownerNodeId: number,
+/** E2E BPMN 요소 검증 — L3_CALL만 허용, cross-L1 L3 허용, L4 Task 금지 */
+const validateE2eBpmnElements = async (
   elements: BpmnElementLinkDto[],
 ): Promise<void> => {
+  for (const element of elements) {
+    if (isBpmnTaskElementType(element.elementType)) {
+      throw new ApiError(
+        "E405",
+        "E2E BPMN does not allow L4 Task elements",
+        400,
+        undefined,
+        "elementType",
+      );
+    }
+
+    if (!element.linkedNodeId) {
+      continue;
+    }
+
+    if (!isBpmnCallActivityType(element.elementType)) {
+      throw new ApiError(
+        "E405",
+        "E2E BPMN only allows Call Activity links to L3",
+        400,
+        undefined,
+        "linkedNodeId",
+      );
+    }
+
+    if (element.properties?.linkKind === "L4_TASK") {
+      throw new ApiError(
+        "E405",
+        "E2E BPMN only allows L3_CALL links",
+        400,
+        undefined,
+        "linkedNodeId",
+      );
+    }
+
+    const linked = await findProcessById(element.linkedNodeId);
+    if (!linked) {
+      throw new ApiError("E302", "Linked process not found", 404);
+    }
+
+    if (linked.level !== "L3") {
+      throw new ApiError(
+        "E405",
+        "Call Activity can only link to an L3 process",
+        400,
+        undefined,
+        "linkedNodeId",
+      );
+    }
+
+    // cross-L1 L3 연결 허용 — L1/부모 노드 제약 없음
+  }
+};
+
+/** BPMN 요소 연결 대상(L3 Call / L4 Task) 유효성을 검사한다 */
+const validateBpmnElementLinks = async (
+  modelKind: BpmnModelKind,
+  ownerNodeId: number | null,
+  elements: BpmnElementLinkDto[],
+): Promise<void> => {
+  if (modelKind === "E2E") {
+    await validateE2eBpmnElements(elements);
+    return;
+  }
+
   for (const element of elements) {
     if (!element.linkedNodeId) {
       continue;
@@ -237,11 +386,17 @@ export const updateBpmnModel = async (
   if (dto.createNewVersion) {
     const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
     if (merged.length > 0) {
-      await validateBpmnElementLinks(existing.nodeId, merged);
+      await validateBpmnElementLinks(
+        existing.modelKind,
+        existing.nodeId,
+        merged,
+      );
     }
 
     const newModelId = await bpmnQueries.insertBpmnModelVersion(existing.modelId, {
       nodeId: existing.nodeId,
+      e2eProcessId: existing.e2eProcessId,
+      modelKind: existing.modelKind,
       modelName: dto.modelName?.trim() ?? existing.modelName,
       version: bumpVersion(existing.version, "minor"),
       bpmnXml: dto.bpmnXml ?? existing.bpmnXml ?? null,
@@ -251,23 +406,20 @@ export const updateBpmnModel = async (
       elements: merged,
     });
 
-    await syncPredecessorsFromBpmnModel(
-      dto.bpmnXml ?? existing.bpmnXml ?? null,
-      merged,
-    );
+    if (existing.modelKind !== "E2E") {
+      await syncPredecessorsFromBpmnModel(
+        dto.bpmnXml ?? existing.bpmnXml ?? null,
+        merged,
+      );
+    }
 
     const created = await bpmnQueries.findBpmnModelById(newModelId);
     if (!created) {
       throw new ApiError("E501", "Failed to create new version", 500);
     }
 
-    const process = await findProcessById(created.nodeId);
-    return toBpmnModelDto(
-      created,
-      process
-        ? { processCode: process.code, processName: process.name }
-        : undefined,
-    );
+    const meta = await resolveModelMeta(created);
+    return toBpmnModelDto(created, meta);
   }
 
   await bpmnQueries.updateBpmnModel(modelId, {
@@ -281,13 +433,19 @@ export const updateBpmnModel = async (
   const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
   if (dto.elements !== undefined || dto.bpmnXml !== undefined) {
     if (merged.length > 0) {
-      await validateBpmnElementLinks(existing.nodeId, merged);
+      await validateBpmnElementLinks(
+        existing.modelKind,
+        existing.nodeId,
+        merged,
+      );
     }
     await bpmnQueries.syncBpmnElements(modelId, merged);
-    await syncPredecessorsFromBpmnModel(
-      dto.bpmnXml ?? existing.bpmnXml ?? null,
-      merged,
-    );
+    if (existing.modelKind !== "E2E") {
+      await syncPredecessorsFromBpmnModel(
+        dto.bpmnXml ?? existing.bpmnXml ?? null,
+        merged,
+      );
+    }
   }
 
   return getBpmnModelDetail(modelId);
@@ -302,6 +460,18 @@ export const linkOrCreateBpmnTaskProcess = async (
   const model = await bpmnQueries.findBpmnModelById(modelId);
   if (!model) {
     throw new ApiError("E303", "BPMN model not found", 404);
+  }
+
+  if (model.modelKind === "E2E") {
+    throw new ApiError(
+      "E405",
+      "E2E BPMN does not support L4 task auto-create",
+      400,
+    );
+  }
+
+  if (!model.nodeId) {
+    throw new ApiError("E302", "Process not found", 404);
   }
 
   const modelProcess = await findProcessById(model.nodeId);
@@ -399,6 +569,8 @@ export const duplicateBpmnModel = async (
 
   const newModelId = await bpmnQueries.insertBpmnModel({
     nodeId: existing.nodeId,
+    e2eProcessId: existing.e2eProcessId,
+    modelKind: existing.modelKind,
     modelName: modelName.trim(),
     bpmnXml: existing.bpmnXml,
     svgContent: existing.svgContent,
@@ -443,4 +615,32 @@ export const compareBpmnModels = async (
   const diff = diffBpmnXml(left.bpmnXml, right.bpmnXml);
 
   return { left, right, diff };
+};
+
+/** E2E BPMN이 없으면 자동 생성하고 modelId 반환 */
+export const ensureE2eBpmnModel = async (
+  e2eProcessId: number,
+  userId?: number,
+): Promise<number> => {
+  const existing =
+    await bpmnQueries.findCurrentBpmnModelByE2eProcessId(e2eProcessId);
+  if (existing) {
+    return existing.modelId;
+  }
+
+  const e2e = await e2eQueries.findE2eProcessById(e2eProcessId);
+  if (!e2e) {
+    throw new ApiError("E404", "E2E process not found", 404);
+  }
+
+  const created = await createBpmnModel(
+    {
+      e2eProcessId,
+      modelKind: "E2E",
+      modelName: `${e2e.name} E2E`,
+    },
+    userId,
+  );
+
+  return created.modelId;
 };

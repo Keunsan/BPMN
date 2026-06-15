@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderTree } from "lucide-react";
+import { FolderTree, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
@@ -9,6 +9,7 @@ import {
   ProcessNodeSelectDialog,
   type ProcessNodeSelection,
 } from "@/components/process/ProcessNodeSelectDialog";
+import { E2eProcessSelectDialog } from "@/components/e2e-process/E2eProcessSelectDialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
@@ -26,6 +27,7 @@ type GraphExplorerPanelProps = {
   centerKind?: GraphNodeKind;
   centerProcessLevel?: GraphCenterProcessLevel;
   onSelectCenter: (nodeId: number, level: GraphCenterProcessLevel) => void;
+  onSelectE2eCenter?: (e2eProcessId: number) => void;
   nodeKinds: Record<GraphNodeKind, boolean>;
   onNodeKindChange: (kind: GraphNodeKind, enabled: boolean) => void;
   summary?: OperationsGraphSummary;
@@ -35,6 +37,7 @@ type GraphExplorerPanelProps = {
 const PROCESS_SELECT_LEVELS: ProcessLevel[] = ["L1", "L2", "L3"];
 
 const kindMarkClass: Record<GraphNodeKind, string> = {
+  E2E: "pams-graph-explorer__kind-mark--e2e",
   L3: "pams-graph-explorer__kind-mark--l3",
   TASK: "pams-graph-explorer__kind-mark--task",
   APPLICATION: "pams-graph-explorer__kind-mark--application",
@@ -74,6 +77,7 @@ export const GraphExplorerPanel = ({
   centerKind,
   centerProcessLevel,
   onSelectCenter,
+  onSelectE2eCenter,
   nodeKinds,
   onNodeKindChange,
   summary,
@@ -82,8 +86,12 @@ export const GraphExplorerPanel = ({
   const t = useTranslations("operationsGraph");
   const tCommon = useTranslations("common");
   const [processDialogOpen, setProcessDialogOpen] = useState(false);
+  const [e2eDialogOpen, setE2eDialogOpen] = useState(false);
 
   const excludedGraphKind = useMemo((): GraphNodeKind | undefined => {
+    if (centerKind === "E2E") {
+      return "E2E";
+    }
     if (centerProcessLevel === "L3") {
       return "L3";
     }
@@ -92,6 +100,9 @@ export const GraphExplorerPanel = ({
     }
     return undefined;
   }, [centerKind, centerProcessLevel]);
+
+  const selectedE2eId =
+    centerKind === "E2E" && centerNodeId ? centerNodeId : null;
 
   const activeKindCount = useMemo(
     () =>
@@ -167,17 +178,32 @@ export const GraphExplorerPanel = ({
             </>
           )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="pams-graph-explorer__context-action shrink-0"
-          onClick={() => setProcessDialogOpen(true)}
-          aria-label={t("explorer.processSelect")}
-        >
-          <FolderTree className="size-3.5 shrink-0" aria-hidden />
-          <span className="hidden min-[360px]:inline">{t("explorer.processSelect")}</span>
-        </Button>
+        <div className="flex shrink-0 flex-col gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="pams-graph-explorer__context-action shrink-0"
+            onClick={() => setProcessDialogOpen(true)}
+            aria-label={t("explorer.processSelect")}
+          >
+            <FolderTree className="size-3.5 shrink-0" aria-hidden />
+            <span className="hidden min-[360px]:inline">{t("explorer.processSelect")}</span>
+          </Button>
+          {onSelectE2eCenter ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="pams-graph-explorer__context-action shrink-0"
+              onClick={() => setE2eDialogOpen(true)}
+              aria-label={t("explorer.e2eSelect")}
+            >
+              <GitBranch className="size-3.5 shrink-0" aria-hidden />
+              <span className="hidden min-[360px]:inline">{t("explorer.e2eSelect")}</span>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <ProcessNodeSelectDialog
@@ -194,6 +220,15 @@ export const GraphExplorerPanel = ({
         contentClassName="max-h-[90vh] overflow-y-auto sm:max-w-xl"
         treeShellClassName="max-h-[min(60vh,28rem)] overflow-y-auto rounded-md border p-2"
       />
+
+      {onSelectE2eCenter ? (
+        <E2eProcessSelectDialog
+          open={e2eDialogOpen}
+          onOpenChange={setE2eDialogOpen}
+          selectedId={selectedE2eId}
+          onConfirm={(process) => onSelectE2eCenter(process.e2eProcessId)}
+        />
+      ) : null}
 
       <ExplorerSection
         title={t("explorer.nodeTypeFilter")}

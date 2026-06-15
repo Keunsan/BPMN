@@ -679,4 +679,158 @@ export const collectTableNeighbors = async (
   return { nodes, edges };
 };
 
+/** E2E 프로세스 단건 조회 (그래프용) */
+export const findGraphE2eProcess = async (
+  e2eProcessId: number,
+): Promise<{
+  e2eProcessId: number;
+  code: string;
+  name: string;
+  status: string;
+} | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT e2e_process_id AS e2eProcessId, code, name, status
+     FROM e2e_process WHERE e2e_process_id = @e2eProcessId`,
+    { e2eProcessId },
+  );
+  return row
+    ? {
+        e2eProcessId: row.e2eProcessId as number,
+        code: row.code as string,
+        name: row.name as string,
+        status: row.status as string,
+      }
+    : null;
+};
+
+/** E2E BPMN Call Activity L3 연결 + sequenceFlow 기반 이웃 수집 */
+export const collectE2eGraphNeighbors = async (
+  e2eProcessId: number,
+  options: {
+    showInterfaces: boolean;
+    showTables: boolean;
+    includeL3Children?: boolean;
+  },
+): Promise<GraphNeighborBundle> => {
+  const { derivePredecessorsFromBpmn } = await import(
+    "@/lib/utils/bpmn-predecessor-sync"
+  );
+
+  const nodes: OperationsGraphNode[] = [];
+  const edges: OperationsGraphEdge[] = [];
+  const nodeIds = new Set<string>();
+  const e2eCenterId = buildGraphNodeId("E2E", e2eProcessId);
+
+  const addNode = (node: OperationsGraphNode) => {
+    if (!nodeIds.has(node.id)) {
+      nodeIds.add(node.id);
+      nodes.push(node);
+    }
+  };
+
+  const addEdge = (
+    source: string,
+    target: string,
+    kind: GraphEdgeKind,
+    label?: string,
+  ) => {
+    const id = `${kind}:${source}->${target}`;
+    if (!edges.some((edge) => edge.id === id)) {
+      edges.push({ id, source, target, kind, label });
+    }
+  };
+
+  const modelRow = await queryOne<Record<string, unknown>>(
+    `SELECT TOP 1 model_id AS modelId, bpmn_xml AS bpmnXml
+     FROM bpmn_model
+     WHERE e2e_process_id = @e2eProcessId AND is_current = 1
+     ORDER BY updated_at DESC, model_id DESC`,
+    { e2eProcessId },
+  );
+
+  if (!modelRow?.modelId) {
+    return { nodes, edges };
+  }
+
+  const modelId = modelRow.modelId as number;
+  const bpmnXml = (modelRow.bpmnXml as string | null) ?? null;
+
+  const elementRows = await query<Record<string, unknown>>(
+    `SELECT e.element_bpmn_id AS elementBpmnId,
+            e.element_type AS elementType,
+            e.linked_node_id AS linkedNodeId,
+            p.code AS linkedCode,
+            p.name AS linkedName,
+            p.level AS linkedLevel,
+            p.status AS linkedStatus
+     FROM bpmn_element e
+     LEFT JOIN process_node p ON p.node_id = e.linked_node_id
+     WHERE e.model_id = @modelId AND e.linked_node_id IS NOT NULL`,
+    { modelId },
+  );
+
+  const elements = elementRows.map((row) => ({
+    elementBpmnId: row.elementBpmnId as string,
+    elementType: row.elementType as string,
+    linkedNodeId: row.linkedNodeId as number,
+  }));
+
+  const linkedL3Ids = new Set<number>();
+  for (const row of elementRows) {
+    if (row.linkedLevel !== "L3") {
+      continue;
+    }
+    const l3Id = row.linkedNodeId as number;
+    linkedL3Ids.add(l3Id);
+    const l3Node: OperationsGraphNode = {
+      id: buildGraphNodeId("L3", l3Id),
+      kind: "L3",
+      label: row.linkedName as string,
+      code: row.linkedCode as string,
+      status: row.linkedStatus as string,
+      sourceId: l3Id,
+      meta: { inE2eFlow: true },
+    };
+    addNode(l3Node);
+    addEdge(e2eCenterId, l3Node.id, "CONTAINS");
+  }
+
+  const predecessors = derivePredecessorsFromBpmn(
+    bpmnXml,
+    elements.map((el) => ({
+      elementBpmnId: el.elementBpmnId,
+      elementType: el.elementType as import("@/types/bpmn").BpmnElementType,
+      linkedNodeId: el.linkedNodeId,
+    })),
+  );
+
+  for (const pair of predecessors) {
+    if (!linkedL3Ids.has(pair.nodeId) || !linkedL3Ids.has(pair.predecessorNodeId)) {
+      continue;
+    }
+    addEdge(
+      buildGraphNodeId("L3", pair.predecessorNodeId),
+      buildGraphNodeId("L3", pair.nodeId),
+      "PRECEDES",
+    );
+  }
+
+  if (options.includeL3Children) {
+    for (const l3Id of linkedL3Ids) {
+      const bundle = await collectProcessNeighbors(l3Id, "L3", {
+        showInterfaces: options.showInterfaces,
+        showTables: options.showTables,
+      });
+      for (const node of bundle.nodes) {
+        addNode(node);
+      }
+      for (const edge of bundle.edges) {
+        addEdge(edge.source, edge.target, edge.kind, edge.label);
+      }
+    }
+  }
+
+  return { nodes, edges };
+};
+
 export type { GraphNodeKind };

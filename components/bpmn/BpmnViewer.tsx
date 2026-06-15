@@ -15,6 +15,12 @@ type BpmnViewerProps = {
   xml: string | null;
   className?: string;
   highlightDiff?: BpmnElementDiff[];
+  links?: Record<string, { nodeId: number; code: string; name: string; linkKind: string }>;
+  onCallActivityDblClick?: (link: {
+    nodeId: number;
+    code: string;
+    name: string;
+  }) => void;
 };
 
 /** BPMN 읽기 전용 뷰어 (비교 화면용) */
@@ -22,11 +28,23 @@ export const BpmnViewer = ({
   xml,
   className,
   highlightDiff = [],
+  links = {},
+  onCallActivityDblClick,
 }: BpmnViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<import("bpmn-js/lib/NavigatedViewer").default | null>(
     null,
   );
+  const linksRef = useRef(links);
+  const onDblClickRef = useRef(onCallActivityDblClick);
+
+  useEffect(() => {
+    linksRef.current = links;
+  }, [links]);
+
+  useEffect(() => {
+    onDblClickRef.current = onCallActivityDblClick;
+  }, [onCallActivityDblClick]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -57,6 +75,29 @@ export const BpmnViewer = ({
           };
           canvas.zoom("fit-viewport");
           applyHighlights(viewer, highlightDiff);
+
+          const eventBus = viewer.get("eventBus") as {
+            on: (
+              event: string,
+              callback: (e: {
+                element?: { id: string; businessObject?: { $type?: string } };
+              }) => void,
+            ) => void;
+          };
+          eventBus.on("element.dblclick", (e) => {
+            const element = e.element;
+            if (!element?.id) {
+              return;
+            }
+            const link = linksRef.current[element.id];
+            if (link?.linkKind === "L3_CALL") {
+              onDblClickRef.current?.({
+                nodeId: link.nodeId,
+                code: link.code,
+                name: link.name,
+              });
+            }
+          });
         } catch (err) {
           console.error("[BpmnViewer] import failed:", err);
         }
@@ -70,7 +111,7 @@ export const BpmnViewer = ({
       viewerRef.current?.destroy();
       viewerRef.current = null;
     };
-  }, [xml, highlightDiff]);
+  }, [xml, highlightDiff, links, onCallActivityDblClick]);
 
   return (
     <div

@@ -19,6 +19,9 @@ import {
   useProcessScopeParams,
 } from "@/components/process/ProcessScopeFilter";
 import { ProcessTree } from "@/components/process/ProcessTree";
+import { E2eProcessTreeSection } from "@/components/e2e-process/E2eProcessTreeSection";
+import { E2eProcessDetail } from "@/components/e2e-process/E2eProcessDetail";
+import { E2eProcessForm } from "@/components/e2e-process/E2eProcessForm";
 import {
   Sheet,
   SheetContent,
@@ -27,11 +30,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { ProcessNodeDto, ProcessNodeTree } from "@/types/process";
+import type { E2eProcessDto } from "@/types/e2e-process";
 
 type ProcessSheetState =
   | { type: "detail"; node: ProcessNodeTree | ProcessNodeDto }
   | { type: "create"; parentId: number | null }
   | { type: "edit"; node: ProcessNodeDto };
+
+type E2eSheetState =
+  | { type: "detail"; process: E2eProcessDto }
+  | { type: "create" }
+  | { type: "edit"; process: E2eProcessDto };
 
 /** 프로세스 트리에서 선택한 노드를 오른쪽 상세 패널로 표시한다. */
 export const ProcessListClient = () => {
@@ -40,6 +49,8 @@ export const ProcessListClient = () => {
   const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
     useProcessScopeParams();
   const [sheetState, setSheetState] = useState<ProcessSheetState | null>(null);
+  const [e2eSheet, setE2eSheet] = useState<E2eSheetState | null>(null);
+  const [selectedE2eId, setSelectedE2eId] = useState<number | undefined>();
   const selectedNode =
     sheetState?.type === "detail" || sheetState?.type === "edit"
       ? sheetState.node
@@ -73,8 +84,20 @@ export const ProcessListClient = () => {
               <ProcessTree
                 selectedId={selectedNode?.nodeId}
                 scopeFilters={scopeFilters}
-                onSelect={(node) => setSheetState({ type: "detail", node })}
+                onSelect={(node) => {
+                  setSelectedE2eId(undefined);
+                  setE2eSheet(null);
+                  setSheetState({ type: "detail", node });
+                }}
                 onCreate={(parentId = null) => setSheetState({ type: "create", parentId })}
+              />
+              <E2eProcessTreeSection
+                selectedId={selectedE2eId}
+                onSelect={(process) => {
+                  setSheetState(null);
+                  setSelectedE2eId(process.e2eProcessId);
+                  setE2eSheet({ type: "detail", process });
+                }}
               />
             </ContentPanel>
           </PageContent>
@@ -82,10 +105,11 @@ export const ProcessListClient = () => {
       />
 
       <Sheet
-        open={Boolean(sheetState)}
+        open={Boolean(sheetState || e2eSheet)}
         onOpenChange={(open) => {
           if (!open) {
             setSheetState(null);
+            setE2eSheet(null);
           }
         }}
       >
@@ -139,6 +163,29 @@ export const ProcessListClient = () => {
                 onSuccess={(node) => setSheetState({ type: "detail", node })}
               />
             </div>
+          )}
+          {e2eSheet?.type === "detail" && (
+            <E2eProcessDetail
+              e2eProcessId={e2eSheet.process.e2eProcessId}
+              onEdit={(process) => setE2eSheet({ type: "edit", process })}
+            />
+          )}
+          {e2eSheet?.type === "create" && (
+            <E2eProcessForm
+              mode="create"
+              onCancel={() => setE2eSheet(null)}
+              onSuccess={(process) => setE2eSheet({ type: "detail", process })}
+            />
+          )}
+          {e2eSheet?.type === "edit" && (
+            <E2eProcessForm
+              mode="edit"
+              initialData={e2eSheet.process}
+              onCancel={() =>
+                setE2eSheet({ type: "detail", process: e2eSheet.process })
+              }
+              onSuccess={(process) => setE2eSheet({ type: "detail", process })}
+            />
           )}
         </SheetContent>
       </Sheet>
