@@ -1,3 +1,5 @@
+import type { BpmnElementDiff } from "./bpmn";
+
 export type ProcessLevel = "L1" | "L2" | "L3" | "L4";
 
 export type ProcessStatus =
@@ -125,6 +127,12 @@ export interface CreateVariantDto {
   copyMetadata?: boolean;
 }
 
+export interface StandardVariantBpmnCompareDto {
+  standardModelId: number | null;
+  variantModelId: number | null;
+  diff: BpmnElementDiff[];
+}
+
 export interface StandardVariantCompareDto {
   standard: ProcessNodeDto;
   variant: ProcessNodeDto | null;
@@ -134,6 +142,7 @@ export interface StandardVariantCompareDto {
     variantValue: string;
     changed: boolean;
   }>;
+  bpmnCompare?: StandardVariantBpmnCompareDto | null;
 }
 
 export interface CreateProcessDto {

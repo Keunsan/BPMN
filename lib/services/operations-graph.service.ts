@@ -55,6 +55,8 @@ const filterByKinds = (
     showInterfaces?: boolean;
     showTables?: boolean;
     highlightCritical?: boolean;
+    centerNodeId?: string;
+    centerKind?: GraphNodeKind;
   },
 ): { nodes: OperationsGraphNode[]; edges: OperationsGraphEdge[] } => {
   const kindSet = includeKinds
@@ -68,7 +70,39 @@ const filterByKinds = (
     kindSet.delete("TABLE");
   }
 
-  const filteredNodes = nodes.filter((node) => kindSet.has(node.kind));
+  const includedIds = new Set<string>();
+
+  for (const node of nodes) {
+    if (kindSet.has(node.kind)) {
+      includedIds.add(node.id);
+    }
+  }
+
+  if (options?.centerKind) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const node of nodes) {
+        if (node.kind !== options.centerKind || node.id === options.centerNodeId) {
+          continue;
+        }
+        if (includedIds.has(node.id)) {
+          continue;
+        }
+        const connected = edges.some(
+          (edge) =>
+            (edge.source === node.id && includedIds.has(edge.target)) ||
+            (edge.target === node.id && includedIds.has(edge.source)),
+        );
+        if (connected) {
+          includedIds.add(node.id);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const filteredNodes = nodes.filter((node) => includedIds.has(node.id));
   const nodeIdSet = new Set(filteredNodes.map((node) => node.id));
 
   const edgeKindSet = includeEdgeKinds
@@ -97,6 +131,17 @@ const filterByKinds = (
   return { nodes: filteredNodes, edges: filteredEdges };
 };
 
+const excludeCenterFromGraph = (
+  nodes: OperationsGraphNode[],
+  edges: OperationsGraphEdge[],
+  centerNodeId: string,
+): { nodes: OperationsGraphNode[]; edges: OperationsGraphEdge[] } => ({
+  nodes: nodes.filter((node) => node.id !== centerNodeId),
+  edges: edges.filter(
+    (edge) => edge.source !== centerNodeId && edge.target !== centerNodeId,
+  ),
+});
+
 const buildSummary = (
   nodes: OperationsGraphNode[],
   edges: OperationsGraphEdge[],
@@ -121,6 +166,7 @@ export const buildOperationsGraph = async (
   const {
     centerKind,
     centerId,
+    centerProcessLevel,
     depth,
     includeKinds,
     includeEdgeKinds,
@@ -128,6 +174,15 @@ export const buildOperationsGraph = async (
     showTables = true,
     highlightCritical = false,
   } = query;
+
+  const isScopeCenter =
+    centerProcessLevel === "L1" || centerProcessLevel === "L2";
+  const filterAnchorKind: GraphNodeKind | undefined =
+    centerProcessLevel === "L3"
+      ? "L3"
+      : centerKind === "TASK"
+        ? "TASK"
+        : undefined;
 
   const nodeMap = new Map<string, OperationsGraphNode>();
   const edgeMap = new Map<string, OperationsGraphEdge>();
@@ -137,6 +192,7 @@ export const buildOperationsGraph = async (
   ];
 
   let truncated = false;
+  let centerNodeMeta: OperationsGraphNode | undefined;
 
   while (queue.length > 0) {
     const current = queue.shift();
@@ -168,25 +224,33 @@ export const buildOperationsGraph = async (
         if (!processNode) {
           throw new ApiError("E404", "Process node not found", 404);
         }
-        const centerNode: OperationsGraphNode = {
-          id: buildGraphNodeId(
-            processNode.level === "L3" ? "L3" : "TASK",
-            processNode.nodeId,
-          ),
-          kind: processNode.level === "L3" ? "L3" : "TASK",
+        const centerGraphKind: GraphNodeKind =
+          processNode.level === "L4" ? "TASK" : "L3";
+        centerNodeMeta = {
+          id: buildGraphNodeId(centerGraphKind, processNode.nodeId),
+          kind: centerGraphKind,
           label: processNode.name,
           code: processNode.code,
           status: processNode.status,
           sourceId: processNode.nodeId,
+          meta: isScopeCenter
+            ? { processLevel: centerProcessLevel }
+            : undefined,
         };
-        mergeNodes(nodeMap, [centerNode]);
       }
 
-      bundle = await graphQueries.collectProcessNeighbors(
-        nodeId,
-        current.kind === "L3" ? "L3" : "L4",
-        { showInterfaces, showTables },
-      );
+      if (current.depth === 0 && isScopeCenter) {
+        bundle = await graphQueries.collectProcessScopeNeighbors(nodeId, {
+          showInterfaces,
+          showTables,
+        });
+      } else {
+        bundle = await graphQueries.collectProcessNeighbors(
+          nodeId,
+          current.kind === "L3" ? "L3" : "L4",
+          { showInterfaces, showTables },
+        );
+      }
     } else if (current.kind === "APPLICATION") {
       const systemId = Number(current.sourceId);
       if (!Number.isFinite(systemId)) {
@@ -241,21 +305,38 @@ export const buildOperationsGraph = async (
     );
   }
 
+  const centerNodeId = buildGraphNodeId(centerKind, centerId);
+
   const filtered = filterByKinds(
     nodes,
     edges,
     includeKinds,
     includeEdgeKinds,
-    { showInterfaces, showTables, highlightCritical },
+    {
+      showInterfaces,
+      showTables,
+      highlightCritical,
+      centerNodeId,
+      centerKind: filterAnchorKind,
+    },
   );
 
-  const centerNodeId = buildGraphNodeId(centerKind, centerId);
+  const withoutCenter = excludeCenterFromGraph(
+    filtered.nodes,
+    filtered.edges,
+    centerNodeId,
+  );
 
   return {
-    nodes: filtered.nodes,
-    edges: filtered.edges,
-    summary: buildSummary(filtered.nodes, filtered.edges, truncated),
+    nodes: withoutCenter.nodes,
+    edges: withoutCenter.edges,
+    summary: buildSummary(
+      withoutCenter.nodes,
+      withoutCenter.edges,
+      truncated,
+    ),
     centerNodeId,
+    centerNode: centerNodeMeta,
   };
 };
 

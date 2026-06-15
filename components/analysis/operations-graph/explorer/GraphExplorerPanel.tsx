@@ -1,36 +1,38 @@
 "use client";
 
+import { FolderTree } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { ProcessTree } from "@/components/process/ProcessTree";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ProcessNodeSelectDialog,
+  type ProcessNodeSelection,
+} from "@/components/process/ProcessNodeSelectDialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
+  GraphCenterProcessLevel,
   GraphNodeKind,
   OperationsGraphNode,
   OperationsGraphSummary,
 } from "@/types/operations-graph";
+import type { ProcessLevel } from "@/types/process";
 import { GRAPH_NODE_KINDS } from "@/types/operations-graph";
 
 type GraphExplorerPanelProps = {
   centerNodeId: number | null;
   centerNode?: OperationsGraphNode;
   centerKind?: GraphNodeKind;
-  onSelectCenter: (nodeId: number, level: "L3" | "L4") => void;
-  depth: 1 | 2;
-  onDepthChange: (depth: 1 | 2) => void;
+  centerProcessLevel?: GraphCenterProcessLevel;
+  onSelectCenter: (nodeId: number, level: GraphCenterProcessLevel) => void;
   nodeKinds: Record<GraphNodeKind, boolean>;
   onNodeKindChange: (kind: GraphNodeKind, enabled: boolean) => void;
   summary?: OperationsGraphSummary;
   isLoading?: boolean;
 };
+
+const PROCESS_SELECT_LEVELS: ProcessLevel[] = ["L1", "L2", "L3"];
 
 const kindMarkClass: Record<GraphNodeKind, string> = {
   L3: "pams-graph-explorer__kind-mark--l3",
@@ -40,17 +42,27 @@ const kindMarkClass: Record<GraphNodeKind, string> = {
   INTERFACE: "pams-graph-explorer__kind-mark--interface",
 };
 
+const EDGE_LEGEND_KEYS = [
+  "CONTAINS",
+  "PRECEDES",
+  "USES_SCREEN",
+  "READS_TABLE",
+] as const;
+
 const ExplorerSection = ({
   title,
+  hint,
   children,
   className,
 }: {
   title: string;
+  hint?: string;
   children: React.ReactNode;
   className?: string;
 }) => (
   <section className={cn("pams-graph-explorer__section", className)}>
     <h3 className="pams-graph-explorer__section-title">{title}</h3>
+    {hint ? <p className="pams-graph-explorer__section-hint">{hint}</p> : null}
     {children}
   </section>
 );
@@ -60,85 +72,136 @@ export const GraphExplorerPanel = ({
   centerNodeId,
   centerNode,
   centerKind,
+  centerProcessLevel,
   onSelectCenter,
-  depth,
-  onDepthChange,
   nodeKinds,
   onNodeKindChange,
   summary,
   isLoading,
 }: GraphExplorerPanelProps) => {
   const t = useTranslations("operationsGraph");
+  const tCommon = useTranslations("common");
+  const [processDialogOpen, setProcessDialogOpen] = useState(false);
+
+  const excludedGraphKind = useMemo((): GraphNodeKind | undefined => {
+    if (centerProcessLevel === "L3") {
+      return "L3";
+    }
+    if (!centerProcessLevel && centerKind === "TASK") {
+      return "TASK";
+    }
+    return undefined;
+  }, [centerKind, centerProcessLevel]);
+
+  const activeKindCount = useMemo(
+    () =>
+      GRAPH_NODE_KINDS.filter(
+        (kind) => nodeKinds[kind] && kind !== excludedGraphKind,
+      ).length,
+    [nodeKinds, excludedGraphKind],
+  );
+
+  const filterableKinds = useMemo(
+    () => GRAPH_NODE_KINDS.filter((kind) => kind !== excludedGraphKind),
+    [excludedGraphKind],
+  );
+
+  const selectedProcess = useMemo<ProcessNodeSelection | null>(() => {
+    if (!centerNodeId || !centerNode) {
+      return null;
+    }
+
+    const level: ProcessLevel =
+      centerProcessLevel ??
+      (centerKind === "TASK" ? "L4" : "L3");
+
+    return {
+      nodeId: centerNodeId,
+      code: centerNode.code ?? "",
+      name: centerNode.label,
+      level,
+    };
+  }, [centerNode, centerKind, centerNodeId, centerProcessLevel]);
+
+  const handleConfirmProcess = (process: ProcessNodeSelection | null) => {
+    if (
+      process &&
+      (process.level === "L1" ||
+        process.level === "L2" ||
+        process.level === "L3")
+    ) {
+      onSelectCenter(process.nodeId, process.level);
+    }
+  };
+
+  const contextLevelLabel = centerProcessLevel ?? centerKind;
 
   return (
     <div className="pams-graph-explorer">
       <div className="pams-graph-explorer__context">
-        <span className="pams-graph-explorer__context-label">
-          {t("explorer.contextLabel")}
-        </span>
-        {!centerNodeId ? (
-          <p className="pams-graph-explorer__context-empty">
-            {t("explorer.contextEmpty")}
-          </p>
-        ) : isLoading && !centerNode ? (
-          <p className="pams-graph-explorer__context-meta">
-            {t("explorer.contextLoading")}
-          </p>
-        ) : (
-          <>
-            <p className="pams-graph-explorer__context-title">
-              {centerNode?.label ?? t("explorer.contextLoading")}
+        <div className="pams-graph-explorer__context-main">
+          <span className="pams-graph-explorer__context-label">
+            {t("explorer.contextLabel")}
+          </span>
+          {!centerNodeId ? (
+            <p className="pams-graph-explorer__context-empty">
+              {t("explorer.contextEmpty")}
             </p>
+          ) : isLoading && !centerNode ? (
             <p className="pams-graph-explorer__context-meta">
-              {centerNode?.code ? `${centerNode.code} · ` : ""}
-              {centerKind
-                ? t(`nodeKindShort.${centerKind}`)
-                : t("explorer.contextLoading")}
-              {" · "}
-              {depth === 1 ? t("explorer.depth1") : t("explorer.depth2")}
+              {t("explorer.contextLoading")}
             </p>
-          </>
-        )}
+          ) : (
+            <>
+              <p className="pams-graph-explorer__context-title">
+                {centerNode?.label ?? t("explorer.contextLoading")}
+              </p>
+              <p className="pams-graph-explorer__context-meta">
+                {centerNode?.code ? `${centerNode.code} · ` : ""}
+                {contextLevelLabel
+                  ? t(`nodeKindShort.${contextLevelLabel}`, {
+                      defaultValue: String(contextLevelLabel),
+                    })
+                  : t("explorer.contextLoading")}
+              </p>
+            </>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="pams-graph-explorer__context-action shrink-0"
+          onClick={() => setProcessDialogOpen(true)}
+          aria-label={t("explorer.processSelect")}
+        >
+          <FolderTree className="size-3.5 shrink-0" aria-hidden />
+          <span className="hidden min-[360px]:inline">{t("explorer.processSelect")}</span>
+        </Button>
       </div>
 
-      <ExplorerSection title={t("explorer.scope")}>
-        <div className="pams-graph-explorer__tree-shell">
-          <ProcessTree
-            variant="picker"
-            selectedId={centerNodeId ?? undefined}
-            fixSearchOnScroll
-            onSelect={(node) => {
-              if (node.level === "L3" || node.level === "L4") {
-                onSelectCenter(node.nodeId, node.level);
-              }
-            }}
-          />
-        </div>
-        <div className="pams-graph-explorer__depth">
-          <span className="pams-graph-explorer__field-label">
-            {t("explorer.depth")}
-          </span>
-          <Select
-            value={String(depth)}
-            onValueChange={(value) => onDepthChange(value === "1" ? 1 : 2)}
-          >
-            <SelectTrigger variant="filter" className="h-8 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">{t("explorer.depth1")}</SelectItem>
-              <SelectItem value="2">{t("explorer.depth2")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </ExplorerSection>
+      <ProcessNodeSelectDialog
+        open={processDialogOpen}
+        onOpenChange={setProcessDialogOpen}
+        title={t("explorer.processSelect")}
+        description={t("explorer.processSelectDesc")}
+        allowedLevels={PROCESS_SELECT_LEVELS}
+        selectedProcess={selectedProcess}
+        helperText={t("explorer.processSelectHint")}
+        confirmLabel={t("explorer.processSelectConfirm")}
+        cancelLabel={tCommon("cancel")}
+        onConfirm={handleConfirmProcess}
+        contentClassName="max-h-[90vh] overflow-y-auto sm:max-w-xl"
+        treeShellClassName="max-h-[min(60vh,28rem)] overflow-y-auto rounded-md border p-2"
+      />
 
       <ExplorerSection
         title={t("explorer.nodeTypeFilter")}
+        hint={t("explorer.filterHint", { count: activeKindCount })}
         className="pams-graph-explorer__section--filters"
       >
         <ul className="pams-graph-explorer__filter-list">
-          {GRAPH_NODE_KINDS.map((kind) => {
+          {filterableKinds.map((kind) => {
             const active = nodeKinds[kind];
             return (
               <li key={kind}>
@@ -172,6 +235,49 @@ export const GraphExplorerPanel = ({
               </li>
             );
           })}
+        </ul>
+        {centerNodeId && excludedGraphKind ? (
+          <p className="pams-graph-explorer__section-hint mt-2">
+            {t("explorer.centerKindExcluded", {
+              kind: t(`nodeKindShort.${excludedGraphKind}`),
+            })}
+          </p>
+        ) : null}
+      </ExplorerSection>
+
+      <ExplorerSection title={t("explorer.legend")}>
+        <div className="pams-graph-explorer__legend-grid">
+          {GRAPH_NODE_KINDS.map((kind) => (
+            <div key={kind} className="pams-graph-explorer__legend-item">
+              <span
+                className={cn(
+                  "pams-graph-explorer__kind-mark",
+                  kindMarkClass[kind],
+                )}
+                aria-hidden
+              />
+              <span className="pams-graph-explorer__legend-label">
+                {t(`nodeKindShort.${kind}`)}
+              </span>
+              <span className="pams-graph-explorer__legend-name">
+                {t(`nodeKind.${kind}`)}
+              </span>
+            </div>
+          ))}
+        </div>
+        <ul className="pams-graph-explorer__edge-legend">
+          {EDGE_LEGEND_KEYS.map((kind) => (
+            <li key={kind} className="pams-graph-explorer__edge-legend-item">
+              <span
+                className={cn(
+                  "pams-graph-explorer__edge-sample",
+                  `pams-graph-explorer__edge-sample--${kind.toLowerCase()}`,
+                )}
+                aria-hidden
+              />
+              <span>{t(`edgeKindShort.${kind}`)}</span>
+            </li>
+          ))}
         </ul>
       </ExplorerSection>
 

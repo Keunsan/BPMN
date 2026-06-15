@@ -97,8 +97,12 @@
     "createFirst": "Create first process",
     "new": "New",
     "searchPlaceholder": "Search by code or name",
+    "treeLevelControls": "Expand by level",
+    "treeLevelExpand": "Expand {level} and upper levels",
+    "treeLevelCollapse": "Collapse {level} and upper levels",
     "viewDetail": "View detail",
     "addChild": "Add child",
+    "directChildCount": "({count})",
     "delete": "Delete",
     "deleteConfirmTitle": "Delete process",
     "deleteConfirmDesc": "Delete \"{name}\"?",
@@ -208,7 +212,17 @@
       "standardColumn": "Standard",
       "variantColumn": "Variant",
       "noStandardOptions": "No comparable standard processes",
-      "noStandardOptionsDesc": "Register L3 or L4 standard processes first."
+      "noStandardOptionsDesc": "Register L3 or L4 standard processes first.",
+      "copyBpmn": "Copy standard BPMN",
+      "copyBpmnDescL3": "Clone the standard L3 BPMN diagram and L4 task links to the variant.",
+      "copyBpmnDescL4": "Update the parent L3 variant BPMN task link to the variant L4.",
+      "copyMetadata": "Copy metadata",
+      "copyMetadataDescL3": "Copy task_attribute from standard L4 tasks to variant L4 tasks.",
+      "copyMetadataDescL4": "Copy task_attribute from the standard L4 to the variant L4.",
+      "compareTabMetadata": "Metadata",
+      "compareTabBpmn": "BPMN",
+      "compareNoBpmn": "No BPMN to compare",
+      "compareNoBpmnDesc": "No BPMN model is registered on the standard or variant L3."
     }
   },
   "bpmn": {
@@ -226,10 +240,12 @@
     "searchPlaceholder": "Search model or process",
     "filterStatus": "Status",
     "allStatus": "All statuses",
+    "scopeFilterHint": "Select company and business unit to show BPMN models for that scope.",
     "sortUpdated": "Latest",
     "sortName": "Name",
     "noThumbnail": "No preview",
     "edit": "Edit",
+    "backToList": "Back to list",
     "duplicate": "Duplicate",
     "delete": "Delete",
     "deleteConfirmTitle": "Delete BPMN Model",
@@ -552,7 +568,7 @@
   },
   "systemMapping": {
     "title": "Task-System Links",
-    "description": "Link L3/L4 tasks to system screens by usage type.",
+    "description": "Link L3/L4 tasks to systems and optionally add screens.",
     "task": "Task",
     "selectTask": "Select a task.",
     "company": "Company",
@@ -564,43 +580,41 @@
     "selectSystem": "Select system",
     "selectModule": "Select module",
     "selectScreen": "Select screen",
-    "usageType": "Usage",
-    "usageDescription": "Usage Description",
     "primary": "Primary System",
     "markPrimary": "Mark as primary",
     "connect": "Connect",
     "connectSelected": "Connect ({count})",
-    "linkedSystems": "Linked Screens",
+    "linkedSystems": "Linked Systems",
+    "linkedScreens": "Linked Screens",
+    "availableSystems": "Available Systems",
     "availableScreens": "Available Screens",
+    "emptyAvailableSystems": "No systems available to link.",
     "emptyAvailableScreens": "No screens available to link.",
+    "emptyLinkedScreens": "No linked screens.",
     "emptyTasks": "No L3/L4 tasks found.",
     "taskList": "Task List",
     "taskCode": "Task Code",
     "taskName": "Task Name",
     "taskSearch": "Task Search",
     "taskSearchPlaceholder": "Search by code or name",
+    "systemSearchPlaceholder": "Search by system code or name",
     "selectTaskHint": "Select a task on the left.",
     "screenSearch": "Screen Search",
     "screenSearchPlaceholder": "Search menu ID, name, or path",
     "menuId": "Menu ID",
     "menuPath": "Menu Path",
+    "screenCount": "Screens",
+    "selectedSystem": "Selected system",
+    "clearSystemSelection": "Clear selection",
     "allSystems": "All Systems",
     "allModules": "All Modules",
     "selectAllOnPage": "Select all on page",
-    "selectScreen": "Select screen",
-    "panelResizeHorizontal": "Resize task/screen panels",
+    "panelResizeHorizontal": "Resize task/system panels",
     "panelResizeVertical": "Resize linked/available panels",
     "loadedCount": "{loaded} / {total}",
     "emptyMappings": "No linked systems.",
     "primaryYes": "Primary",
-    "actions": "Actions",
-    "usageTypes": {
-      "EXECUTE": "Execute",
-      "INQUIRY": "Inquiry",
-      "APPROVAL": "Approval",
-      "REPORT": "Report",
-      "INTERFACE": "Interface"
-    }
+    "actions": "Actions"
   },
   "externalTables": {
     "title": "External Table Browser",
@@ -704,6 +718,8 @@
       "INTERFACE": "Interface"
     },
     "nodeKindShort": {
+      "L1": "L1",
+      "L2": "L2",
       "L3": "L3",
       "TASK": "Task",
       "APPLICATION": "App",
@@ -713,15 +729,15 @@
     "nodeCriticalShort": "Critical",
     "explorer": {
       "contextLabel": "Center node",
-      "contextEmpty": "Select an L3 or Task from the list below.",
+      "contextEmpty": "Use the process select button to choose an L1–L3 process.",
       "contextLoading": "Loading…",
-      "scope": "Traversal scope",
-      "processSelect": "Process selection",
-      "depth": "Traversal depth",
-      "depth1": "1-hop",
-      "depth2": "2-hop",
+      "processSelect": "Select process",
+      "processSelectDesc": "Choose the L1–L3 process to use as the graph center.",
+      "processSelectHint": "Only L1, L2, and L3 nodes can be selected. L4 (Task) is not selectable.",
+      "processSelectConfirm": "Select",
       "nodeTypeFilter": "Node types",
       "filterHint": "Showing {count} types",
+      "centerKindExcluded": "The exploration center ({kind}) is excluded from node types.",
       "legend": "Legend",
       "summary": "Graph summary",
       "summaryEmpty": "Summary appears after a process is selected.",
@@ -751,7 +767,11 @@
       "emptyDescription": "Select an L3 or Task process on the left.",
       "hiddenTitle": "Graph is hidden",
       "hiddenDescription": "Enable graph display from the toolbar.",
-      "metaSummary": "{nodes} nodes · {edges} edges"
+      "metaSummary": "{nodes} nodes · {edges} edges",
+      "statusNodes": "{count} nodes",
+      "statusEdges": "{count} edges",
+      "statusZoom": "Zoom {percent}%",
+      "statusSelected": "Selected: {label}"
     },
     "inspector": {
       "emptyTitle": "Select a node",
@@ -780,7 +800,35 @@
       "incident": "Incident",
       "change": "Change history",
       "noData": "No operational data linked.",
-      "placeholderHint": "Operational data will be connected later."
+      "placeholderHint": "Operational data will be connected later.",
+      "fields": {
+        "impact": {
+          "scope": "Impact scope",
+          "relatedSystems": "Related systems",
+          "dependentTasks": "Dependent tasks"
+        },
+        "usage": {
+          "dailyCalls": "Daily calls",
+          "lastUsed": "Last used",
+          "activeUsers": "Active users"
+        },
+        "crud": {
+          "create": "Create",
+          "read": "Read",
+          "update": "Update",
+          "delete": "Delete"
+        },
+        "incident": {
+          "lastIncident": "Last incident",
+          "openCount": "Open count",
+          "mttr": "MTTR"
+        },
+        "change": {
+          "lastChange": "Last change",
+          "changeFrequency": "Change frequency",
+          "owner": "Owner"
+        }
+      }
     },
     "edgeKindShort": {
       "CONTAINS": "Contains",

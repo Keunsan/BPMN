@@ -175,6 +175,20 @@ export const countVariantsForStandard = async (
   return row?.cnt ?? 0;
 };
 
+/** 직계 자식 프로세스 노드를 조회한다 */
+export const listChildProcesses = async (
+  parentNodeId: number,
+): Promise<ProcessNode[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT *
+     FROM process_node
+     WHERE parent_node_id = @parentNodeId
+     ORDER BY sort_order, code`,
+    { parentNodeId },
+  );
+  return rows.map(mapProcessNode);
+};
+
 export const countChildProcesses = async (nodeId: number): Promise<number> => {
   const row = await queryOne<{ cnt: number }>(
     `SELECT COUNT(*) AS cnt
@@ -205,7 +219,7 @@ const deleteImpactCountQueries: Array<{
   },
   {
     kind: "taskSystemMapping",
-    sql: "SELECT COUNT(*) AS cnt FROM task_system_mapping WHERE node_id = @nodeId",
+    sql: "SELECT COUNT(*) AS cnt FROM task_system_link WHERE node_id = @nodeId",
   },
   {
     kind: "taskInterfaceMapping",
@@ -509,7 +523,7 @@ export const deleteProcess = async (
       await txRequest(`DELETE FROM task_role_mapping WHERE node_id = @nodeId`, {
         nodeId,
       });
-      await txRequest(`DELETE FROM task_system_mapping WHERE node_id = @nodeId`, {
+      await txRequest(`DELETE FROM task_system_link WHERE node_id = @nodeId`, {
         nodeId,
       });
       await txRequest(

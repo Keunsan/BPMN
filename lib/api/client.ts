@@ -2,7 +2,7 @@ import type { Locale } from "@/lib/i18n/config";
 
 import type { ApiErrorResponse, ApiResponse } from "@/types/error";
 
-
+import { isAuthEnabled } from "@/lib/auth/config";
 
 import { ApiError } from "./error-handler";
 
@@ -212,7 +212,7 @@ export async function apiClient<T>(
 
 
 
-    if (response.status === 401) {
+    if (response.status === 401 && isAuthEnabled()) {
 
       redirectToLogin(locale);
 
@@ -371,6 +371,19 @@ export function apiPut<T>(
 }
 
 
+
+/** PATCH 요청 헬퍼 */
+export function apiPatch<T>(
+  path: string,
+  data?: unknown,
+  options?: Omit<ApiClientOptions, "method" | "body">,
+): Promise<T> {
+  return apiClient<T>(path, {
+    ...options,
+    method: "PATCH",
+    body: data !== undefined ? JSON.stringify(data) : undefined,
+  });
+}
 
 /** DELETE 요청 헬퍼 */
 

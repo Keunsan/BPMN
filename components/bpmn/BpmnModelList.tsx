@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Link, useRouter } from "@/lib/i18n/navigation";
+import { ProcessScopeFilter } from "@/components/process/ProcessScopeFilter";
 import {
   useBpmnList,
   useCreateBpmn,
@@ -72,6 +73,8 @@ export const BpmnModelList = () => {
     "ALL",
   );
   const [sort, setSort] = useState<"updated" | "name">("updated");
+  const [companyCode, setCompanyCode] = useState("");
+  const [businessUnitCode, setBusinessUnitCode] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const statusFilterLabel =
     statusFilter === "ALL" ? t("allStatus") : ts(statusFilter);
@@ -82,6 +85,8 @@ export const BpmnModelList = () => {
     search: debouncedSearch || undefined,
     status: statusFilter === "ALL" ? undefined : statusFilter,
     sort,
+    companyCode: companyCode || undefined,
+    businessUnitCode: businessUnitCode || undefined,
   });
 
   const deleteMutation = useDeleteBpmn();
@@ -130,6 +135,15 @@ export const BpmnModelList = () => {
       <ListPageBody
         filter={
           <FilterPanel>
+            <ProcessScopeFilter
+              embedded
+              companyCode={companyCode}
+              businessUnitCode={businessUnitCode}
+              onScopeChange={({ companyCode: nextCompany, businessUnitCode: nextBu }) => {
+                setCompanyCode(nextCompany ?? "");
+                setBusinessUnitCode(nextBu ?? "");
+              }}
+            />
             <FilterField label={t("searchPlaceholder")}>
               <SearchBar
                 value={search}
@@ -175,6 +189,11 @@ export const BpmnModelList = () => {
                 </SelectContent>
               </Select>
             </FilterField>
+            {!companyCode || !businessUnitCode ? (
+              <p className="px-1 text-[11px] text-muted-foreground">
+                {t("scopeFilterHint")}
+              </p>
+            ) : null}
           </FilterPanel>
         }
         content={

@@ -15,8 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { GraphViewMode } from "@/types/operations-graph";
 
-import "./operations-graph.css";
-
 type GraphToolbarProps = {
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -92,47 +90,55 @@ export const GraphToolbar = ({
 
         <div className="pams-graph-toolbar__divider" aria-hidden />
 
-        <div
-          className="pams-graph-toolbar__segment"
-          role="group"
-          aria-label={t("toolbar.filterGroup")}
-        >
-          <LayerToggle
-            pressed={showGraph}
-            onClick={() => onShowGraphChange(!showGraph)}
-            title={t("toolbar.toggleGraph")}
+        <div className="pams-graph-toolbar__group pams-graph-toolbar__group--labeled">
+          <span className="pams-graph-toolbar__group-label">
+            {t("toolbar.filterGroup")}
+          </span>
+          <div
+            className="pams-graph-toolbar__segment"
+            role="group"
+            aria-label={t("toolbar.filterGroup")}
           >
-            {t("toolbar.graph")}
-          </LayerToggle>
-          <LayerToggle
-            pressed={showInterfaces}
-            onClick={() => onShowInterfacesChange(!showInterfaces)}
-            title={t("toolbar.toggleInterfaces")}
-          >
-            {t("toolbar.interfaces")}
-          </LayerToggle>
-          <LayerToggle
-            pressed={showTables}
-            onClick={() => onShowTablesChange(!showTables)}
-            title={t("toolbar.toggleTables")}
-          >
-            {t("toolbar.tables")}
-          </LayerToggle>
-          <LayerToggle
-            pressed={highlightCritical}
-            onClick={() => onHighlightCriticalChange(!highlightCritical)}
-            title={t("toolbar.toggleCritical")}
-          >
-            {t("toolbar.critical")}
-          </LayerToggle>
+            <LayerToggle
+              pressed={showGraph}
+              onClick={() => onShowGraphChange(!showGraph)}
+              title={t("toolbar.toggleGraph")}
+            >
+              {t("toolbar.graph")}
+            </LayerToggle>
+            <LayerToggle
+              pressed={showInterfaces}
+              onClick={() => onShowInterfacesChange(!showInterfaces)}
+              title={t("toolbar.toggleInterfaces")}
+            >
+              {t("toolbar.interfaces")}
+            </LayerToggle>
+            <LayerToggle
+              pressed={showTables}
+              onClick={() => onShowTablesChange(!showTables)}
+              title={t("toolbar.toggleTables")}
+            >
+              {t("toolbar.tables")}
+            </LayerToggle>
+            <LayerToggle
+              pressed={highlightCritical}
+              onClick={() => onHighlightCriticalChange(!highlightCritical)}
+              title={t("toolbar.toggleCritical")}
+            >
+              {t("toolbar.critical")}
+            </LayerToggle>
+          </div>
         </div>
 
         <div className="pams-graph-toolbar__divider" aria-hidden />
 
         <div
-          className="pams-graph-toolbar__group"
+          className="pams-graph-toolbar__group pams-graph-toolbar__group--labeled"
           aria-label={t("toolbar.viewGroup")}
         >
+          <span className="pams-graph-toolbar__group-label">
+            {t("toolbar.viewGroup")}
+          </span>
           <Select
             value={viewMode}
             onValueChange={(value) =>

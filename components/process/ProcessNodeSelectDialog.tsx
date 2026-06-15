@@ -37,6 +37,8 @@ type ProcessNodeSelectDialogProps = {
   onConfirm: (process: ProcessNodeSelection | null) => void;
   onCancel?: () => void;
   extraAction?: ReactNode;
+  contentClassName?: string;
+  treeShellClassName?: string;
 };
 
 /** 프로세스 트리에서 지정 레벨(L3/L4 등) 노드를 선택하는 공통 다이얼로그 */
@@ -56,6 +58,8 @@ export const ProcessNodeSelectDialog = ({
   onConfirm,
   onCancel,
   extraAction,
+  contentClassName,
+  treeShellClassName,
 }: ProcessNodeSelectDialogProps) => {
   const excludeSet = new Set(excludeNodeIds);
   const allowedSet = new Set(allowedLevels);
@@ -95,7 +99,7 @@ export const ProcessNodeSelectDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={contentClassName ?? "max-w-lg"}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -107,11 +111,17 @@ export const ProcessNodeSelectDialog = ({
           </p>
         )}
 
-        <div className="max-h-80 overflow-y-auto rounded-md border p-2">
+        <div
+          className={
+            treeShellClassName ??
+            "max-h-80 overflow-y-auto rounded-md border p-2"
+          }
+        >
           <ProcessTree
             variant="picker"
             selectedId={selected?.nodeId ?? currentProcess?.nodeId}
             onSelect={handleSelect}
+            selectableLevels={allowedLevels}
           />
         </div>
 

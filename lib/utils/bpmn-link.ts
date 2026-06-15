@@ -4,6 +4,9 @@ import type {
   BpmnLinkKind,
   ProcessLinkInfo,
 } from "@/types/bpmn";
+import type { ProcessNodeTree } from "@/types/process";
+
+import { isEnterpriseScope } from "@/lib/utils/process-scope";
 
 /** Task 계열 BPMN 요소인지 판별한다 */
 export const isBpmnTaskElementType = (type: BpmnElementType): boolean =>
@@ -104,4 +107,75 @@ export const flattenL3Processes = <T extends { level: string; nodeId: number; ch
 
   walk(nodes);
   return result;
+};
+
+export type ProcessScopeContext = {
+  companyCode?: string | null;
+  businessUnitCode?: string | null;
+};
+
+/** 표준 L3에 대한 스코프 변형 노드를 트리에서 찾는다 */
+export const findScopedVariantForStandard = (
+  standardNodeId: number,
+  nodes: ProcessNodeTree[],
+  scope?: ProcessScopeContext,
+): ProcessNodeTree | null => {
+  if (
+    !scope?.companyCode ||
+    !scope?.businessUnitCode ||
+    isEnterpriseScope(scope.companyCode, scope.businessUnitCode)
+  ) {
+    return null;
+  }
+
+  let found: ProcessNodeTree | null = null;
+
+  const walk = (items: ProcessNodeTree[]) => {
+    for (const node of items) {
+      if (
+        node.variantOf === standardNodeId &&
+        node.companyCode === scope.companyCode &&
+        node.businessUnitCode === scope.businessUnitCode
+      ) {
+        found = node;
+        return;
+      }
+      if (node.children?.length) {
+        walk(node.children);
+      }
+    }
+  };
+
+  walk(nodes);
+  return found;
+};
+
+/** Call Activity 연결 시 스코프 변형 L3를 우선 해석한다 */
+export const resolveScopedL3LinkTarget = (
+  node: ProcessNodeTree,
+  tree: ProcessNodeTree[],
+  scope?: ProcessScopeContext,
+): ProcessNodeTree => {
+  if (node.variantOf || node.level !== "L3") {
+    return node;
+  }
+
+  const variant = findScopedVariantForStandard(node.nodeId, tree, scope);
+  return variant ?? node;
+};
+
+/** L3 Call Activity용 ProcessLinkInfo를 스코프에 맞게 해석한다 */
+export const toScopedL3LinkPayload = (
+  node: ProcessNodeTree,
+  tree: ProcessNodeTree[],
+  scope?: ProcessScopeContext,
+): ProcessLinkInfo => {
+  const resolved = resolveScopedL3LinkTarget(node, tree, scope);
+  return {
+    nodeId: resolved.nodeId,
+    code: resolved.code,
+    name: resolved.name,
+    level: "L3",
+    linkKind: "L3_CALL",
+  };
 };

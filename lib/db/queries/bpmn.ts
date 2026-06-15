@@ -42,6 +42,33 @@ const mapBpmnElement = (row: Record<string, unknown>): BpmnElement => ({
   createdAt: new Date(row.created_at as string),
 });
 
+/** 노드의 현재(is_current) BPMN 모델을 조회한다 */
+export const findCurrentBpmnModelByNodeId = async (
+  nodeId: number,
+): Promise<BpmnModel | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT TOP 1 *
+     FROM bpmn_model
+     WHERE node_id = @nodeId AND is_current = 1
+     ORDER BY updated_at DESC, model_id DESC`,
+    { nodeId },
+  );
+
+  if (row) {
+    return mapBpmnModel(row);
+  }
+
+  const fallback = await queryOne<Record<string, unknown>>(
+    `SELECT TOP 1 *
+     FROM bpmn_model
+     WHERE node_id = @nodeId
+     ORDER BY is_current DESC, updated_at DESC, model_id DESC`,
+    { nodeId },
+  );
+
+  return fallback ? mapBpmnModel(fallback) : null;
+};
+
 export const findBpmnModelById = async (
   modelId: number,
 ): Promise<BpmnModel | null> => {
@@ -90,6 +117,16 @@ export const listBpmnModels = async (
   if (filters.isCurrent !== undefined) {
     conditions.push("m.is_current = @isCurrent");
     params.isCurrent = filters.isCurrent ? 1 : 0;
+  }
+
+  if (filters.companyCode) {
+    conditions.push("p.company_code = @companyCode");
+    params.companyCode = filters.companyCode;
+  }
+
+  if (filters.businessUnitCode) {
+    conditions.push("p.business_unit_code = @businessUnitCode");
+    params.businessUnitCode = filters.businessUnitCode;
   }
 
   if (filters.search?.trim()) {

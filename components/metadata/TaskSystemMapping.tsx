@@ -24,19 +24,22 @@ import { useVerticalPanelResize } from "@/hooks/useVerticalPanelResize";
 import { useCommonCodeLookup } from "@/lib/query/hooks/useCommonCode";
 import { useProcessTree } from "@/lib/query/hooks/useProcess";
 import {
-  useCreateTaskSystemMappingsBatch,
-  useDeleteTaskSystemMapping,
+  useCreateTaskSystemLinksBatch,
+  useCreateTaskSystemScreenLinksBatch,
+  useDeleteTaskSystemLink,
+  useDeleteTaskSystemScreenLink,
   useScreenCatalogInfinite,
-  useSystemHierarchy,
-  useTaskSystemMappings,
+  useSystemCatalogInfinite,
+  useTaskSystemLinks,
 } from "@/lib/query/hooks/useSystems";
 import { cn } from "@/lib/utils";
 import { formatSystemLabel } from "@/lib/utils/system-label";
 import type { ProcessNodeTree } from "@/types/process";
 import type {
   ScreenCatalogItem,
-  SystemUsageType,
-  TaskSystemMappingDto,
+  SystemCatalogItem,
+  TaskSystemLinkDto,
+  TaskSystemScreenLinkDto,
 } from "@/types/system";
 
 type TaskOption = {
@@ -45,14 +48,6 @@ type TaskOption = {
   name: string;
   level: string;
 };
-
-const USAGE_TYPES: SystemUsageType[] = [
-  "EXECUTE",
-  "INQUIRY",
-  "APPROVAL",
-  "REPORT",
-  "INTERFACE",
-];
 
 const PAGE_SIZE = 50;
 const ALL_FILTER = "__ALL__";
@@ -105,51 +100,84 @@ const PanelSplitter = ({
   </div>
 );
 
-/** Task-시스템/화면 매핑 관리 — 좌측 태스크 · 우측 화면 다중 연결 */
+/** Task-시스템 2단계 매핑 — 1차 시스템 연결 · 2차 화면 연결(선택) */
 export const TaskSystemMapping = () => {
   const t = useTranslations("systemMapping");
   const tc = useTranslations("common");
   const locale = useLocale();
 
   const [nodeId, setNodeId] = useState(0);
+  const [linkId, setLinkId] = useState(0);
   const [taskSearch, setTaskSearch] = useState("");
-  const [systemId, setSystemId] = useState(0);
+  const [systemSearch, setSystemSearch] = useState("");
   const [moduleCode, setModuleCode] = useState("");
   const [screenSearch, setScreenSearch] = useState("");
+  const [selectedSystemIds, setSelectedSystemIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<number>>(
     () => new Set(),
   );
-  const [usageType, setUsageType] = useState<SystemUsageType>("EXECUTE");
   const [isPrimary, setIsPrimary] = useState(false);
 
+  const debouncedSystemSearch = useDebounce(systemSearch, 300);
   const debouncedScreenSearch = useDebounce(screenSearch, 300);
 
   const { data: tree, isLoading: treeLoading } = useProcessTree();
-  const { data: hierarchy } = useSystemHierarchy();
   const { data: moduleOptions = [] } = useCommonCodeLookup("MODULE_CD");
-  const { data: mappings, isLoading: mappingsLoading, refetch } =
-    useTaskSystemMappings(nodeId);
-  const batchConnect = useCreateTaskSystemMappingsBatch(nodeId);
-  const deleteMapping = useDeleteTaskSystemMapping(nodeId);
+  const { data: links, isLoading: linksLoading, refetch } =
+    useTaskSystemLinks(nodeId);
+  const batchConnectSystems = useCreateTaskSystemLinksBatch(nodeId);
+  const deleteLink = useDeleteTaskSystemLink(nodeId);
+  const batchConnectScreens = useCreateTaskSystemScreenLinksBatch(nodeId, linkId);
+  const deleteScreenLink = useDeleteTaskSystemScreenLink(nodeId, linkId);
 
-  const catalogFilters = useMemo(
+  const selectedLink = links?.find((link) => link.linkId === linkId);
+
+  const systemCatalogFilters = useMemo(
     () => ({
-      systemId: systemId || undefined,
-      moduleCode: moduleCode || undefined,
-      search: debouncedScreenSearch || undefined,
+      search: debouncedSystemSearch || undefined,
       excludeNodeId: nodeId || undefined,
       pageSize: PAGE_SIZE,
     }),
-    [debouncedScreenSearch, moduleCode, nodeId, systemId],
+    [debouncedSystemSearch, nodeId],
+  );
+
+  const screenCatalogFilters = useMemo(
+    () => ({
+      systemId: selectedLink?.systemId,
+      moduleCode: moduleCode || undefined,
+      search: debouncedScreenSearch || undefined,
+      excludeLinkId: linkId || undefined,
+      linkNodeId: nodeId || undefined,
+      pageSize: PAGE_SIZE,
+    }),
+    [debouncedScreenSearch, linkId, moduleCode, nodeId, selectedLink?.systemId],
   );
 
   const {
-    data: catalog,
-    isLoading: catalogLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useScreenCatalogInfinite(catalogFilters, locale, nodeId > 0);
+    data: systemCatalog,
+    isLoading: systemCatalogLoading,
+    fetchNextPage: fetchNextSystemPage,
+    hasNextPage: hasNextSystemPage,
+    isFetchingNextPage: isFetchingNextSystemPage,
+  } = useSystemCatalogInfinite(
+    systemCatalogFilters,
+    locale,
+    nodeId > 0 && linkId === 0,
+  );
+
+  const {
+    data: screenCatalog,
+    isLoading: screenCatalogLoading,
+    fetchNextPage: fetchNextScreenPage,
+    hasNextPage: hasNextScreenPage,
+    isFetchingNextPage: isFetchingNextScreenPage,
+  } = useScreenCatalogInfinite(
+    screenCatalogFilters,
+    locale,
+    nodeId > 0 && linkId > 0,
+  );
 
   const {
     width: taskPanelWidth,
@@ -173,6 +201,17 @@ export const TaskSystemMapping = () => {
     maxHeight: 520,
   });
 
+  const {
+    height: linkedScreensPanelHeight,
+    isResizing: isResizingLinkedScreensPanel,
+    handleResizePointerDown: handleLinkedScreensPanelResize,
+  } = useVerticalPanelResize({
+    storageKey: "pams-system-mapping-linked-screens-panel-height",
+    defaultHeight: 180,
+    minHeight: 120,
+    maxHeight: 400,
+  });
+
   const taskOptions = useMemo(() => flattenProcesses(tree), [tree]);
   const filteredTasks = useMemo(() => {
     const keyword = taskSearch.trim().toLowerCase();
@@ -187,20 +226,21 @@ export const TaskSystemMapping = () => {
   }, [taskOptions, taskSearch]);
 
   const selectedTask = taskOptions.find((task) => task.nodeId === nodeId);
-  const selectedSystem = hierarchy?.find(
-    (system) => Number(system.systemId) === systemId,
+  const systemCatalogItems = useMemo(
+    () => systemCatalog?.pages.flatMap((page) => page.items) ?? [],
+    [systemCatalog?.pages],
   );
-  const catalogItems = useMemo(
-    () => catalog?.pages.flatMap((page) => page.items) ?? [],
-    [catalog?.pages],
+  const systemCatalogTotal = systemCatalog?.pages[0]?.total ?? 0;
+  const screenCatalogItems = useMemo(
+    () => screenCatalog?.pages.flatMap((page) => page.items) ?? [],
+    [screenCatalog?.pages],
   );
-  const catalogTotal = catalog?.pages[0]?.total ?? 0;
-  const handleCatalogReachEnd = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      void fetchNextPage();
-    }
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
-  const usageTypeLabel = t(`usageTypes.${usageType}`);
+  const screenCatalogTotal = screenCatalog?.pages[0]?.total ?? 0;
+  const linkedScreens = selectedLink?.screens ?? [];
+
+  const resetSystemSelection = useCallback(() => {
+    setSelectedSystemIds(new Set());
+  }, []);
 
   const resetScreenSelection = useCallback(() => {
     setSelectedScreenIds(new Set());
@@ -209,10 +249,34 @@ export const TaskSystemMapping = () => {
   const selectTask = useCallback(
     (nextNodeId: number) => {
       setNodeId(nextNodeId);
+      setLinkId(0);
+      resetSystemSelection();
       resetScreenSelection();
+    },
+    [resetScreenSelection, resetSystemSelection],
+  );
+
+  const selectLink = useCallback(
+    (nextLinkId: number) => {
+      setLinkId((current) => (current === nextLinkId ? 0 : nextLinkId));
+      resetScreenSelection();
+      setModuleCode("");
+      setScreenSearch("");
     },
     [resetScreenSelection],
   );
+
+  const toggleSystemSelection = useCallback((systemId: number) => {
+    setSelectedSystemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(systemId)) {
+        next.delete(systemId);
+      } else {
+        next.add(systemId);
+      }
+      return next;
+    });
+  }, []);
 
   const toggleScreenSelection = useCallback((screenId: number) => {
     setSelectedScreenIds((prev) => {
@@ -226,8 +290,26 @@ export const TaskSystemMapping = () => {
     });
   }, []);
 
-  const toggleAllOnPage = useCallback(() => {
-    const pageIds = catalogItems.map((item) => item.screenId);
+  const toggleAllSystemsOnPage = useCallback(() => {
+    const pageIds = systemCatalogItems.map((item) => item.systemId);
+    const allSelected = pageIds.every((id) => selectedSystemIds.has(id));
+    setSelectedSystemIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of pageIds) {
+          next.delete(id);
+        }
+      } else {
+        for (const id of pageIds) {
+          next.add(id);
+        }
+      }
+      return next;
+    });
+  }, [selectedSystemIds, systemCatalogItems]);
+
+  const toggleAllScreensOnPage = useCallback(() => {
+    const pageIds = screenCatalogItems.map((item) => item.screenId);
     const allSelected = pageIds.every((id) => selectedScreenIds.has(id));
     setSelectedScreenIds((prev) => {
       const next = new Set(prev);
@@ -242,21 +324,40 @@ export const TaskSystemMapping = () => {
       }
       return next;
     });
-  }, [catalogItems, selectedScreenIds]);
+  }, [screenCatalogItems, selectedScreenIds]);
 
-  const handleConnect = async () => {
-    if (!nodeId || selectedScreenIds.size === 0) {
+  const handleConnectSystems = async () => {
+    if (!nodeId || selectedSystemIds.size === 0) {
       return;
     }
 
-    await batchConnect.mutateAsync({
-      screenIds: [...selectedScreenIds],
-      usageType,
-      isPrimary,
-    });
-    setSelectedScreenIds(new Set());
-    setIsPrimary(false);
-    await refetch();
+    try {
+      await batchConnectSystems.mutateAsync({
+        systemIds: [...selectedSystemIds],
+        isPrimary,
+      });
+      resetSystemSelection();
+      setIsPrimary(false);
+      await refetch();
+    } catch {
+      // onMutationError에서 토스트 표시
+    }
+  };
+
+  const handleConnectScreens = async () => {
+    if (!nodeId || !linkId || !selectedLink || selectedScreenIds.size === 0) {
+      return;
+    }
+
+    try {
+      await batchConnectScreens.mutateAsync({
+        screenIds: [...selectedScreenIds],
+      });
+      resetScreenSelection();
+      await refetch();
+    } catch {
+      // onMutationError에서 토스트 표시
+    }
   };
 
   const taskColumns = useMemo<DataGridColumn<TaskOption>[]>(
@@ -310,7 +411,7 @@ export const TaskSystemMapping = () => {
     [t],
   );
 
-  const linkedColumns = useMemo<DataGridColumn<TaskSystemMappingDto>[]>(
+  const linkedSystemColumns = useMemo<DataGridColumn<TaskSystemLinkDto>[]>(
     () => [
       {
         key: "company",
@@ -319,10 +420,10 @@ export const TaskSystemMapping = () => {
         minWidth: 72,
         sortable: true,
         filter: "select",
-        value: (mapping) => mapping.companyName ?? mapping.companyCode ?? "",
-        cell: (mapping) => (
+        value: (link) => link.companyName ?? link.companyCode ?? "",
+        cell: (link) => (
           <span className="truncate">
-            {mapping.companyName ?? mapping.companyCode ?? "-"}
+            {link.companyName ?? link.companyCode ?? "-"}
           </span>
         ),
       },
@@ -333,24 +434,80 @@ export const TaskSystemMapping = () => {
         minWidth: 72,
         sortable: true,
         filter: "select",
-        value: (mapping) =>
-          mapping.businessUnitName ?? mapping.businessUnitCode ?? "",
-        cell: (mapping) => (
+        value: (link) =>
+          link.businessUnitName ?? link.businessUnitCode ?? "",
+        cell: (link) => (
           <span className="truncate">
-            {mapping.businessUnitName ?? mapping.businessUnitCode ?? "-"}
+            {link.businessUnitName ?? link.businessUnitCode ?? "-"}
           </span>
         ),
       },
       {
         key: "system",
         header: t("system"),
-        width: 96,
-        minWidth: 80,
+        width: 120,
+        minWidth: 96,
         sortable: true,
         filter: "select",
-        value: (mapping) => mapping.systemName,
-        cell: (mapping) => <span className="truncate">{mapping.systemName}</span>,
+        value: (link) => link.systemName,
+        cell: (link) => <span className="truncate">{link.systemName}</span>,
       },
+      {
+        key: "primary",
+        header: t("primary"),
+        width: 72,
+        minWidth: 60,
+        align: "center",
+        sortable: true,
+        filter: "select",
+        value: (link) => (link.isPrimary ? t("primaryYes") : ""),
+        cell: (link) =>
+          link.isPrimary ? (
+            <Badge className="h-5 px-1.5 text-[10px]">{t("primaryYes")}</Badge>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          ),
+      },
+      {
+        key: "screenCount",
+        header: t("screenCount"),
+        width: 64,
+        minWidth: 52,
+        align: "center",
+        sortable: true,
+        value: (link) => link.screenCount,
+        cell: (link) => <span>{link.screenCount}</span>,
+      },
+      {
+        key: "actions",
+        header: t("actions"),
+        width: 60,
+        minWidth: 52,
+        align: "center",
+        cell: (link) => (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            onClick={(event) => {
+              event.stopPropagation();
+              deleteLink.mutate(link.linkId);
+              if (linkId === link.linkId) {
+                setLinkId(0);
+              }
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ),
+      },
+    ],
+    [deleteLink, linkId, t],
+  );
+
+  const linkedScreenColumns = useMemo<DataGridColumn<TaskSystemScreenLinkDto>[]>(
+    () => [
       {
         key: "module",
         header: t("module"),
@@ -358,9 +515,9 @@ export const TaskSystemMapping = () => {
         minWidth: 60,
         sortable: true,
         filter: "select",
-        value: (mapping) => mapping.moduleCode,
-        cell: (mapping) => (
-          <span className="font-mono text-[11px]">{mapping.moduleCode}</span>
+        value: (screen) => screen.moduleCode,
+        cell: (screen) => (
+          <span className="font-mono text-[11px]">{screen.moduleCode}</span>
         ),
       },
       {
@@ -370,34 +527,35 @@ export const TaskSystemMapping = () => {
         minWidth: 80,
         sortable: true,
         filter: "text",
-        value: (mapping) => mapping.menuId,
-        cell: (mapping) => (
-          <span className="font-mono text-[11px]">{mapping.menuId}</span>
+        value: (screen) => screen.menuId,
+        cell: (screen) => (
+          <span className="font-mono text-[11px]">{screen.menuId}</span>
         ),
       },
       {
         key: "screen",
         header: t("screen"),
-        width: 160,
-        minWidth: 120,
+        width: 180,
+        minWidth: 140,
         sortable: true,
         filter: "text",
-        value: (mapping) => mapping.screenName,
-        cell: (mapping) => <span className="truncate">{mapping.screenName}</span>,
+        value: (screen) => screen.screenName,
+        cell: (screen) => (
+          <span className="truncate">{screen.screenName}</span>
+        ),
       },
       {
-        key: "usageType",
-        header: t("usageType"),
-        width: 80,
-        minWidth: 64,
-        align: "center",
+        key: "menuPath",
+        header: t("menuPath"),
+        width: 200,
+        minWidth: 160,
         sortable: true,
-        filter: "select",
-        value: (mapping) => mapping.usageType,
-        cell: (mapping) => (
-          <Badge className="h-5 px-1.5 text-[10px]">
-            {t(`usageTypes.${mapping.usageType}`)}
-          </Badge>
+        filter: "text",
+        value: (screen) => screen.menuPath ?? "",
+        cell: (screen) => (
+          <span className="line-clamp-2 text-[11px] text-slate-600">
+            {screen.menuPath ?? "-"}
+          </span>
         ),
       },
       {
@@ -406,23 +564,23 @@ export const TaskSystemMapping = () => {
         width: 60,
         minWidth: 52,
         align: "center",
-        cell: (mapping) => (
+        cell: (screen) => (
           <Button
             type="button"
             size="sm"
             variant="ghost"
             className="h-6 px-2 text-[11px]"
-            onClick={() => deleteMapping.mutate(mapping.mappingId)}
+            onClick={() => deleteScreenLink.mutate(screen.screenLinkId)}
           >
             <Trash2 className="size-3.5" />
           </Button>
         ),
       },
     ],
-    [deleteMapping, t],
+    [deleteScreenLink, t],
   );
 
-  const availableColumns = useMemo<DataGridColumn<ScreenCatalogItem>[]>(
+  const availableSystemColumns = useMemo<DataGridColumn<SystemCatalogItem>[]>(
     () => [
       {
         key: "select",
@@ -431,10 +589,12 @@ export const TaskSystemMapping = () => {
             type="checkbox"
             aria-label={t("selectAllOnPage")}
             checked={
-              catalogItems.length > 0 &&
-              catalogItems.every((item) => selectedScreenIds.has(item.screenId))
+              systemCatalogItems.length > 0 &&
+              systemCatalogItems.every((item) =>
+                selectedSystemIds.has(item.systemId),
+              )
             }
-            onChange={toggleAllOnPage}
+            onChange={toggleAllSystemsOnPage}
           />
         ),
         width: 40,
@@ -443,10 +603,10 @@ export const TaskSystemMapping = () => {
         cell: (item) => (
           <input
             type="checkbox"
-            aria-label={t("selectScreen")}
-            checked={selectedScreenIds.has(item.screenId)}
+            aria-label={t("selectSystem")}
+            checked={selectedSystemIds.has(item.systemId)}
             onClick={(event) => event.stopPropagation()}
-            onChange={() => toggleScreenSelection(item.screenId)}
+            onChange={() => toggleSystemSelection(item.systemId)}
           />
         ),
       },
@@ -481,12 +641,63 @@ export const TaskSystemMapping = () => {
       {
         key: "system",
         header: t("system"),
-        width: 96,
-        minWidth: 80,
+        width: 140,
+        minWidth: 110,
         sortable: true,
         filter: "select",
-        value: (item) => item.systemName ?? "",
-        cell: (item) => <span className="truncate">{item.systemName}</span>,
+        value: (item) => item.systemName,
+        cell: (item) => (
+          <span className="truncate">{formatSystemLabel(item)}</span>
+        ),
+      },
+      {
+        key: "screenCount",
+        header: t("screenCount"),
+        width: 64,
+        minWidth: 52,
+        align: "center",
+        value: (item) => item.screenCount ?? 0,
+        cell: (item) => <span>{item.screenCount ?? 0}</span>,
+      },
+    ],
+    [
+      selectedSystemIds,
+      systemCatalogItems,
+      t,
+      toggleAllSystemsOnPage,
+      toggleSystemSelection,
+    ],
+  );
+
+  const availableScreenColumns = useMemo<DataGridColumn<ScreenCatalogItem>[]>(
+    () => [
+      {
+        key: "select",
+        header: (
+          <input
+            type="checkbox"
+            aria-label={t("selectAllOnPage")}
+            checked={
+              screenCatalogItems.length > 0 &&
+              screenCatalogItems.every((item) =>
+                selectedScreenIds.has(item.screenId),
+              )
+            }
+            onChange={toggleAllScreensOnPage}
+          />
+        ),
+        width: 40,
+        minWidth: 36,
+        align: "center",
+        cell: (item) => (
+          <input
+            type="checkbox"
+            aria-label={t("selectScreen")}
+            checked={selectedScreenIds.has(item.screenId)}
+            onClick={(event) => event.stopPropagation()}
+            onChange={() => toggleScreenSelection(item.screenId)}
+          />
+        ),
       },
       {
         key: "module",
@@ -537,50 +748,17 @@ export const TaskSystemMapping = () => {
         ),
       },
     ],
-    [catalogItems, selectedScreenIds, t, toggleAllOnPage, toggleScreenSelection],
-  );
-
-  const catalogToolbar = (
-    <div className="flex items-center gap-2 text-[11px] text-slate-500">
-      <span>
-        {t("loadedCount", {
-          loaded: catalogItems.length,
-          total: catalogTotal,
-        })}
-      </span>
-      {isFetchingNextPage ? <span>{tc("loading")}</span> : null}
-    </div>
+    [
+      screenCatalogItems,
+      selectedScreenIds,
+      t,
+      toggleAllScreensOnPage,
+      toggleScreenSelection,
+    ],
   );
 
   const screenFilterBar = (
     <div className="mb-1.5 flex shrink-0 flex-wrap items-center gap-1.5">
-      <Select
-        value={systemId ? String(systemId) : ALL_FILTER}
-        onValueChange={(value) => {
-          setSystemId(value === ALL_FILTER ? 0 : Number(value));
-          resetScreenSelection();
-        }}
-      >
-        <SelectTrigger variant="filter" className="h-8 w-[180px]">
-          <SelectValue placeholder={t("selectSystem")}>
-            {selectedSystem ? formatSystemLabel(selectedSystem) : t("allSystems")}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent variant="filter">
-          <SelectItem variant="filter" value={ALL_FILTER}>
-            {t("allSystems")}
-          </SelectItem>
-          {hierarchy?.map((system) => (
-            <SelectItem
-              variant="filter"
-              key={system.systemId}
-              value={String(system.systemId)}
-            >
-              {formatSystemLabel(system)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       <Select
         value={moduleCode || ALL_FILTER}
         onValueChange={(value) => {
@@ -615,6 +793,143 @@ export const TaskSystemMapping = () => {
     </div>
   );
 
+  const renderSystemMode = () => (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <SearchBar
+        variant="filter"
+        className="mb-1.5 shrink-0"
+        value={systemSearch}
+        onChange={(value) => {
+          setSystemSearch(value);
+          resetSystemSelection();
+        }}
+        placeholder={t("systemSearchPlaceholder")}
+      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DataGrid
+          title={t("availableSystems")}
+          count={systemCatalogTotal}
+          countSuffix={tc("countUnit")}
+          icon
+          toolbar={
+            <span className="text-[11px] text-slate-500">
+              {t("loadedCount", {
+                loaded: systemCatalogItems.length,
+                total: systemCatalogTotal,
+              })}
+              {isFetchingNextSystemPage ? ` · ${tc("loading")}` : null}
+            </span>
+          }
+          columns={availableSystemColumns}
+          data={systemCatalogItems}
+          rowKey={(item) => item.systemId}
+          storageKey="pams-task-system-available-systems-grid"
+          emptyMessage={t("emptyAvailableSystems")}
+          body={
+            systemCatalogLoading ? (
+              <LoadingSpinner className="min-h-[240px]" />
+            ) : undefined
+          }
+          onRowClick={(item) => toggleSystemSelection(item.systemId)}
+          onReachEnd={() => {
+            if (hasNextSystemPage && !isFetchingNextSystemPage) {
+              void fetchNextSystemPage();
+            }
+          }}
+          loadingMore={isFetchingNextSystemPage}
+          fillHeight
+        />
+      </div>
+    </div>
+  );
+
+  const renderScreenMode = () => (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="mb-1.5 shrink-0 rounded-lg border border-slate-200/85 bg-white px-3 py-2 text-xs shadow-sm dark:border-slate-600/65 dark:bg-slate-900/40">
+        <span className="text-muted-foreground">{t("selectedSystem")}: </span>
+        <span className="font-medium">
+          {selectedLink ? formatSystemLabel(selectedLink) : "-"}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="ml-2 h-6 px-2 text-[11px]"
+          onClick={() => {
+            setLinkId(0);
+            resetScreenSelection();
+          }}
+        >
+          {t("clearSystemSelection")}
+        </Button>
+      </div>
+
+      <div
+        className="flex min-h-0 shrink-0 flex-col overflow-hidden"
+        style={{ height: linkedScreensPanelHeight }}
+      >
+        <DataGrid
+          title={t("linkedScreens")}
+          count={linkedScreens.length}
+          countSuffix={tc("countUnit")}
+          icon
+          columns={linkedScreenColumns}
+          data={linkedScreens}
+          rowKey={(screen) => screen.screenLinkId}
+          storageKey="pams-task-system-linked-screens-grid"
+          emptyMessage={t("emptyLinkedScreens")}
+          fillHeight
+        />
+      </div>
+
+      <PanelSplitter
+        orientation="vertical"
+        label={t("panelResizeVertical")}
+        isResizing={isResizingLinkedScreensPanel}
+        onPointerDown={handleLinkedScreensPanelResize}
+      />
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {screenFilterBar}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <DataGrid
+            title={t("availableScreens")}
+            count={screenCatalogTotal}
+            countSuffix={tc("countUnit")}
+            icon
+            toolbar={
+              <span className="text-[11px] text-slate-500">
+                {t("loadedCount", {
+                  loaded: screenCatalogItems.length,
+                  total: screenCatalogTotal,
+                })}
+                {isFetchingNextScreenPage ? ` · ${tc("loading")}` : null}
+              </span>
+            }
+            columns={availableScreenColumns}
+            data={screenCatalogItems}
+            rowKey={(item) => item.screenId}
+            storageKey="pams-task-system-available-screens-grid"
+            emptyMessage={t("emptyAvailableScreens")}
+            body={
+              screenCatalogLoading ? (
+                <LoadingSpinner className="min-h-[240px]" />
+              ) : undefined
+            }
+            onRowClick={(item) => toggleScreenSelection(item.screenId)}
+            onReachEnd={() => {
+              if (hasNextScreenPage && !isFetchingNextScreenPage) {
+                void fetchNextScreenPage();
+              }
+            }}
+            loadingMore={isFetchingNextScreenPage}
+            fillHeight
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   const renderRightBody = () => {
     if (!nodeId) {
       return <EmptyState title={t("selectTaskHint")} className="min-h-[320px]" />;
@@ -628,16 +943,18 @@ export const TaskSystemMapping = () => {
         >
           <DataGrid
             title={t("linkedSystems")}
-            count={mappings?.length ?? 0}
+            count={links?.length ?? 0}
             countSuffix={tc("countUnit")}
             icon
-            columns={linkedColumns}
-            data={mappings ?? []}
-            rowKey={(mapping) => mapping.mappingId}
-            storageKey="pams-task-system-mappings-linked-grid"
+            columns={linkedSystemColumns}
+            data={links ?? []}
+            rowKey={(link) => link.linkId}
+            storageKey="pams-task-system-links-grid"
+            selectedRowKey={linkId || undefined}
+            onRowClick={(link) => selectLink(link.linkId)}
             emptyMessage={t("emptyMappings")}
             body={
-              mappingsLoading ? (
+              linksLoading ? (
                 <LoadingSpinner className="min-h-[160px]" />
               ) : undefined
             }
@@ -653,34 +970,13 @@ export const TaskSystemMapping = () => {
         />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {screenFilterBar}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <DataGrid
-              title={t("availableScreens")}
-              count={catalogTotal}
-              countSuffix={tc("countUnit")}
-              icon
-              toolbar={catalogToolbar}
-              columns={availableColumns}
-              data={catalogItems}
-              rowKey={(item) => item.screenId}
-              storageKey="pams-task-system-screens-available-grid"
-              emptyMessage={t("emptyAvailableScreens")}
-              body={
-                catalogLoading ? (
-                  <LoadingSpinner className="min-h-[240px]" />
-                ) : undefined
-              }
-              onRowClick={(item) => toggleScreenSelection(item.screenId)}
-              onReachEnd={handleCatalogReachEnd}
-              loadingMore={isFetchingNextPage}
-              fillHeight
-            />
-          </div>
+          {linkId > 0 ? renderScreenMode() : renderSystemMode()}
         </div>
       </div>
     );
   };
+
+  const isScreenMode = linkId > 0;
 
   return (
     <ListPageLayout>
@@ -690,43 +986,37 @@ export const TaskSystemMapping = () => {
         icon={Link2}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={usageType}
-              onValueChange={(value) =>
-                value && setUsageType(value as SystemUsageType)
-              }
-            >
-              <SelectTrigger variant="filter" className="h-8 w-[120px]">
-                <SelectValue>{usageTypeLabel}</SelectValue>
-              </SelectTrigger>
-              <SelectContent variant="filter">
-                {USAGE_TYPES.map((type) => (
-                  <SelectItem variant="filter" key={type} value={type}>
-                    {t(`usageTypes.${type}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <label className="flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs">
-              <input
-                type="checkbox"
-                checked={isPrimary}
-                onChange={(event) => setIsPrimary(event.target.checked)}
-              />
-              {t("markPrimary")}
-            </label>
+            {!isScreenMode ? (
+              <label className="flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={isPrimary}
+                  onChange={(event) => setIsPrimary(event.target.checked)}
+                />
+                {t("markPrimary")}
+              </label>
+            ) : null}
             <Button
               type="button"
               size="sm"
               disabled={
                 !nodeId ||
-                selectedScreenIds.size === 0 ||
-                batchConnect.isPending
+                (isScreenMode
+                  ? selectedScreenIds.size === 0 || batchConnectScreens.isPending
+                  : selectedSystemIds.size === 0 || batchConnectSystems.isPending)
               }
-              onClick={() => void handleConnect()}
+              onClick={() =>
+                void (isScreenMode
+                  ? handleConnectScreens()
+                  : handleConnectSystems())
+              }
             >
               <Link2 className="size-3.5" />
-              {t("connectSelected", { count: selectedScreenIds.size })}
+              {t("connectSelected", {
+                count: isScreenMode
+                  ? selectedScreenIds.size
+                  : selectedSystemIds.size,
+              })}
             </Button>
           </div>
         }

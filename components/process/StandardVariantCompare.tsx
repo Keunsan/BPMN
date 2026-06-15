@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { BpmnViewer } from "@/components/bpmn/BpmnViewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useBpmnDetail } from "@/lib/query/hooks/useBpmn";
 import { cn } from "@/lib/utils";
+import type { BpmnElementDiff } from "@/types/bpmn";
 import type { StandardVariantCompareDto } from "@/types/process";
 
 type StandardVariantCompareProps = {
@@ -17,12 +21,127 @@ type StandardVariantCompareProps = {
 
 type DiffRow = StandardVariantCompareDto["diffRows"][number];
 
-/** 표준·변형 필드 비교 그리드 */
+const BpmnDiffItem = ({ item }: { item: BpmnElementDiff }) => {
+  const t = useTranslations("bpmn");
+
+  const colorClass =
+    item.changeType === "added"
+      ? "text-green-600"
+      : item.changeType === "removed"
+        ? "text-red-600"
+        : "text-amber-600";
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 text-sm">
+      <span className={`font-medium ${colorClass}`}>
+        {t(`diff.${item.changeType}`)}
+      </span>
+      <span className="font-mono text-xs">{item.elementBpmnId}</span>
+      {item.elementName && (
+        <span className="text-muted-foreground">({item.elementName})</span>
+      )}
+      {item.field && (
+        <span className="text-muted-foreground">
+          {item.field}: {item.oldValue ?? "-"} → {item.newValue ?? "-"}
+        </span>
+      )}
+    </li>
+  );
+};
+
+const StandardVariantBpmnCompare = ({
+  data,
+}: {
+  data: StandardVariantCompareDto;
+}) => {
+  const t = useTranslations("process");
+  const tb = useTranslations("bpmn");
+  const bpmnCompare = data.bpmnCompare;
+  const standardModelId = bpmnCompare?.standardModelId ?? 0;
+  const variantModelId = bpmnCompare?.variantModelId ?? 0;
+
+  const { data: standardModel, isLoading: isStandardLoading } =
+    useBpmnDetail(standardModelId);
+  const { data: variantModel, isLoading: isVariantLoading } =
+    useBpmnDetail(variantModelId);
+
+  if (!bpmnCompare?.standardModelId && !bpmnCompare?.variantModelId) {
+    return (
+      <EmptyState
+        title={t("variant.compareNoBpmn")}
+        description={t("variant.compareNoBpmnDesc")}
+      />
+    );
+  }
+
+  if (isStandardLoading || isVariantLoading) {
+    return <LoadingSpinner label={t("loading")} />;
+  }
+
+  const diff = bpmnCompare?.diff ?? [];
+  const leftDiff = diff.filter((item) => item.changeType !== "added");
+  const rightDiff = diff.filter((item) => item.changeType !== "removed");
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {standardModel?.modelName ?? data.standard.code}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[360px] p-0">
+            {standardModel?.bpmnXml ? (
+              <BpmnViewer xml={standardModel.bpmnXml} highlightDiff={leftDiff} />
+            ) : (
+              <EmptyState title={t("variant.compareNoBpmn")} className="py-12" />
+            )}
+          </CardContent>
+        </Card>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {variantModel?.modelName ?? data.variant?.code}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[360px] p-0">
+            {variantModel?.bpmnXml ? (
+              <BpmnViewer xml={variantModel.bpmnXml} highlightDiff={rightDiff} />
+            ) : (
+              <EmptyState title={t("variant.compareNoBpmn")} className="py-12" />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{tb("diffSummary")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {diff.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{tb("noDiff")}</p>
+          ) : (
+            <ul className="space-y-2">
+              {diff.map((item, idx) => (
+                <BpmnDiffItem key={`${item.elementBpmnId}-${idx}`} item={item} />
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+/** 표준·변형 필드 및 BPMN 비교 */
 export const StandardVariantCompare = ({
   data,
   isLoading,
 }: StandardVariantCompareProps) => {
   const t = useTranslations("process");
+  const [activeTab, setActiveTab] = useState("metadata");
 
   const columns = useMemo<DataGridColumn<DiffRow>[]>(
     () => [
@@ -103,6 +222,8 @@ export const StandardVariantCompare = ({
     );
   }
 
+  const showBpmnTab = data.standard.level === "L3";
+
   return (
     <Card>
       <CardHeader>
@@ -114,12 +235,27 @@ export const StandardVariantCompare = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <DataGrid
-          columns={columns}
-          data={data.diffRows}
-          rowKey={(row) => row.key}
-          storageKey="pams-standard-variant-compare-grid"
-        />
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="metadata">{t("variant.compareTabMetadata")}</TabsTrigger>
+            {showBpmnTab && (
+              <TabsTrigger value="bpmn">{t("variant.compareTabBpmn")}</TabsTrigger>
+            )}
+          </TabsList>
+          <TabsContent value="metadata" className="mt-4">
+            <DataGrid
+              columns={columns}
+              data={data.diffRows}
+              rowKey={(row) => row.key}
+              storageKey="pams-standard-variant-compare-grid"
+            />
+          </TabsContent>
+          {showBpmnTab && (
+            <TabsContent value="bpmn" className="mt-4">
+              <StandardVariantBpmnCompare data={data} />
+            </TabsContent>
+          )}
+        </Tabs>
       </CardContent>
     </Card>
   );

@@ -41,9 +41,17 @@ export const GET = withApiHandler(async ({ request }) => {
     throw new ApiError("E001", "centerKind and centerId are required", 400);
   }
 
+  const centerProcessLevel = searchParams.get("centerProcessLevel");
+  const validCenterProcessLevels = new Set(["L1", "L2", "L3"]);
+
   const query: OperationsGraphQuery = {
     centerKind,
     centerId: /^\d+$/.test(centerId) ? Number(centerId) : centerId,
+    centerProcessLevel:
+      centerProcessLevel &&
+      validCenterProcessLevels.has(centerProcessLevel)
+        ? (centerProcessLevel as OperationsGraphQuery["centerProcessLevel"])
+        : undefined,
     depth: depth === 1 ? 1 : 2,
     includeKinds: parseKinds(searchParams.get("includeKinds")),
     includeEdgeKinds: parseEdgeKinds(searchParams.get("includeEdgeKinds")),

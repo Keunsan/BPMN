@@ -4,10 +4,13 @@ import type { Locale } from "@/lib/i18n/config";
 import type {
   ApplicationSystem,
   ApplicationSystemDto,
-  BatchCreateTaskSystemMappingDto,
-  CreateTaskSystemMappingDto,
+  BatchCreateTaskSystemLinkDto,
+  BatchCreateTaskSystemScreenLinkDto,
+  CreateTaskSystemLinkDto,
   ScreenCatalogFilters,
   ScreenCatalogItem,
+  SystemCatalogFilters,
+  SystemCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
   SystemModuleDto,
@@ -15,7 +18,8 @@ import type {
   SystemScreen,
   SystemScreenDto,
   SystemScreenListFilters,
-  TaskSystemMappingDto,
+  TaskSystemLinkDto,
+  TaskSystemScreenLinkDto,
   UpsertApplicationSystemDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
@@ -67,8 +71,8 @@ const mapSystem = (row: Record<string, unknown>): ApplicationSystem => ({
 
 /** system_screen 행을 도메인 타입으로 변환한다. */
 const mapScreen = (row: Record<string, unknown>): SystemScreen => ({
-  screenId: row.screen_id as number,
-  systemId: row.system_id as number,
+  screenId: toNumber(row.screen_id),
+  systemId: toNumber(row.system_id),
   moduleCode: row.module_code as string,
   menuId: row.menu_id as string,
   screenCode: row.screen_code as string,
@@ -562,14 +566,25 @@ export const listSystemHierarchy = async (
   return result;
 };
 
-/** Task-시스템 매핑 목록을 조회한다. */
-export const listTaskSystemMappings = async (
-  nodeId: number,
+/** Task-시스템 화면 연결 목록을 조회한다. */
+const listTaskSystemScreenLinks = async (
+  linkIds: number[],
   locale: Locale = "ko",
-): Promise<TaskSystemMappingDto[]> => {
+): Promise<Map<number, TaskSystemScreenLinkDto[]>> => {
+  const result = new Map<number, TaskSystemScreenLinkDto[]>();
+  if (linkIds.length === 0) {
+    return result;
+  }
+
+  const placeholders = linkIds.map((_, index) => `@linkId${index}`).join(", ");
+  const params: QueryParams = { locale };
+  linkIds.forEach((linkId, index) => {
+    params[`linkId${index}`] = linkId;
+  });
+
   const rows = await query<Record<string, unknown>>(
     `SELECT
-       tsm.*,
+       tssl.*,
        sc.screen_code,
        sc.screen_name,
        sc.menu_id,
@@ -577,17 +592,9 @@ export const listTaskSystemMappings = async (
        sc.menu_path,
        sc.screen_type,
        sc.module_code,
-       s.system_id,
-       s.system_code,
-       s.system_name,
-       s.company_code,
-       s.business_unit_code,
-       COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
-       COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
        COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
-     FROM task_system_mapping tsm
-     INNER JOIN system_screen sc ON tsm.screen_id = sc.screen_id
-     INNER JOIN application_system s ON sc.system_id = s.system_id
+     FROM task_system_screen_link tssl
+     INNER JOIN system_screen sc ON tssl.screen_id = sc.screen_id
      LEFT JOIN common_code cc
        ON cc.group_code = 'MODULE_CD'
       AND cc.code = sc.module_code
@@ -595,6 +602,55 @@ export const listTaskSystemMappings = async (
        ON cci.group_code = cc.group_code
       AND cci.code = cc.code
       AND cci.locale = @locale
+     WHERE tssl.link_id IN (${placeholders})
+     ORDER BY sc.module_code, sc.menu_id`,
+    params,
+  );
+
+  for (const row of rows) {
+    const linkId = toNumber(row.link_id);
+    const screens = result.get(linkId) ?? [];
+    screens.push({
+      screenLinkId: toNumber(row.screen_link_id),
+      linkId,
+      screenId: toNumber(row.screen_id),
+      createdAt: new Date(row.created_at as string),
+      moduleCode: row.module_code as string,
+      moduleName: row.module_name as string,
+      menuId: row.menu_id as string,
+      screenCode: row.screen_code as string,
+      screenName: row.screen_name as string,
+      transactionCode: (row.transaction_code as string | null) ?? null,
+      menuPath: (row.menu_path as string | null) ?? null,
+      screenType: (row.screen_type as TaskSystemScreenLinkDto["screenType"]) ?? null,
+    });
+    result.set(linkId, screens);
+  }
+
+  return result;
+};
+
+/** Task-시스템 1차 연결 목록을 조회한다. */
+export const listTaskSystemLinks = async (
+  nodeId: number,
+  locale: Locale = "ko",
+): Promise<TaskSystemLinkDto[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       tsl.*,
+       s.system_code,
+       s.system_name,
+       s.company_code,
+       s.business_unit_code,
+       COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
+       (
+         SELECT COUNT(*)
+         FROM task_system_screen_link tssl
+         WHERE tssl.link_id = tsl.link_id
+       ) AS screen_count
+     FROM task_system_link tsl
+     INNER JOIN application_system s ON tsl.system_id = s.system_id
      LEFT JOIN common_code company_code_cc
        ON company_code_cc.group_code = 'COMPANY_CD'
       AND company_code_cc.code = s.company_code
@@ -609,91 +665,404 @@ export const listTaskSystemMappings = async (
        ON bu_i18n.group_code = bu_code_cc.group_code
       AND bu_i18n.code = bu_code_cc.code
       AND bu_i18n.locale = @locale
-     WHERE tsm.node_id = @nodeId
-     ORDER BY tsm.is_primary DESC, s.system_code, sc.module_code, sc.menu_id`,
+     WHERE tsl.node_id = @nodeId
+     ORDER BY tsl.is_primary DESC, s.system_code`,
     { nodeId, locale },
   );
 
-  return rows.map((row) => ({
-    mappingId: row.mapping_id as number,
-    nodeId: row.node_id as number,
-    screenId: row.screen_id as number,
-    usageType: row.usage_type as TaskSystemMappingDto["usageType"],
+  const linkIds = rows.map((row) => toNumber(row.link_id));
+  const screensByLink = await listTaskSystemScreenLinks(linkIds, locale);
+
+  return rows.map((row) => {
+    const linkId = toNumber(row.link_id);
+    const screens = screensByLink.get(linkId) ?? [];
+    return {
+      linkId,
+      nodeId: toNumber(row.node_id),
+      systemId: toNumber(row.system_id),
+      usageDescription: (row.usage_description as string | null) ?? null,
+      isPrimary: Boolean(row.is_primary),
+      createdBy: toNullableNumber(row.created_by),
+      createdAt: new Date(row.created_at as string),
+      systemCode: row.system_code as string,
+      systemName: row.system_name as string,
+      companyCode: (row.company_code as string | null) ?? null,
+      businessUnitCode: (row.business_unit_code as string | null) ?? null,
+      companyName: (row.company_name as string | null) ?? null,
+      businessUnitName: (row.business_unit_name as string | null) ?? null,
+      screenCount: Number(row.screen_count ?? screens.length),
+      screens,
+    };
+  });
+};
+
+/** link_id(및 선택적 node_id)로 시스템 ID를 조회한다. */
+export const findTaskSystemLinkSystemId = async (
+  linkId: number,
+  nodeId?: number,
+): Promise<number | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    nodeId
+      ? `SELECT system_id FROM task_system_link WHERE link_id = @linkId AND node_id = @nodeId`
+      : `SELECT system_id FROM task_system_link WHERE link_id = @linkId`,
+    nodeId ? { linkId, nodeId } : { linkId },
+  );
+  return row ? toNumber(row.system_id) : null;
+};
+
+/** Task-시스템 링크와 시스템이 일치하지 않는 화면 ID를 반환한다. */
+export const findScreenIdsOutsideTaskSystemLink = async (
+  nodeId: number,
+  linkId: number,
+  screenIds: number[],
+): Promise<number[]> => {
+  const uniqueScreenIds = [...new Set(screenIds.filter((id) => id > 0))];
+  if (uniqueScreenIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = uniqueScreenIds.map((_, index) => `@screenId${index}`).join(", ");
+  const params: QueryParams = { nodeId, linkId };
+  uniqueScreenIds.forEach((screenId, index) => {
+    params[`screenId${index}`] = screenId;
+  });
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT sc.screen_id
+     FROM system_screen sc
+     WHERE sc.screen_id IN (${placeholders})
+       AND NOT EXISTS (
+         SELECT 1
+         FROM task_system_link tsl
+         WHERE tsl.link_id = @linkId
+           AND tsl.node_id = @nodeId
+           AND tsl.system_id = sc.system_id
+       )`,
+    params,
+  );
+
+  return rows.map((row) => toNumber(row.screen_id));
+};
+
+/** Task-시스템 1차 연결을 조회한다. */
+export const findTaskSystemLinkById = async (
+  nodeId: number,
+  linkId: number,
+  locale: Locale = "ko",
+): Promise<TaskSystemLinkDto | null> => {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT
+       tsl.*,
+       s.system_code,
+       s.system_name,
+       s.company_code,
+       s.business_unit_code,
+       COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
+       (
+         SELECT COUNT(*)
+         FROM task_system_screen_link tssl
+         WHERE tssl.link_id = tsl.link_id
+       ) AS screen_count
+     FROM task_system_link tsl
+     INNER JOIN application_system s ON tsl.system_id = s.system_id
+     LEFT JOIN common_code company_code_cc
+       ON company_code_cc.group_code = 'COMPANY_CD'
+      AND company_code_cc.code = s.company_code
+     LEFT JOIN common_code_i18n company_i18n
+       ON company_i18n.group_code = company_code_cc.group_code
+      AND company_i18n.code = company_code_cc.code
+      AND company_i18n.locale = @locale
+     LEFT JOIN common_code bu_code_cc
+       ON bu_code_cc.group_code = 'BU_CD'
+      AND bu_code_cc.code = s.business_unit_code
+     LEFT JOIN common_code_i18n bu_i18n
+       ON bu_i18n.group_code = bu_code_cc.group_code
+      AND bu_i18n.code = bu_code_cc.code
+      AND bu_i18n.locale = @locale
+     WHERE tsl.node_id = @nodeId AND tsl.link_id = @linkId`,
+    { nodeId, linkId, locale },
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  const normalizedLinkId = toNumber(row.link_id);
+  const screensByLink = await listTaskSystemScreenLinks([normalizedLinkId], locale);
+  const screens = screensByLink.get(normalizedLinkId) ?? [];
+
+  return {
+    linkId: normalizedLinkId,
+    nodeId: toNumber(row.node_id),
+    systemId: toNumber(row.system_id),
     usageDescription: (row.usage_description as string | null) ?? null,
     isPrimary: Boolean(row.is_primary),
-    createdBy: (row.created_by as number | null) ?? null,
+    createdBy: toNullableNumber(row.created_by),
     createdAt: new Date(row.created_at as string),
-    systemId: row.system_id as number,
     systemCode: row.system_code as string,
     systemName: row.system_name as string,
     companyCode: (row.company_code as string | null) ?? null,
     businessUnitCode: (row.business_unit_code as string | null) ?? null,
     companyName: (row.company_name as string | null) ?? null,
     businessUnitName: (row.business_unit_name as string | null) ?? null,
-    moduleCode: row.module_code as string,
-    moduleName: row.module_name as string,
-    menuId: row.menu_id as string,
-    screenCode: row.screen_code as string,
-    screenName: row.screen_name as string,
-    transactionCode: (row.transaction_code as string | null) ?? null,
-    menuPath: (row.menu_path as string | null) ?? null,
-    screenType: (row.screen_type as TaskSystemMappingDto["screenType"]) ?? null,
-  }));
+    screenCount: Number(row.screen_count ?? screens.length),
+    screens,
+  };
 };
 
-export const createTaskSystemMapping = async (
-  input: CreateTaskSystemMappingDto,
+const clearTaskSystemLinkPrimary = async (nodeId: number): Promise<void> => {
+  await execute(
+    "UPDATE task_system_link SET is_primary = 0 WHERE node_id = @nodeId",
+    { nodeId },
+  );
+};
+
+/** Task-시스템 1차 연결을 생성한다. */
+export const createTaskSystemLink = async (
+  input: CreateTaskSystemLinkDto,
   userId: number | null,
-): Promise<TaskSystemMappingDto> => {
+): Promise<TaskSystemLinkDto> => {
   if (input.isPrimary) {
-    await execute(
-      "UPDATE task_system_mapping SET is_primary = 0 WHERE node_id = @nodeId",
-      { nodeId: input.nodeId },
-    );
+    await clearTaskSystemLinkPrimary(input.nodeId);
   }
 
   const row = await queryOne<Record<string, unknown>>(
-    `INSERT INTO task_system_mapping (
-       node_id, screen_id, usage_type, usage_description, is_primary, created_by
+    `INSERT INTO task_system_link (
+       node_id, system_id, usage_description, is_primary, created_by
      )
-     OUTPUT INSERTED.mapping_id
+     OUTPUT INSERTED.link_id
      VALUES (
-       @nodeId, @screenId, @usageType, @usageDescription, @isPrimary, @createdBy
+       @nodeId, @systemId, @usageDescription, @isPrimary, @createdBy
      )`,
     {
       nodeId: input.nodeId,
-      screenId: input.screenId,
-      usageType: input.usageType,
+      systemId: input.systemId,
       usageDescription: input.usageDescription ?? null,
       isPrimary: input.isPrimary ? 1 : 0,
       createdBy: userId,
     },
   );
 
-  const mappingId = row?.mapping_id as number | undefined;
-  if (!mappingId) {
-    throw new Error("Failed to create task-system mapping");
+  const linkId = row?.link_id ? toNumber(row.link_id) : undefined;
+  if (!linkId) {
+    throw new Error("Failed to create task-system link");
   }
 
-  const created = (await listTaskSystemMappings(input.nodeId)).find(
-    (mapping) => mapping.mappingId === mappingId,
-  );
+  const created = await findTaskSystemLinkById(input.nodeId, linkId);
   if (!created) {
-    throw new Error("Failed to load task-system mapping");
+    throw new Error("Failed to load task-system link");
   }
 
   return created;
 };
 
-export const deleteTaskSystemMapping = async (
+/** Task-시스템 1차 연결을 삭제한다. */
+export const deleteTaskSystemLink = async (
   nodeId: number,
-  mappingId: number,
+  linkId: number,
 ): Promise<void> => {
   await execute(
-    `DELETE FROM task_system_mapping
-     WHERE node_id = @nodeId AND mapping_id = @mappingId`,
-    { nodeId, mappingId },
+    `DELETE FROM task_system_link
+     WHERE node_id = @nodeId AND link_id = @linkId`,
+    { nodeId, linkId },
   );
+};
+
+/** Task-시스템 1차 연결의 주요 시스템을 지정한다. */
+export const setTaskSystemLinkPrimary = async (
+  nodeId: number,
+  linkId: number,
+): Promise<void> => {
+  await clearTaskSystemLinkPrimary(nodeId);
+  await execute(
+    `UPDATE task_system_link
+     SET is_primary = 1
+     WHERE node_id = @nodeId AND link_id = @linkId`,
+    { nodeId, linkId },
+  );
+};
+
+/** Task-시스템 1차 연결을 일괄 생성한다. */
+export const createTaskSystemLinksBatch = async (
+  nodeId: number,
+  input: BatchCreateTaskSystemLinkDto,
+  userId: number | null,
+): Promise<number> => {
+  const uniqueSystemIds = [...new Set(input.systemIds.filter((id) => id > 0))];
+  if (uniqueSystemIds.length === 0) {
+    return 0;
+  }
+
+  if (input.isPrimary) {
+    await clearTaskSystemLinkPrimary(nodeId);
+  }
+
+  let createdCount = 0;
+
+  for (const systemId of uniqueSystemIds) {
+    const exists = await queryOne<Record<string, unknown>>(
+      `SELECT 1 AS found
+       FROM task_system_link
+       WHERE node_id = @nodeId AND system_id = @systemId`,
+      { nodeId, systemId },
+    );
+
+    if (exists) {
+      continue;
+    }
+
+    await execute(
+      `INSERT INTO task_system_link (
+         node_id, system_id, usage_description, is_primary, created_by
+       )
+       VALUES (
+         @nodeId, @systemId, NULL, @isPrimary, @createdBy
+       )`,
+      {
+        nodeId,
+        systemId,
+        isPrimary: input.isPrimary && createdCount === 0 ? 1 : 0,
+        createdBy: userId,
+      },
+    );
+    createdCount += 1;
+  }
+
+  return createdCount;
+};
+
+/** Task-시스템 2차 화면 연결을 일괄 생성한다. */
+export const createTaskSystemScreenLinksBatch = async (
+  linkId: number,
+  input: BatchCreateTaskSystemScreenLinkDto,
+): Promise<number> => {
+  const uniqueScreenIds = [...new Set(input.screenIds.filter((id) => id > 0))];
+  if (uniqueScreenIds.length === 0) {
+    return 0;
+  }
+
+  let createdCount = 0;
+
+  for (const screenId of uniqueScreenIds) {
+    const exists = await queryOne<Record<string, unknown>>(
+      `SELECT 1 AS found
+       FROM task_system_screen_link
+       WHERE link_id = @linkId AND screen_id = @screenId`,
+      { linkId, screenId },
+    );
+
+    if (exists) {
+      continue;
+    }
+
+    await execute(
+      `INSERT INTO task_system_screen_link (link_id, screen_id)
+       VALUES (@linkId, @screenId)`,
+      { linkId, screenId },
+    );
+    createdCount += 1;
+  }
+
+  return createdCount;
+};
+
+/** Task-시스템 2차 화면 연결을 삭제한다. */
+export const deleteTaskSystemScreenLink = async (
+  linkId: number,
+  screenLinkId: number,
+): Promise<void> => {
+  await execute(
+    `DELETE FROM task_system_screen_link
+     WHERE link_id = @linkId AND screen_link_id = @screenLinkId`,
+    { linkId, screenLinkId },
+  );
+};
+
+/** 연결 후보 시스템 카탈로그를 페이지 단위로 조회한다. */
+export const listSystemCatalog = async (
+  filters: SystemCatalogFilters = {},
+  locale: Locale = "ko",
+): Promise<{ items: SystemCatalogItem[]; total: number }> => {
+  const conditions = ["s.is_active = 1"];
+  const params: QueryParams = { locale };
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
+  params.offset = (page - 1) * pageSize;
+  params.pageSize = pageSize;
+
+  if (filters.search?.trim()) {
+    conditions.push(
+      "(s.system_name LIKE @search OR s.system_code LIKE @search)",
+    );
+    params.search = `%${filters.search.trim()}%`;
+  }
+  if (filters.companyCode) {
+    conditions.push("s.company_code = @companyCode");
+    params.companyCode = filters.companyCode;
+  }
+  if (filters.businessUnitCode) {
+    conditions.push("s.business_unit_code = @businessUnitCode");
+    params.businessUnitCode = filters.businessUnitCode;
+  }
+  if (filters.excludeNodeId) {
+    conditions.push(`s.system_id NOT IN (
+      SELECT tsl.system_id
+      FROM task_system_link tsl
+      WHERE tsl.node_id = @excludeNodeId
+    )`);
+    params.excludeNodeId = filters.excludeNodeId;
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  const countRow = await queryOne<Record<string, unknown>>(
+    `SELECT COUNT(*) AS total
+     FROM application_system s
+     WHERE ${whereClause}`,
+    params,
+  );
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       s.*,
+       COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
+       COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
+       (
+         SELECT COUNT(*)
+         FROM system_screen sc
+         WHERE sc.system_id = s.system_id AND sc.is_active = 1
+       ) AS screen_count
+     FROM application_system s
+     LEFT JOIN common_code company_code
+       ON company_code.group_code = 'COMPANY_CD'
+      AND company_code.code = s.company_code
+     LEFT JOIN common_code_i18n company_i18n
+       ON company_i18n.group_code = company_code.group_code
+      AND company_i18n.code = company_code.code
+      AND company_i18n.locale = @locale
+     LEFT JOIN common_code bu_code
+       ON bu_code.group_code = 'BU_CD'
+      AND bu_code.code = s.business_unit_code
+     LEFT JOIN common_code_i18n bu_i18n
+       ON bu_i18n.group_code = bu_code.group_code
+      AND bu_i18n.code = bu_code.code
+      AND bu_i18n.locale = @locale
+     WHERE ${whereClause}
+     ORDER BY s.system_code, s.company_code, s.business_unit_code
+     OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
+    params,
+  );
+
+  return {
+    items: rows.map((row) => ({
+      ...mapSystem(row),
+      companyName: (row.company_name as string | null) ?? null,
+      businessUnitName: (row.business_unit_name as string | null) ?? null,
+      screenCount: Number(row.screen_count ?? 0),
+    })),
+    total: (countRow?.total as number) ?? 0,
+  };
 };
 
 /** 연결 후보 화면 카탈로그를 페이지 단위로 조회한다. */
@@ -722,11 +1091,19 @@ export const listScreenCatalog = async (
     );
     params.search = `%${filters.search.trim()}%`;
   }
-  if (filters.excludeNodeId) {
+  if (filters.excludeLinkId) {
     conditions.push(`sc.screen_id NOT IN (
-      SELECT tsm.screen_id
-      FROM task_system_mapping tsm
-      WHERE tsm.node_id = @excludeNodeId
+      SELECT tssl.screen_id
+      FROM task_system_screen_link tssl
+      WHERE tssl.link_id = @excludeLinkId
+    )`);
+    params.excludeLinkId = filters.excludeLinkId;
+  } else if (filters.excludeNodeId) {
+    conditions.push(`sc.screen_id NOT IN (
+      SELECT tssl.screen_id
+      FROM task_system_screen_link tssl
+      INNER JOIN task_system_link tsl ON tsl.link_id = tssl.link_id
+      WHERE tsl.node_id = @excludeNodeId
     )`);
     params.excludeNodeId = filters.excludeNodeId;
   }
@@ -792,59 +1169,6 @@ export const listScreenCatalog = async (
   };
 };
 
-/** Task-시스템 매핑을 일괄 생성한다. */
-export const createTaskSystemMappingsBatch = async (
-  nodeId: number,
-  input: BatchCreateTaskSystemMappingDto,
-  userId: number | null,
-): Promise<number> => {
-  const uniqueScreenIds = [...new Set(input.screenIds.filter((id) => id > 0))];
-  if (uniqueScreenIds.length === 0) {
-    return 0;
-  }
-
-  if (input.isPrimary) {
-    await execute(
-      "UPDATE task_system_mapping SET is_primary = 0 WHERE node_id = @nodeId",
-      { nodeId },
-    );
-  }
-
-  let createdCount = 0;
-
-  for (const screenId of uniqueScreenIds) {
-    const exists = await queryOne<Record<string, unknown>>(
-      `SELECT 1 AS found
-       FROM task_system_mapping
-       WHERE node_id = @nodeId AND screen_id = @screenId`,
-      { nodeId, screenId },
-    );
-
-    if (exists) {
-      continue;
-    }
-
-    await execute(
-      `INSERT INTO task_system_mapping (
-         node_id, screen_id, usage_type, usage_description, is_primary, created_by
-       )
-       VALUES (
-         @nodeId, @screenId, @usageType, @usageDescription, @isPrimary, @createdBy
-       )`,
-      {
-        nodeId,
-        screenId,
-        usageType: input.usageType ?? "EXECUTE",
-        usageDescription: input.usageDescription ?? null,
-        isPrimary: input.isPrimary && createdCount === 0 ? 1 : 0,
-        createdBy: userId,
-      },
-    );
-    createdCount += 1;
-  }
-
-  return createdCount;
-};
 
 /** 공통코드(MODULE_CD) 항목을 upsert한다. */
 export const upsertModuleCode = async (

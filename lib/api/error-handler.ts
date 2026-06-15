@@ -83,6 +83,11 @@ const defaultErrorMessages: Record<string, Record<Locale, string>> = {
     en: "Cannot directly modify Published status.",
     "zh-TW": "無法直接修改已發布狀態。",
   },
+  E406: {
+    ko: "연결된 시스템에 속하지 않는 화면입니다.",
+    en: "Screen does not belong to the linked system.",
+    "zh-TW": "畫面不屬於已連接的系統。",
+  },
   E409: {
     ko: "연결된 데이터가 있어 삭제 전 확인이 필요합니다.",
     en: "Linked data exists. Please confirm before deleting.",

@@ -121,6 +121,10 @@ export interface BpmnFilters {
 
   isCurrent?: boolean;
 
+  companyCode?: string;
+
+  businessUnitCode?: string;
+
   search?: string;
 
   sort?: "updated" | "name";

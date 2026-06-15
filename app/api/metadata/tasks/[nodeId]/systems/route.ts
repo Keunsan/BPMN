@@ -1,23 +1,24 @@
 import { requireAuth } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/route-handler";
 import {
-  createTaskSystemMapping,
-  listTaskSystemMappings,
+  createTaskSystemLinksBatch,
+  listTaskSystemLinks,
 } from "@/lib/services/system.service";
-import type { CreateTaskSystemMappingDto } from "@/types/system";
+import type { BatchCreateTaskSystemLinkDto } from "@/types/system";
 
-/** GET /api/metadata/tasks/[nodeId]/systems — Task 시스템 매핑 목록 */
+/** GET /api/metadata/tasks/[nodeId]/systems — Task 시스템 1차 연결 목록 */
 export const GET = withApiHandler(async ({ params, locale }) => {
-  const data = await listTaskSystemMappings(Number(params.nodeId), locale);
+  const data = await listTaskSystemLinks(Number(params.nodeId), locale);
   return { data };
 });
 
-/** POST /api/metadata/tasks/[nodeId]/systems — Task 시스템 매핑 생성 */
+/** POST /api/metadata/tasks/[nodeId]/systems — Task 시스템 1차 연결 일괄 생성 */
 export const POST = withApiHandler(async ({ request, params }) => {
   const auth = await requireAuth();
-  const body = (await request.json()) as CreateTaskSystemMappingDto;
-  const data = await createTaskSystemMapping(
-    { ...body, nodeId: Number(params.nodeId) },
+  const body = (await request.json()) as BatchCreateTaskSystemLinkDto;
+  const data = await createTaskSystemLinksBatch(
+    Number(params.nodeId),
+    body,
     auth.userId,
   );
 

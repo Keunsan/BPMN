@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useGuardedRouter } from "@/hooks/useGuardedRouter";
+import { isAuthEnabled } from "@/lib/auth/config";
 import { useLogout, useSessionStatus } from "@/lib/query/hooks/useSession";
 import { useUIStore } from "@/lib/store/ui.store";
 import { cn } from "@/lib/utils";
@@ -69,17 +70,19 @@ export function Header() {
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn("pams-page-action-outline hidden sm:inline-flex")}
-          onClick={handleLogout}
-          disabled={logoutMutation.isPending}
-        >
-          <LogOut />
-          {t("common.logout")}
-        </Button>
+        {isAuthEnabled() ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn("pams-page-action-outline hidden sm:inline-flex")}
+            onClick={handleLogout}
+            disabled={logoutMutation.isPending}
+          >
+            <LogOut />
+            {t("common.logout")}
+          </Button>
+        ) : null}
       </div>
     </header>
   );

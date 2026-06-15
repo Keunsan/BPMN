@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import {
+  ChevronLeft,
   Link2,
   Map,
   Maximize2,
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { useGuardedRouter } from "@/hooks/useGuardedRouter";
 import type { PredecessorSelection } from "@/components/metadata/PredecessorSelect";
 import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useLinkOrCreateBpmnTask } from "@/lib/query/hooks/useBpmn";
+import { useProcessDetail } from "@/lib/query/hooks/useProcess";
 import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
 import {
   isProcessLinkCompatible,
@@ -79,9 +82,12 @@ type TaskHoverState = {
   y: number;
 };
 
+const BPMN_LIST_PATH = "/bpmn";
+
 /** BPMN 에디터 — 툴바 + 모델러 + 프로세스 연결 */
 export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const t = useTranslations("bpmn");
+  const router = useGuardedRouter();
   const apiRef = useRef<BpmnEditorHandle | null>(null);
   const [links, setLinks] = useState<Record<string, ProcessLinkInfo>>(() =>
     buildLinksFromModel(model),
@@ -100,6 +106,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const [taskHover, setTaskHover] = useState<TaskHoverState | null>(null);
   const [diagramDirty, setDiagramDirty] = useState(false);
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
+  const { data: ownerProcess } = useProcessDetail(model.nodeId);
   const [savedLinksJson, setSavedLinksJson] = useState(() =>
     JSON.stringify(buildLinksFromModel(model)),
   );
@@ -369,6 +376,16 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b px-4 py-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          onClick={() => router.push(BPMN_LIST_PATH)}
+          title={t("backToList")}
+        >
+          <ChevronLeft className="size-4" />
+          <span className="hidden sm:inline">{t("backToList")}</span>
+        </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <h1 className="truncate text-lg font-semibold">{model.modelName}</h1>
           <p className="shrink-0 text-right text-xs text-muted-foreground">
@@ -448,6 +465,8 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           parentNodeId={model.nodeId}
           parentCode={model.processCode}
           parentName={model.processName}
+          companyCode={ownerProcess?.companyCode}
+          businessUnitCode={ownerProcess?.businessUnitCode}
           selectedElementType={selectedElementType}
           links={links}
           selectedElementId={selectedElementId}

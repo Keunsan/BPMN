@@ -31,6 +31,8 @@ export const useBpmnList = (
           linkedNodeId: filters.linkedNodeId,
           status: filters.status,
           isCurrent: filters.isCurrent,
+          companyCode: filters.companyCode,
+          businessUnitCode: filters.businessUnitCode,
           search: filters.search,
           sort: filters.sort,
         },

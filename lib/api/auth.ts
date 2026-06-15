@@ -1,3 +1,4 @@
+import { DEV_AUTH_USER, isAuthEnabled } from "@/lib/auth/config";
 import { ApiError } from "@/lib/api/error-handler";
 import { readSession } from "@/lib/session/server";
 
@@ -12,6 +13,10 @@ export type AuthContext = {
  * @throws {ApiError} E101 — 인증 실패 시
  */
 export const requireAuth = async (): Promise<AuthContext> => {
+  if (!isAuthEnabled()) {
+    return { ...DEV_AUTH_USER };
+  }
+
   const session = await readSession();
   if (!session) {
     throw new ApiError("E101", "Authentication required", 401);

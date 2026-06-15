@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { useSessionTimer } from "@/hooks/useSessionTimer";
+import { isAuthEnabled } from "@/lib/auth/config";
 import { cn } from "@/lib/utils";
 
 type StatusBarProps = {
@@ -22,11 +23,16 @@ const formatRemaining = (remainingMs: number | null): string => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
-/** 하단 상태바 — 세션 타이머·연장 */
+/** 하단 상태바 — 세션 타이머·연장 (인증 활성 시에만 표시) */
 export const StatusBar = ({ className }: StatusBarProps) => {
+  const authEnabled = isAuthEnabled();
   const t = useTranslations("common");
   const { remainingMs, progress, isWarning, isExtending, extend, refetch } =
     useSessionTimer();
+
+  if (!authEnabled) {
+    return null;
+  }
 
   return (
     <footer

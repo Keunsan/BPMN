@@ -37,6 +37,15 @@ import type {
 
 import * as commonCodeQueries from "@/lib/db/queries/common-code";
 import * as processQueries from "@/lib/db/queries/process";
+import * as bpmnQueries from "@/lib/db/queries/bpmn";
+import {
+  copyBpmnForVariant,
+  copyMetadataForL3Variant,
+  copyMetadataForVariantNode,
+  ensureL4VariantsForL3,
+  updateL4VariantBpmnLink,
+} from "@/lib/services/variant-copy.service";
+import { diffBpmnXml } from "@/lib/utils/bpmn-xml";
 
 type ScopeNameLookup = {
   companyNames: Map<string, string>;
@@ -529,6 +538,50 @@ export const createVariantFromStandard = async (
     createdBy: userId ?? null,
   });
 
+  const shouldCopyBpmn = dto.copyBpmn ?? standard.level === "L3";
+  const shouldCopyMetadata = dto.copyMetadata ?? false;
+
+  if (standard.level === "L3") {
+    let l4Mapping: Map<number, number> | undefined;
+
+    if (shouldCopyBpmn || shouldCopyMetadata) {
+      l4Mapping = await ensureL4VariantsForL3(
+        standardNodeId,
+        node.nodeId,
+        targetScope,
+        userId,
+      );
+    }
+
+    if (shouldCopyBpmn) {
+      await copyBpmnForVariant(
+        standardNodeId,
+        node.nodeId,
+        targetScope,
+        userId,
+        l4Mapping,
+      );
+    }
+
+    if (shouldCopyMetadata && l4Mapping) {
+      await copyMetadataForL3Variant(l4Mapping, userId);
+    }
+  }
+
+  if (standard.level === "L4") {
+    if (shouldCopyMetadata) {
+      await copyMetadataForVariantNode(standardNodeId, node.nodeId, userId);
+    }
+
+    if (shouldCopyBpmn) {
+      await updateL4VariantBpmnLink(
+        standardNodeId,
+        node.nodeId,
+        targetScope,
+      );
+    }
+  }
+
   return toProcessDto(node, locale, undefined, {
     standardProcess: {
       nodeId: standard.nodeId,
@@ -582,10 +635,30 @@ export const compareStandardVariant = async (
     };
   });
 
+  let bpmnCompare = null;
+  if (standard.level === "L3" && variant) {
+    const standardModel = await bpmnQueries.findCurrentBpmnModelByNodeId(
+      standardNodeId,
+    );
+    const variantModel = await bpmnQueries.findCurrentBpmnModelByNodeId(
+      variant.nodeId,
+    );
+
+    bpmnCompare = {
+      standardModelId: standardModel?.modelId ?? null,
+      variantModelId: variantModel?.modelId ?? null,
+      diff:
+        standardModel?.bpmnXml && variantModel?.bpmnXml
+          ? diffBpmnXml(standardModel.bpmnXml, variantModel.bpmnXml)
+          : [],
+    };
+  }
+
   return {
     standard,
     variant,
     diffRows,
+    bpmnCompare,
   };
 };
 

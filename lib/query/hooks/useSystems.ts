@@ -8,21 +8,24 @@ import {
 } from "@tanstack/react-query";
 
 import { showErrorToast } from "@/components/common/ErrorToast";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error-handler";
 import { systemKeys, metadataKeys } from "@/lib/query/keys";
 import type {
   ApplicationSystemDto,
-  BatchCreateTaskSystemMappingDto,
-  CreateTaskSystemMappingDto,
+  BatchCreateTaskSystemLinkDto,
+  BatchCreateTaskSystemScreenLinkDto,
   ScreenCatalogFilters,
   ScreenCatalogItem,
+  SystemCatalogFilters,
+  SystemCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
   SystemModuleOption,
   SystemScreen,
   SystemScreenDto,
-  TaskSystemMappingDto,
+  TaskSystemLinkDto,
+  UpdateTaskSystemLinkDto,
   UpsertApplicationSystemDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
@@ -167,35 +170,22 @@ export const useDeactivateScreen = () => {
   });
 };
 
-/** Task 시스템 매핑 목록 */
-export const useTaskSystemMappings = (nodeId: number) =>
+/** Task 시스템 1차 연결 목록 */
+export const useTaskSystemLinks = (nodeId: number) =>
   useQuery({
     queryKey: metadataKeys.systems(nodeId),
     queryFn: () =>
-      apiGet<TaskSystemMappingDto[]>(`/api/metadata/tasks/${nodeId}/systems`),
+      apiGet<TaskSystemLinkDto[]>(`/api/metadata/tasks/${nodeId}/systems`),
     enabled: nodeId > 0,
   });
 
-/** Task 시스템 매핑 생성 */
-export const useCreateTaskSystemMapping = (nodeId: number) => {
+/** Task 시스템 1차 연결 일괄 생성 */
+export const useCreateTaskSystemLinksBatch = (nodeId: number) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateTaskSystemMappingDto) =>
-      apiPost<TaskSystemMappingDto>(`/api/metadata/tasks/${nodeId}/systems`, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
-    },
-    onError: onMutationError,
-  });
-};
-
-/** Task 시스템 매핑 일괄 생성 */
-export const useCreateTaskSystemMappingsBatch = (nodeId: number) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: BatchCreateTaskSystemMappingDto) =>
+    mutationFn: (data: BatchCreateTaskSystemLinkDto) =>
       apiPost<{ createdCount: number }>(
-        `/api/metadata/tasks/${nodeId}/systems/batch`,
+        `/api/metadata/tasks/${nodeId}/systems`,
         data,
       ),
     onSuccess: () => {
@@ -206,13 +196,13 @@ export const useCreateTaskSystemMappingsBatch = (nodeId: number) => {
   });
 };
 
-/** Task 시스템 매핑 삭제 */
-export const useDeleteTaskSystemMapping = (nodeId: number) => {
+/** Task 시스템 1차 연결 삭제 */
+export const useDeleteTaskSystemLink = (nodeId: number) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (mappingId: number) =>
-      apiDelete<{ mappingId: number }>(
-        `/api/metadata/tasks/${nodeId}/systems/${mappingId}`,
+    mutationFn: (linkId: number) =>
+      apiDelete<{ linkId: number }>(
+        `/api/metadata/tasks/${nodeId}/systems/${linkId}`,
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
@@ -222,53 +212,143 @@ export const useDeleteTaskSystemMapping = (nodeId: number) => {
   });
 };
 
-/** 연결 후보 화면 카탈로그 */
-export const useScreenCatalog = (
-  filters: ScreenCatalogFilters,
+/** Task 시스템 1차 연결 주요 시스템 지정 */
+export const useSetTaskSystemLinkPrimary = (nodeId: number) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: number) =>
+      apiPatch<TaskSystemLinkDto>(
+        `/api/metadata/tasks/${nodeId}/systems/${linkId}`,
+        { isPrimary: true } satisfies UpdateTaskSystemLinkDto,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
+    },
+    onError: onMutationError,
+  });
+};
+
+/** Task 시스템 2차 화면 연결 일괄 생성 */
+export const useCreateTaskSystemScreenLinksBatch = (
+  nodeId: number,
+  linkId: number,
+) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BatchCreateTaskSystemScreenLinkDto) =>
+      apiPost<{ createdCount: number }>(
+        `/api/metadata/tasks/${nodeId}/systems/${linkId}/screens/batch`,
+        data,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
+      qc.invalidateQueries({ queryKey: systemKeys.all });
+    },
+    onError: onMutationError,
+  });
+};
+
+/** Task 시스템 2차 화면 연결 삭제 */
+export const useDeleteTaskSystemScreenLink = (
+  nodeId: number,
+  linkId: number,
+) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (screenLinkId: number) =>
+      apiDelete<{ screenLinkId: number }>(
+        `/api/metadata/tasks/${nodeId}/systems/${linkId}/screens/${screenLinkId}`,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: metadataKeys.systems(nodeId) });
+      qc.invalidateQueries({ queryKey: systemKeys.all });
+    },
+    onError: onMutationError,
+  });
+};
+
+const fetchCatalogPage = async <T>(
+  endpoint: string,
+  params: URLSearchParams,
+  locale: string,
+  fallbackMessage: string,
+): Promise<{
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> => {
+  const response = await fetch(`${endpoint}?${params.toString()}`, {
+    headers: { "Accept-Language": locale },
+  });
+  const body = (await response.json()) as {
+    success: boolean;
+    data?: T[];
+    meta?: { total?: number; page?: number; pageSize?: number };
+    error?: { code: string; message: string };
+  };
+
+  if (!response.ok || !body.success) {
+    throw new ApiError(
+      body.error?.code ?? "E502",
+      body.error?.message ?? fallbackMessage,
+      response.status,
+    );
+  }
+
+  return {
+    items: body.data ?? [],
+    total: body.meta?.total ?? 0,
+    page: body.meta?.page ?? 1,
+    pageSize: body.meta?.pageSize ?? 50,
+  };
+};
+
+/** 연결 후보 시스템 카탈로그 — 무한 스크롤 */
+export const useSystemCatalogInfinite = (
+  filters: Omit<SystemCatalogFilters, "page">,
   locale: string,
   enabled = true,
 ) =>
-  useQuery({
-    queryKey: systemKeys.screenCatalog({
-      ...filters,
+  useInfiniteQuery({
+    queryKey: systemKeys.systemCatalogInfinite({
+      search: filters.search,
+      companyCode: filters.companyCode,
+      businessUnitCode: filters.businessUnitCode,
+      excludeNodeId: filters.excludeNodeId,
+      pageSize: filters.pageSize,
       locale,
     }),
-    queryFn: async () => {
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
-      if (filters.systemId) params.set("systemId", String(filters.systemId));
-      if (filters.moduleCode) params.set("moduleCode", filters.moduleCode);
       if (filters.search) params.set("search", filters.search);
+      if (filters.companyCode) params.set("companyCode", filters.companyCode);
+      if (filters.businessUnitCode) {
+        params.set("businessUnitCode", filters.businessUnitCode);
+      }
       if (filters.excludeNodeId) {
         params.set("excludeNodeId", String(filters.excludeNodeId));
       }
-      params.set("page", String(filters.page ?? 1));
+      params.set("page", String(pageParam));
       params.set("pageSize", String(filters.pageSize ?? 50));
 
-      const response = await fetch(`/api/metadata/screens?${params.toString()}`, {
-        headers: { "Accept-Language": locale },
-      });
-      const body = (await response.json()) as {
-        success: boolean;
-        data?: ScreenCatalogItem[];
-        meta?: { total?: number; page?: number; pageSize?: number };
-        error?: { code: string; message: string };
-      };
-
-      if (!response.ok || !body.success) {
-        throw new ApiError(
-          body.error?.code ?? "E502",
-          body.error?.message ?? "Failed to load screens",
-          response.status,
-        );
-      }
+      const result = await fetchCatalogPage<SystemCatalogItem>(
+        "/api/metadata/systems",
+        params,
+        locale,
+        "Failed to load systems",
+      );
 
       return {
-        items: body.data ?? [],
-        total: body.meta?.total ?? 0,
-        page: body.meta?.page ?? filters.page ?? 1,
-        pageSize: body.meta?.pageSize ?? filters.pageSize ?? 50,
+        ...result,
+        page: result.page ?? (pageParam as number),
       };
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
     enabled,
   });
 
@@ -284,6 +364,8 @@ export const useScreenCatalogInfinite = (
       moduleCode: filters.moduleCode,
       search: filters.search,
       excludeNodeId: filters.excludeNodeId,
+      excludeLinkId: filters.excludeLinkId,
+      linkNodeId: filters.linkNodeId,
       pageSize: filters.pageSize,
       locale,
     }),
@@ -296,32 +378,25 @@ export const useScreenCatalogInfinite = (
       if (filters.excludeNodeId) {
         params.set("excludeNodeId", String(filters.excludeNodeId));
       }
+      if (filters.excludeLinkId) {
+        params.set("excludeLinkId", String(filters.excludeLinkId));
+      }
+      if (filters.linkNodeId) {
+        params.set("linkNodeId", String(filters.linkNodeId));
+      }
       params.set("page", String(pageParam));
       params.set("pageSize", String(filters.pageSize ?? 50));
 
-      const response = await fetch(`/api/metadata/screens?${params.toString()}`, {
-        headers: { "Accept-Language": locale },
-      });
-      const body = (await response.json()) as {
-        success: boolean;
-        data?: ScreenCatalogItem[];
-        meta?: { total?: number; page?: number; pageSize?: number };
-        error?: { code: string; message: string };
-      };
-
-      if (!response.ok || !body.success) {
-        throw new ApiError(
-          body.error?.code ?? "E502",
-          body.error?.message ?? "Failed to load screens",
-          response.status,
-        );
-      }
+      const result = await fetchCatalogPage<ScreenCatalogItem>(
+        "/api/metadata/screens",
+        params,
+        locale,
+        "Failed to load screens",
+      );
 
       return {
-        items: body.data ?? [],
-        total: body.meta?.total ?? 0,
-        page: body.meta?.page ?? (pageParam as number),
-        pageSize: body.meta?.pageSize ?? filters.pageSize ?? 50,
+        ...result,
+        page: result.page ?? (pageParam as number),
       };
     },
     getNextPageParam: (lastPage) =>

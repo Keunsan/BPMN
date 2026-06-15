@@ -18,6 +18,8 @@ import {
   flattenL3Processes,
   isBpmnCallActivityType,
   isProcessLinkCompatible,
+  toScopedL3LinkPayload,
+  type ProcessScopeContext,
 } from "@/lib/utils/bpmn-link";
 import { cn } from "@/lib/utils";
 import type { BpmnElementType, ProcessLinkInfo } from "@/types/bpmn";
@@ -29,6 +31,8 @@ type ProcessLinkSidebarProps = {
   parentNodeId: number;
   parentCode?: string | null;
   parentName?: string | null;
+  companyCode?: string | null;
+  businessUnitCode?: string | null;
   selectedElementType?: BpmnElementType | null;
   links: Record<string, ProcessLinkInfo>;
   selectedElementId: string | null;
@@ -75,6 +79,8 @@ export const ProcessLinkSidebar = ({
   parentNodeId,
   parentCode,
   parentName,
+  companyCode,
+  businessUnitCode,
   selectedElementType,
   links,
   selectedElementId,
@@ -88,7 +94,11 @@ export const ProcessLinkSidebar = ({
   const t = useTranslations("bpmn");
   const [search, setSearch] = useState("");
   const [browseTab, setBrowseTab] = useState<LinkPanelTab>("L4");
-  const { data: tree, isLoading, isError } = useProcessTree();
+  const scope: ProcessScopeContext = { companyCode, businessUnitCode };
+  const { data: tree, isLoading, isError } = useProcessTree({
+    companyCode: companyCode ?? undefined,
+    businessUnitCode: businessUnitCode ?? undefined,
+  });
 
   const tab: LinkPanelTab = selectedElementType
     ? isBpmnCallActivityType(selectedElementType)
@@ -110,6 +120,13 @@ export const ProcessLinkSidebar = ({
     }
     return flattenL3Processes(tree, [parentNodeId]);
   }, [parentNodeId, tree]);
+
+  const buildLinkPayload = (node: ProcessNodeTree, linkTab: LinkPanelTab) => {
+    if (linkTab === "L3" && tree?.length) {
+      return toScopedL3LinkPayload(node, tree, scope);
+    }
+    return toLinkPayload(node, linkTab);
+  };
 
   const activeList = tab === "L3" ? l3Processes : l4Processes;
 
@@ -141,7 +158,7 @@ export const ProcessLinkSidebar = ({
     if (!selectedElementId || !canLinkSelection) {
       return;
     }
-    const payload = toLinkPayload(node, tab);
+    const payload = buildLinkPayload(node, tab);
     if (!isProcessLinkCompatible(selectedElementType, payload)) {
       return;
     }
@@ -156,7 +173,7 @@ export const ProcessLinkSidebar = ({
       event.preventDefault();
       return;
     }
-    const payload = toLinkPayload(node, tab);
+    const payload = buildLinkPayload(node, tab);
     writeProcessLinkDrag(event.dataTransfer, payload);
   };
 

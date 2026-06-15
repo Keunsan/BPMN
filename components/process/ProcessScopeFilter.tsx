@@ -24,6 +24,8 @@ type ProcessScopeFilterProps = {
   companyCode: string;
   businessUnitCode: string;
   onScopeChange: (scope: Pick<ProcessFilters, "companyCode" | "businessUnitCode">) => void;
+  /** true면 FilterPanel 없이 필드만 렌더 — 상위 FilterPanel에 합칠 때 사용 */
+  embedded?: boolean;
 };
 
 /** 프로세스 scope(법인·사업부) 조회 필터 */
@@ -31,13 +33,14 @@ export const ProcessScopeFilter = ({
   companyCode,
   businessUnitCode,
   onScopeChange,
+  embedded = false,
 }: ProcessScopeFilterProps) => {
   const t = useTranslations("process");
   const { data: companyOptions = [] } = useCommonCodeLookup("COMPANY_CD");
   const { data: businessUnitOptions = [] } = useCommonCodeLookup("BU_CD");
 
-  return (
-    <FilterPanel>
+  const fields = (
+    <>
       <FilterField label={t("scope.companyCode")}>
         <Select
           value={companyCode || "ALL"}
@@ -90,22 +93,29 @@ export const ProcessScopeFilter = ({
         </Select>
       </FilterField>
 
-      {!companyCode || !businessUnitCode ? (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          {t("scope.catalogViewHint")}
-        </p>
-      ) : companyCode === ENTERPRISE_COMPANY_CODE &&
-        businessUnitCode === ENTERPRISE_BUSINESS_UNIT_CODE ? (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          {t("scope.enterpriseViewHint")}
-        </p>
-      ) : (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          {t("scope.organizationViewHint")}
-        </p>
-      )}
-    </FilterPanel>
+      {!embedded &&
+        (!companyCode || !businessUnitCode ? (
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {t("scope.catalogViewHint")}
+          </p>
+        ) : companyCode === ENTERPRISE_COMPANY_CODE &&
+            businessUnitCode === ENTERPRISE_BUSINESS_UNIT_CODE ? (
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {t("scope.enterpriseViewHint")}
+          </p>
+        ) : (
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {t("scope.organizationViewHint")}
+          </p>
+        ))}
+    </>
   );
+
+  if (embedded) {
+    return fields;
+  }
+
+  return <FilterPanel>{fields}</FilterPanel>;
 };
 
 /** URL과 동기화된 프로세스 scope 상태 */

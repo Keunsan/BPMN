@@ -18,13 +18,14 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { TreeLevelExpandControls } from "@/components/common/TreeLevelExpandControls";
 import { VariantCreateDialog } from "@/components/process/VariantCreateDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useProcessTreeExpansion } from "@/hooks/useProcessTreeExpansion";
+import {
+  getDisabledTreeLevels,
+  PROCESS_LEVELS,
+  setTreeExpansionToLevel,
+} from "@/lib/utils/process-tree-expansion";
 import {
   useDeleteProcess,
   useMoveProcess,
@@ -70,6 +77,10 @@ type ProcessTreeProps = {
   variant?: "default" | "picker";
   /** true면 검색은 고정하고 트리 목록만 스크롤 */
   fixSearchOnScroll?: boolean;
+  /** false면 L1~L4 레벨 펼치기 컨트롤을 숨김 */
+  showLevelControls?: boolean;
+  /** picker에서 선택 가능한 레벨 (미지정 시 전체) */
+  selectableLevels?: ProcessLevel[];
 };
 
 type TreeNodeItemProps = {
@@ -84,6 +95,7 @@ type TreeNodeItemProps = {
   onCreateVariant?: (node: ProcessNodeTree) => void;
   filter: string;
   pickerMode?: boolean;
+  selectableLevels?: Set<ProcessLevel>;
 };
 
 /** 단일 트리 노드 렌더링 */
@@ -99,12 +111,16 @@ const TreeNodeItem = ({
   onCreateVariant,
   filter,
   pickerMode = false,
+  selectableLevels,
 }: TreeNodeItemProps) => {
   const t = useTranslations("process");
   const router = useRouter();
-  const hasChildren = Boolean(node.children?.length);
+  const directChildCount = node.children?.length ?? 0;
+  const hasChildren = directChildCount > 0;
   const isExpanded = expandedIds.has(node.nodeId);
   const isSelected = selectedId === node.nodeId;
+  const isSelectable =
+    !selectableLevels || selectableLevels.has(node.level);
   const label = `${node.code} ${node.name}`;
 
   if (filter && !label.toLowerCase().includes(filter.toLowerCase())) {
@@ -118,8 +134,9 @@ const TreeNodeItem = ({
     <li>
       <div
         className={cn(
-          "group flex items-center gap-1 rounded-md py-1 pr-1 text-sm transition-colors hover:bg-muted",
-          isSelected && "bg-accent text-accent-foreground",
+          "group flex items-center gap-1 rounded-md py-1 pr-1 text-sm transition-colors",
+          isSelectable ? "hover:bg-muted" : "opacity-50",
+          isSelected && isSelectable && "bg-accent text-accent-foreground",
         )}
         style={{ paddingLeft: `${level * 12 + 4}px` }}
       >
@@ -146,14 +163,24 @@ const TreeNodeItem = ({
 
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          onClick={() => onSelect?.(node)}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-1.5 text-left",
+            !isSelectable && "cursor-not-allowed",
+          )}
+          disabled={!isSelectable}
+          onClick={() => {
+            if (isSelectable) {
+              onSelect?.(node);
+            }
+          }}
         >
           <FolderTree className={cn("size-3.5 shrink-0", levelStyles[node.level])} />
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {node.code}
-          </span>
           <span className="truncate">{node.name}</span>
+          {directChildCount > 0 && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {t("directChildCount", { count: directChildCount })}
+            </span>
+          )}
           {node.isOverlayVariant && (
             <Badge variant="secondary" className="shrink-0 text-[10px]">
               {t("variant.badge")}
@@ -245,6 +272,7 @@ const TreeNodeItem = ({
               onCreateVariant={onCreateVariant}
               filter={filter}
               pickerMode={pickerMode}
+              selectableLevels={selectableLevels}
             />
           ))}
         </ul>
@@ -261,14 +289,19 @@ export const ProcessTree = ({
   className,
   variant = "default",
   fixSearchOnScroll = false,
+  showLevelControls = true,
   scopeFilters,
+  selectableLevels,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
+  const selectableLevelSet = useMemo(
+    () => (selectableLevels ? new Set(selectableLevels) : undefined),
+    [selectableLevels],
+  );
   const t = useTranslations("process");
   const router = useRouter();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<ProcessNodeTree | null>(null);
   const [variantTarget, setVariantTarget] = useState<ProcessNodeTree | null>(null);
   const hasInitializedExpansion = useRef(false);
@@ -281,13 +314,23 @@ export const ProcessTree = ({
 
   const { data: tree, isLoading, isError, refetch } = useProcessTree(treeFilters);
 
-  /** 최초 로드 시 L1 노드를 펼침 — 토글 시 상위가 접히지 않도록 state에 반영 */
+  const {
+    expandedIds,
+    expandedLevels,
+    onToggleNode,
+    onToggleLevel,
+    setExpandedIds,
+  } = useProcessTreeExpansion(tree);
+
+  const disabledLevels = tree?.length ? getDisabledTreeLevels(tree) : new Set<ProcessLevel>();
+
+  /** 최초 로드 시 L2까지 펼침 (L1 노드만 확장) */
   useEffect(() => {
     if (tree?.length && !hasInitializedExpansion.current) {
-      setExpandedIds(new Set(tree.map((n) => n.nodeId)));
+      setExpandedIds([...setTreeExpansionToLevel(tree, new Set(), "L2")]);
       hasInitializedExpansion.current = true;
     }
-  }, [tree]);
+  }, [tree, setExpandedIds]);
   const deleteMutation = useDeleteProcess();
   const deleteImpactMutation = useProcessDeleteImpact();
   const moveMutation = useMoveProcess();
@@ -295,15 +338,6 @@ export const ProcessTree = ({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
-
-  const onToggle = useCallback((id: number) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const handleSelect = useCallback(
     (node: ProcessNodeTree) => {
@@ -427,13 +461,14 @@ export const ProcessTree = ({
           level={0}
           selectedId={selectedId}
           expandedIds={expandedIds}
-          onToggle={onToggle}
+          onToggle={onToggleNode}
           onSelect={handleSelect}
           onCreate={onCreate}
           onDelete={handleRequestDelete}
           onCreateVariant={setVariantTarget}
           filter={debouncedSearch}
           pickerMode={pickerMode}
+          selectableLevels={selectableLevelSet}
         />
       ))}
     </ul>
@@ -502,6 +537,15 @@ export const ProcessTree = ({
       )}
     >
       {searchRow}
+      {showLevelControls && Boolean(tree?.length) && (
+        <TreeLevelExpandControls
+          levels={PROCESS_LEVELS}
+          expandedLevels={expandedLevels}
+          onToggleLevel={onToggleLevel}
+          disabledLevels={disabledLevels}
+          levelClassNames={levelStyles}
+        />
+      )}
       {fixSearchOnScroll ? (
         <div className="min-h-0 flex-1 overflow-y-auto">{treeBody}</div>
       ) : (

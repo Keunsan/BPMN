@@ -6,17 +6,21 @@ import * as processQueries from "@/lib/db/queries/process";
 import * as systemQueries from "@/lib/db/queries/system";
 import type {
   ApplicationSystemDto,
-  BatchCreateTaskSystemMappingDto,
-  CreateTaskSystemMappingDto,
+  BatchCreateTaskSystemLinkDto,
+  BatchCreateTaskSystemScreenLinkDto,
+  CreateTaskSystemLinkDto,
   ScreenCatalogFilters,
   ScreenCatalogItem,
+  SystemCatalogFilters,
+  SystemCatalogItem,
   SystemHierarchyDto,
   SystemListFilters,
   SystemModuleOption,
   SystemScreen,
   SystemScreenDto,
   SystemScreenListFilters,
-  TaskSystemMappingDto,
+  TaskSystemLinkDto,
+  UpdateTaskSystemLinkDto,
   UpsertApplicationSystemDto,
   UpsertSystemScreenDto,
 } from "@/types/system";
@@ -279,28 +283,28 @@ export const listSystemHierarchy = async (
   locale: Locale,
 ): Promise<SystemHierarchyDto[]> => systemQueries.listSystemHierarchy(locale);
 
-/** Task별 시스템 매핑을 조회한다. */
-export const listTaskSystemMappings = async (
+/** Task별 시스템 1차 연결 목록을 조회한다. */
+export const listTaskSystemLinks = async (
   nodeId: number,
   locale: Locale = "ko",
-): Promise<TaskSystemMappingDto[]> => {
+): Promise<TaskSystemLinkDto[]> => {
   await assertTaskNode(nodeId);
-  return systemQueries.listTaskSystemMappings(nodeId, locale);
+  return systemQueries.listTaskSystemLinks(nodeId, locale);
 };
 
-/** Task-시스템 매핑을 생성한다. */
-export const createTaskSystemMapping = async (
-  dto: CreateTaskSystemMappingDto,
+/** Task-시스템 1차 연결을 생성한다. */
+export const createTaskSystemLink = async (
+  dto: CreateTaskSystemLinkDto,
   userId: number,
-): Promise<TaskSystemMappingDto> => {
+): Promise<TaskSystemLinkDto> => {
   await assertTaskNode(dto.nodeId);
 
-  const screen = await systemQueries.findScreenById(dto.screenId);
-  if (!screen) {
-    throw new ApiError("E301", "Screen not found", 404, undefined, "screenId");
+  const system = await systemQueries.findSystemById(dto.systemId);
+  if (!system) {
+    throw new ApiError("E301", "System not found", 404, undefined, "systemId");
   }
 
-  return systemQueries.createTaskSystemMapping(
+  return systemQueries.createTaskSystemLink(
     {
       ...dto,
       usageDescription: dto.usageDescription?.trim() || null,
@@ -310,13 +314,91 @@ export const createTaskSystemMapping = async (
   );
 };
 
-/** Task-시스템 매핑을 삭제한다. */
-export const deleteTaskSystemMapping = async (
+/** Task-시스템 1차 연결을 삭제한다. */
+export const deleteTaskSystemLink = async (
   nodeId: number,
-  mappingId: number,
+  linkId: number,
 ): Promise<void> => {
   await assertTaskNode(nodeId);
-  await systemQueries.deleteTaskSystemMapping(nodeId, mappingId);
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+  await systemQueries.deleteTaskSystemLink(nodeId, linkId);
+};
+
+/** Task-시스템 1차 연결의 주요 시스템을 지정한다. */
+export const setTaskSystemLinkPrimary = async (
+  nodeId: number,
+  linkId: number,
+): Promise<TaskSystemLinkDto> => {
+  await assertTaskNode(nodeId);
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+
+  await systemQueries.setTaskSystemLinkPrimary(nodeId, linkId);
+  const updated = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!updated) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+
+  return updated;
+};
+
+/** Task-시스템 1차 연결을 일괄 생성한다. */
+export const createTaskSystemLinksBatch = async (
+  nodeId: number,
+  dto: BatchCreateTaskSystemLinkDto,
+  userId: number,
+): Promise<{ createdCount: number }> => {
+  await assertTaskNode(nodeId);
+
+  if (!dto.systemIds.length) {
+    throw new ApiError("E001", "System ids are required", 400, undefined, "systemIds");
+  }
+
+  const createdCount = await systemQueries.createTaskSystemLinksBatch(
+    nodeId,
+    {
+      systemIds: dto.systemIds,
+      isPrimary: dto.isPrimary ?? false,
+    },
+    userId,
+  );
+
+  return { createdCount };
+};
+
+/** Task-시스템 1차 연결을 수정한다. */
+export const updateTaskSystemLink = async (
+  nodeId: number,
+  linkId: number,
+  dto: UpdateTaskSystemLinkDto,
+): Promise<TaskSystemLinkDto> => {
+  if (dto.isPrimary) {
+    return setTaskSystemLinkPrimary(nodeId, linkId);
+  }
+
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+
+  return link;
+};
+
+/** 연결 후보 시스템 카탈로그를 조회한다. */
+export const listSystemCatalog = async (
+  filters: SystemCatalogFilters,
+  locale: Locale = "ko",
+): Promise<{ items: SystemCatalogItem[]; total: number }> => {
+  if (filters.excludeNodeId) {
+    await assertTaskNode(filters.excludeNodeId);
+  }
+
+  return systemQueries.listSystemCatalog(filters, locale);
 };
 
 /** 연결 후보 화면 카탈로그를 조회한다. */
@@ -328,33 +410,89 @@ export const listScreenCatalog = async (
     await assertTaskNode(filters.excludeNodeId);
   }
 
+  if (filters.excludeLinkId) {
+    const systemId = await systemQueries.findTaskSystemLinkSystemId(
+      filters.excludeLinkId,
+      filters.linkNodeId,
+    );
+    if (!systemId) {
+      throw new ApiError("E301", "System link not found", 404, undefined, "excludeLinkId");
+    }
+    filters = { ...filters, systemId };
+  }
+
   return systemQueries.listScreenCatalog(filters, locale);
 };
 
-/** Task-시스템 매핑을 일괄 생성한다. */
-export const createTaskSystemMappingsBatch = async (
+/** Task-시스템 2차 화면 연결을 일괄 생성한다. */
+export const createTaskSystemScreenLinksBatch = async (
   nodeId: number,
-  dto: BatchCreateTaskSystemMappingDto,
-  userId: number,
+  linkId: number,
+  dto: BatchCreateTaskSystemScreenLinkDto,
 ): Promise<{ createdCount: number }> => {
   await assertTaskNode(nodeId);
 
-  if (!dto.screenIds.length) {
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+
+  const screenIds = [...new Set(dto.screenIds.map((id) => Number(id)).filter((id) => id > 0))];
+  if (!screenIds.length) {
     throw new ApiError("E001", "Screen ids are required", 400, undefined, "screenIds");
   }
 
-  const createdCount = await systemQueries.createTaskSystemMappingsBatch(
+  const missingScreenIds: number[] = [];
+  for (const screenId of screenIds) {
+    if (!(await systemQueries.findScreenById(screenId))) {
+      missingScreenIds.push(screenId);
+    }
+  }
+  if (missingScreenIds.length > 0) {
+    throw new ApiError("E301", "Screen not found", 404, undefined, "screenId");
+  }
+
+  const foreignScreenIds = await systemQueries.findScreenIdsOutsideTaskSystemLink(
     nodeId,
-    {
-      screenIds: dto.screenIds,
-      usageType: dto.usageType ?? "EXECUTE",
-      usageDescription: dto.usageDescription?.trim() || null,
-      isPrimary: dto.isPrimary ?? false,
-    },
-    userId,
+    linkId,
+    screenIds,
+  );
+  if (foreignScreenIds.length > 0) {
+    throw new ApiError(
+      "E406",
+      "Screen does not belong to the linked system",
+      400,
+      undefined,
+      "screenId",
+    );
+  }
+
+  const createdCount = await systemQueries.createTaskSystemScreenLinksBatch(
+    linkId,
+    { screenIds },
   );
 
   return { createdCount };
+};
+
+/** Task-시스템 2차 화면 연결을 삭제한다. */
+export const deleteTaskSystemScreenLink = async (
+  nodeId: number,
+  linkId: number,
+  screenLinkId: number,
+): Promise<void> => {
+  await assertTaskNode(nodeId);
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+
+  const exists = link.screens.some((screen) => screen.screenLinkId === screenLinkId);
+  if (!exists) {
+    throw new ApiError("E301", "Screen link not found", 404, undefined, "screenLinkId");
+  }
+
+  await systemQueries.deleteTaskSystemScreenLink(linkId, screenLinkId);
 };
 
 /** 화면을 upsert한다. (마이그레이션/동기화용) */

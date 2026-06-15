@@ -97,8 +97,12 @@
     "createFirst": "建立第一個流程",
     "new": "新增",
     "searchPlaceholder": "依代碼或名稱搜尋",
+    "treeLevelControls": "依層級展開",
+    "treeLevelExpand": "展開 {level} 及上層",
+    "treeLevelCollapse": "收合 {level} 及上層",
     "viewDetail": "查看詳情",
     "addChild": "新增子項",
+    "directChildCount": "({count})",
     "delete": "刪除",
     "deleteConfirmTitle": "刪除流程",
     "deleteConfirmDesc": "確定刪除「{name}」？",
@@ -208,7 +212,17 @@
       "standardColumn": "標準",
       "variantColumn": "變形",
       "noStandardOptions": "無可比較的標準流程",
-      "noStandardOptionsDesc": "請先登錄 L3 或 L4 標準流程。"
+      "noStandardOptionsDesc": "請先登錄 L3 或 L4 標準流程。",
+      "copyBpmn": "複製標準 BPMN",
+      "copyBpmnDescL3": "將標準 L3 的 BPMN 圖與 L4 Task 連結複製到變形。",
+      "copyBpmnDescL4": "更新父 L3 變形 BPMN 中的 Task 連結至變形 L4。",
+      "copyMetadata": "複製元資料",
+      "copyMetadataDescL3": "將標準 L4 Task 的 task_attribute 複製到變形 L4。",
+      "copyMetadataDescL4": "將標準 L4 的 task_attribute 複製到變形 L4。",
+      "compareTabMetadata": "元資料",
+      "compareTabBpmn": "BPMN",
+      "compareNoBpmn": "無可比較的 BPMN",
+      "compareNoBpmnDesc": "標準或變形 L3 尚未登錄 BPMN 模型。"
     }
   },
   "bpmn": {
@@ -226,10 +240,12 @@
     "searchPlaceholder": "搜尋模型或流程",
     "filterStatus": "狀態",
     "allStatus": "全部狀態",
+    "scopeFilterHint": "選擇法人與事業部後，僅顯示該範圍的 BPMN 模型。",
     "sortUpdated": "最新",
     "sortName": "名稱",
     "noThumbnail": "無預覽",
     "edit": "編輯",
+    "backToList": "返回清單",
     "duplicate": "複製",
     "delete": "刪除",
     "deleteConfirmTitle": "刪除 BPMN 模型",
@@ -552,7 +568,7 @@
   },
   "systemMapping": {
     "title": "Task-系統連接",
-    "description": "依用途將 L3/L4 Task 與系統畫面連接。",
+    "description": "連接 L3/L4 Task 與系統，必要時再新增畫面。",
     "task": "Task",
     "selectTask": "請選擇 Task。",
     "company": "法人",
@@ -564,43 +580,41 @@
     "selectSystem": "選擇系統",
     "selectModule": "選擇模組",
     "selectScreen": "選擇畫面",
-    "usageType": "用途",
-    "usageDescription": "用途說明",
     "primary": "主要系統",
     "markPrimary": "標示為主要系統",
     "connect": "連接",
     "connectSelected": "連接 ({count})",
-    "linkedSystems": "已連接畫面",
+    "linkedSystems": "已連接系統",
+    "linkedScreens": "已連接畫面",
+    "availableSystems": "可連接系統",
     "availableScreens": "可連接畫面",
+    "emptyAvailableSystems": "沒有可連接的系統。",
     "emptyAvailableScreens": "沒有可連接的畫面。",
+    "emptyLinkedScreens": "沒有已連接的畫面。",
     "emptyTasks": "沒有 L3/L4 Task。",
     "taskList": "Task 清單",
     "taskCode": "Task 代碼",
     "taskName": "Task 名稱",
     "taskSearch": "Task 搜尋",
     "taskSearchPlaceholder": "依代碼或名稱搜尋",
+    "systemSearchPlaceholder": "依系統代碼或名稱搜尋",
     "selectTaskHint": "請在左側選擇 Task。",
     "screenSearch": "畫面搜尋",
     "screenSearchPlaceholder": "搜尋選單ID、畫面名稱、路徑",
     "menuId": "選單ID",
     "menuPath": "選單路徑",
+    "screenCount": "畫面數",
+    "selectedSystem": "已選系統",
+    "clearSystemSelection": "取消選取",
     "allSystems": "全部系統",
     "allModules": "全部模組",
     "selectAllOnPage": "選取本頁全部",
-    "selectScreen": "選取畫面",
-    "panelResizeHorizontal": "調整 Task/畫面面板寬度",
+    "panelResizeHorizontal": "調整 Task/系統面板寬度",
     "panelResizeVertical": "調整已連接/候選面板高度",
     "loadedCount": "{loaded} / {total}",
     "emptyMappings": "沒有已連接系統。",
     "primaryYes": "主要",
-    "actions": "操作",
-    "usageTypes": {
-      "EXECUTE": "執行",
-      "INQUIRY": "查詢",
-      "APPROVAL": "批准",
-      "REPORT": "報表",
-      "INTERFACE": "介面"
-    }
+    "actions": "操作"
   },
   "externalTables": {
     "title": "外部資料表查詢",
@@ -704,6 +718,8 @@
       "INTERFACE": "Interface"
     },
     "nodeKindShort": {
+      "L1": "L1",
+      "L2": "L2",
       "L3": "L3",
       "TASK": "Task",
       "APPLICATION": "App",
@@ -713,15 +729,15 @@
     "nodeCriticalShort": "Critical",
     "explorer": {
       "contextLabel": "基準節點",
-      "contextEmpty": "請從下方清單選擇 L3 或 Task。",
+      "contextEmpty": "請使用流程選擇按鈕指定 L1~L3 流程。",
       "contextLoading": "載入中…",
-      "scope": "探索範圍",
-      "processSelect": "流程選擇",
-      "depth": "探索深度",
-      "depth1": "1-hop",
-      "depth2": "2-hop",
+      "processSelect": "選擇流程",
+      "processSelectDesc": "選擇作為探索基準的 L1~L3 流程。",
+      "processSelectHint": "僅可選擇 L1、L2、L3 節點，無法選擇 L4（Task）。",
+      "processSelectConfirm": "選擇",
       "nodeTypeFilter": "節點類型",
       "filterHint": "顯示 {count} 種類型",
+      "centerKindExcluded": "探索基準（{kind}）已從節點類型中排除。",
       "legend": "圖例",
       "summary": "圖譜摘要",
       "summaryEmpty": "選擇流程後顯示摘要。",
@@ -751,7 +767,11 @@
       "emptyDescription": "請在左側選擇 L3 或 Task 流程。",
       "hiddenTitle": "圖譜已隱藏",
       "hiddenDescription": "請從工具列開啟圖譜顯示。",
-      "metaSummary": "節點 {nodes} · 邊 {edges}"
+      "metaSummary": "節點 {nodes} · 邊 {edges}",
+      "statusNodes": "節點 {count}",
+      "statusEdges": "邊 {count}",
+      "statusZoom": "縮放 {percent}%",
+      "statusSelected": "已選: {label}"
     },
     "inspector": {
       "emptyTitle": "請選擇節點",
@@ -780,7 +800,35 @@
       "incident": "事件",
       "change": "變更紀錄",
       "noData": "尚未連接營運資料。",
-      "placeholderHint": "後續將連接營運資料。"
+      "placeholderHint": "後續將連接營運資料。",
+      "fields": {
+        "impact": {
+          "scope": "影響範圍",
+          "relatedSystems": "關聯系統",
+          "dependentTasks": "依賴 Task"
+        },
+        "usage": {
+          "dailyCalls": "每日呼叫",
+          "lastUsed": "最近使用",
+          "activeUsers": "活躍使用者"
+        },
+        "crud": {
+          "create": "Create",
+          "read": "Read",
+          "update": "Update",
+          "delete": "Delete"
+        },
+        "incident": {
+          "lastIncident": "最近事件",
+          "openCount": "未解決件數",
+          "mttr": "MTTR"
+        },
+        "change": {
+          "lastChange": "最近變更",
+          "changeFrequency": "變更頻率",
+          "owner": "負責人"
+        }
+      }
     },
     "edgeKindShort": {
       "CONTAINS": "包含",

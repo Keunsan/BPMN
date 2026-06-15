@@ -32,6 +32,16 @@ const kindAccentClass: Record<GraphNodeKind, string> = {
   INTERFACE: "pams-graph-inspector__kind-mark--interface",
 };
 
+type OperationsSectionKey = "impact" | "usage" | "crud" | "incident" | "change";
+
+const OPERATIONS_FIELD_KEYS: Record<OperationsSectionKey, string[]> = {
+  impact: ["scope", "relatedSystems", "dependentTasks"],
+  usage: ["dailyCalls", "lastUsed", "activeUsers"],
+  crud: ["create", "read", "update", "delete"],
+  incident: ["lastIncident", "openCount", "mttr"],
+  change: ["lastChange", "changeFrequency", "owner"],
+};
+
 type GraphInspectorPanelProps = {
   graph?: OperationsGraphResult;
   selectedNodeId: string | null;
@@ -167,9 +177,32 @@ const MetricItem = ({
   </div>
 );
 
-const ExtensionPlaceholder = ({ hint }: { hint: string }) => (
-  <p className="pams-graph-inspector__empty">{hint}</p>
-);
+const OperationsDataSection = ({
+  sectionKey,
+  title,
+}: {
+  sectionKey: OperationsSectionKey;
+  title: string;
+}) => {
+  const t = useTranslations("operationsGraph");
+
+  return (
+    <InspectorSection title={title}>
+      <dl className="pams-graph-inspector__field-grid">
+        {OPERATIONS_FIELD_KEYS[sectionKey].map((fieldKey) => (
+          <div key={fieldKey} className="pams-graph-inspector__field-row">
+            <dt className="pams-graph-inspector__field-label">
+              {t(`inspector.fields.${sectionKey}.${fieldKey}`)}
+            </dt>
+            <dd className="pams-graph-inspector__field-value">
+              {t("inspector.noValue")}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </InspectorSection>
+  );
+};
 
 /** 우측 노드 Inspector — 선택 노드 상세·운영 메타 */
 export const GraphInspectorPanel = ({
@@ -331,25 +364,15 @@ export const GraphInspectorPanel = ({
         {t("inspector.operationsGroup")}
       </div>
 
-      <InspectorSection title={t("inspector.impact")}>
-        <ExtensionPlaceholder hint={t("inspector.noData")} />
-      </InspectorSection>
+      <OperationsDataSection sectionKey="impact" title={t("inspector.impact")} />
+      <OperationsDataSection sectionKey="usage" title={t("inspector.usage")} />
+      <OperationsDataSection sectionKey="crud" title={t("inspector.crud")} />
+      <OperationsDataSection sectionKey="incident" title={t("inspector.incident")} />
+      <OperationsDataSection sectionKey="change" title={t("inspector.change")} />
 
-      <InspectorSection title={t("inspector.usage")}>
-        <ExtensionPlaceholder hint={t("inspector.noData")} />
-      </InspectorSection>
-
-      <InspectorSection title={t("inspector.crud")}>
-        <ExtensionPlaceholder hint={t("inspector.noData")} />
-      </InspectorSection>
-
-      <InspectorSection title={t("inspector.incident")}>
-        <ExtensionPlaceholder hint={t("inspector.noData")} />
-      </InspectorSection>
-
-      <InspectorSection title={t("inspector.change")}>
-        <ExtensionPlaceholder hint={t("inspector.noData")} />
-      </InspectorSection>
+      <p className="pams-graph-inspector__operations-hint">
+        {t("inspector.placeholderHint")}
+      </p>
     </div>
   );
 };

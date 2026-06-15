@@ -11,13 +11,15 @@ export const OperationsGraphClient = () => {
   const t = useTranslations("operationsGraph");
 
   return (
-    <ListPageLayout>
+    <ListPageLayout className="min-h-0 flex-1">
       <PageHeader
         title={t("title")}
         description={t("description")}
         icon={Network}
       />
-      <OperationsGraphWorkspace />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <OperationsGraphWorkspace />
+      </div>
     </ListPageLayout>
   );
 };

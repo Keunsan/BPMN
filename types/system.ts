@@ -27,13 +27,6 @@ export type ScreenType =
   | "APPROVAL"
   | "DASHBOARD";
 
-export type SystemUsageType =
-  | "EXECUTE"
-  | "INQUIRY"
-  | "APPROVAL"
-  | "REPORT"
-  | "INTERFACE";
-
 export interface ApplicationSystem {
   systemId: number;
   systemCode: string;
@@ -142,25 +135,24 @@ export interface UpsertSystemScreenDto {
   isActive?: boolean;
 }
 
-export interface TaskSystemMapping {
-  mappingId: number;
+export interface TaskSystemLink {
+  linkId: number;
   nodeId: number;
-  screenId: number;
-  usageType: SystemUsageType;
+  systemId: number;
   usageDescription: string | null;
   isPrimary: boolean;
   createdBy: number | null;
   createdAt: Date;
 }
 
-export interface TaskSystemMappingDto extends TaskSystemMapping {
-  systemId: number;
-  systemCode: string;
-  systemName: string;
-  companyCode: string | null;
-  businessUnitCode: string | null;
-  companyName: string | null;
-  businessUnitName: string | null;
+export interface TaskSystemScreenLink {
+  screenLinkId: number;
+  linkId: number;
+  screenId: number;
+  createdAt: Date;
+}
+
+export interface TaskSystemScreenLinkDto extends TaskSystemScreenLink {
   moduleCode: string;
   moduleName: string;
   menuId: string;
@@ -171,18 +163,34 @@ export interface TaskSystemMappingDto extends TaskSystemMapping {
   screenType: ScreenType | null;
 }
 
-export interface CreateTaskSystemMappingDto {
+export interface TaskSystemLinkDto extends TaskSystemLink {
+  systemCode: string;
+  systemName: string;
+  companyCode: string | null;
+  businessUnitCode: string | null;
+  companyName: string | null;
+  businessUnitName: string | null;
+  screenCount: number;
+  screens: TaskSystemScreenLinkDto[];
+}
+
+export interface CreateTaskSystemLinkDto {
   nodeId: number;
-  screenId: number;
-  usageType: SystemUsageType;
+  systemId: number;
   usageDescription?: string | null;
   isPrimary?: boolean;
 }
 
-export interface BatchCreateTaskSystemMappingDto {
+export interface BatchCreateTaskSystemLinkDto {
+  systemIds: number[];
+  isPrimary?: boolean;
+}
+
+export interface BatchCreateTaskSystemScreenLinkDto {
   screenIds: number[];
-  usageType?: SystemUsageType;
-  usageDescription?: string | null;
+}
+
+export interface UpdateTaskSystemLinkDto {
   isPrimary?: boolean;
 }
 
@@ -191,6 +199,9 @@ export interface ScreenCatalogFilters {
   moduleCode?: string;
   search?: string;
   excludeNodeId?: number;
+  excludeLinkId?: number;
+  /** excludeLinkId와 함께 사용 — 링크 소속 Task(node) 검증 */
+  linkNodeId?: number;
   page?: number;
   pageSize?: number;
 }
@@ -198,6 +209,20 @@ export interface ScreenCatalogFilters {
 export interface ScreenCatalogItem extends SystemScreenDto {
   companyCode: string | null;
   businessUnitCode: string | null;
+  companyName: string | null;
+  businessUnitName: string | null;
+}
+
+export interface SystemCatalogFilters {
+  search?: string;
+  companyCode?: string;
+  businessUnitCode?: string;
+  excludeNodeId?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SystemCatalogItem extends ApplicationSystemDto {
   companyName: string | null;
   businessUnitName: string | null;
 }

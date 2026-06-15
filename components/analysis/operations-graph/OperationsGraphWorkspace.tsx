@@ -23,11 +23,14 @@ import { cn } from "@/lib/utils";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useOperationsGraph } from "@/lib/query/hooks/useOperationsGraph";
 import type {
+  GraphCenterProcessLevel,
   GraphNodeKind,
   GraphViewMode,
   OperationsGraphQuery,
 } from "@/types/operations-graph";
 import { GRAPH_NODE_KINDS } from "@/types/operations-graph";
+
+import "./operations-graph.css";
 
 const DEFAULT_NODE_KINDS = Object.fromEntries(
   GRAPH_NODE_KINDS.map((kind) => [kind, true]),
@@ -48,9 +51,9 @@ export const OperationsGraphWorkspace = () => {
       "L3",
     ),
   );
-  const [depth, setDepth] = useQueryState(
-    "depth",
-    parseAsInteger.withDefault(2),
+  const [centerLevel, setCenterLevel] = useQueryState(
+    "centerLevel",
+    parseAsStringLiteral(["L1", "L2", "L3"] as const),
   );
   const [selectedNodeId, setSelectedNodeId] = useQueryState(
     "selected",
@@ -106,15 +109,31 @@ export const OperationsGraphWorkspace = () => {
     side: "right",
   });
 
+  const excludedGraphKind = useMemo((): GraphNodeKind | undefined => {
+    if (centerLevel === "L3") {
+      return "L3";
+    }
+    if (!centerLevel && centerKind === "TASK") {
+      return "TASK";
+    }
+    return undefined;
+  }, [centerKind, centerLevel]);
+
   const graphQuery = useMemo<OperationsGraphQuery | null>(() => {
     if (!centerNodeId) {
       return null;
     }
-    const enabledKinds = GRAPH_NODE_KINDS.filter((kind) => nodeKinds[kind]);
+    const enabledKinds = GRAPH_NODE_KINDS.filter(
+      (kind) => kind !== excludedGraphKind && nodeKinds[kind],
+    );
+    const processLevel =
+      centerLevel ??
+      (centerKind === "L3" ? ("L3" as const) : undefined);
     return {
       centerKind: centerKind as GraphNodeKind,
       centerId: centerNodeId,
-      depth: depth === 1 ? 1 : 2,
+      centerProcessLevel: processLevel,
+      depth: 2,
       includeKinds: enabledKinds,
       showInterfaces,
       showTables,
@@ -123,7 +142,8 @@ export const OperationsGraphWorkspace = () => {
   }, [
     centerNodeId,
     centerKind,
-    depth,
+    centerLevel,
+    excludedGraphKind,
     nodeKinds,
     showInterfaces,
     showTables,
@@ -136,12 +156,18 @@ export const OperationsGraphWorkspace = () => {
   );
 
   const handleSelectCenter = useCallback(
-    (nodeId: number, level: "L3" | "L4") => {
+    (nodeId: number, level: GraphCenterProcessLevel) => {
       void setCenterNodeId(nodeId);
-      void setCenterKind(level === "L4" ? "TASK" : "L3");
+      void setCenterKind("L3");
+      void setCenterLevel(level);
       void setSelectedNodeId(null);
+      setNodeKinds((prev) => ({
+        ...prev,
+        L3: level === "L3" ? false : true,
+        TASK: true,
+      }));
     },
-    [setCenterNodeId, setCenterKind, setSelectedNodeId],
+    [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId],
   );
 
   const handleExport = useCallback(async () => {
@@ -161,11 +187,10 @@ export const OperationsGraphWorkspace = () => {
       >
         <GraphExplorerPanel
           centerNodeId={centerNodeId}
-          centerNode={graph?.nodes.find((node) => node.id === graph.centerNodeId)}
+          centerNode={graph?.centerNode}
           centerKind={centerKind as GraphNodeKind}
+          centerProcessLevel={centerLevel ?? undefined}
           onSelectCenter={handleSelectCenter}
-          depth={depth === 1 ? 1 : 2}
-          onDepthChange={(value) => void setDepth(value)}
           nodeKinds={nodeKinds}
           onNodeKindChange={(kind, enabled) =>
             setNodeKinds((prev) => ({ ...prev, [kind]: enabled }))
@@ -206,18 +231,20 @@ export const OperationsGraphWorkspace = () => {
           onExport={handleExport}
           exportDisabled={!graph || graph.nodes.length === 0}
         />
-        <GraphCanvas
-          graph={graph}
-          isLoading={isLoading || isFetching}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={(nodeId) => void setSelectedNodeId(nodeId)}
-          showGraph={showGraph}
-          viewMode={viewMode as GraphViewMode}
-          searchTerm={searchTerm}
-          onExportReady={(fn) => {
-            exportRef.current = fn;
-          }}
-        />
+        <div className="pams-ops-graph-canvas-shell flex min-h-0 flex-1 flex-col">
+          <GraphCanvas
+            graph={graph}
+            isLoading={isLoading || isFetching}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={(nodeId) => void setSelectedNodeId(nodeId)}
+            showGraph={showGraph}
+            viewMode={viewMode as GraphViewMode}
+            searchTerm={searchTerm}
+            onExportReady={(fn) => {
+              exportRef.current = fn;
+            }}
+          />
+        </div>
       </div>
 
       {!rightCollapsed ? (

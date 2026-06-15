@@ -42,6 +42,10 @@ export const GET = withApiHandler(async ({ request }) => {
 
           : undefined,
 
+    companyCode: searchParams.get("companyCode") ?? undefined,
+
+    businessUnitCode: searchParams.get("businessUnitCode") ?? undefined,
+
     search: searchParams.get("search") ?? undefined,
 
     sort: (searchParams.get("sort") as BpmnFilters["sort"]) ?? "updated",

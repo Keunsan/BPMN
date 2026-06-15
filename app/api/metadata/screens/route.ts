@@ -9,6 +9,8 @@ export const GET = withApiHandler(async ({ locale, request }) => {
   const moduleCode = url.searchParams.get("moduleCode") ?? undefined;
   const search = url.searchParams.get("search") ?? undefined;
   const excludeNodeId = url.searchParams.get("excludeNodeId");
+  const excludeLinkId = url.searchParams.get("excludeLinkId");
+  const linkNodeId = url.searchParams.get("linkNodeId");
   const page = url.searchParams.get("page");
   const pageSize = url.searchParams.get("pageSize");
 
@@ -17,6 +19,8 @@ export const GET = withApiHandler(async ({ locale, request }) => {
     search,
     systemId: systemId ? Number(systemId) : undefined,
     excludeNodeId: excludeNodeId ? Number(excludeNodeId) : undefined,
+    excludeLinkId: excludeLinkId ? Number(excludeLinkId) : undefined,
+    linkNodeId: linkNodeId ? Number(linkNodeId) : undefined,
     page: page ? Number(page) : 1,
     pageSize: pageSize ? Number(pageSize) : 50,
   };

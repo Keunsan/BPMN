@@ -40,9 +40,23 @@ export const VariantCreateDialog = ({
   const t = useTranslations("process");
   const [companyCode, setCompanyCode] = useState("");
   const [businessUnitCode, setBusinessUnitCode] = useState("");
+  const [copyBpmn, setCopyBpmn] = useState(true);
+  const [copyMetadata, setCopyMetadata] = useState(false);
   const { data: companyOptions = [] } = useCommonCodeLookup("COMPANY_CD");
   const { data: businessUnitOptions = [] } = useCommonCodeLookup("BU_CD");
   const createVariant = useCreateProcessVariant(standardNode?.nodeId ?? 0);
+  const isL3 = standardNode?.level === "L3";
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      setCopyBpmn(standardNode?.level === "L3");
+      setCopyMetadata(false);
+    } else {
+      setCompanyCode("");
+      setBusinessUnitCode("");
+    }
+    onOpenChange(next);
+  };
 
   const handleSubmit = () => {
     if (!standardNode || !companyCode || !businessUnitCode) {
@@ -50,12 +64,15 @@ export const VariantCreateDialog = ({
     }
 
     createVariant.mutate(
-      { companyCode, businessUnitCode },
+      {
+        companyCode,
+        businessUnitCode,
+        copyBpmn: copyBpmn || undefined,
+        copyMetadata: copyMetadata || undefined,
+      },
       {
         onSuccess: (variant) => {
-          onOpenChange(false);
-          setCompanyCode("");
-          setBusinessUnitCode("");
+          handleOpenChange(false);
           onSuccess?.(variant);
         },
       },
@@ -63,7 +80,7 @@ export const VariantCreateDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("variant.createTitle")}</DialogTitle>
@@ -113,10 +130,50 @@ export const VariantCreateDialog = ({
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-3 rounded-md border p-3">
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={copyBpmn}
+                onChange={(event) => setCopyBpmn(event.target.checked)}
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">
+                  {t("variant.copyBpmn")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {isL3
+                    ? t("variant.copyBpmnDescL3")
+                    : t("variant.copyBpmnDescL4")}
+                </span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={copyMetadata}
+                onChange={(event) => setCopyMetadata(event.target.checked)}
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">
+                  {t("variant.copyMetadata")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {isL3
+                    ? t("variant.copyMetadataDescL3")
+                    : t("variant.copyMetadataDescL4")}
+                </span>
+              </span>
+            </label>
+          </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button

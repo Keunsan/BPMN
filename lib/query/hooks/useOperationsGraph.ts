@@ -19,6 +19,7 @@ const fetchOperationsGraph = async (
       params: {
         centerKind: params.centerKind,
         centerId: params.centerId,
+        centerProcessLevel: params.centerProcessLevel,
         depth: params.depth,
         showInterfaces: params.showInterfaces,
         showTables: params.showTables,

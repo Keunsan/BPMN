@@ -1,5 +1,9 @@
 /** 운영 지식그래프 노드·엣지 DTO */
 
+import type { ProcessLevel } from "@/types/process";
+
+export type GraphCenterProcessLevel = Extract<ProcessLevel, "L1" | "L2" | "L3">;
+
 export type GraphNodeKind = "L3" | "TASK" | "APPLICATION" | "TABLE" | "INTERFACE";
 
 export type GraphEdgeKind =
@@ -41,6 +45,8 @@ export type OperationsGraphSummary = {
 export type OperationsGraphQuery = {
   centerKind: GraphNodeKind;
   centerId: number | string;
+  /** L1/L2/L3 프로세스 탐색 기준 레벨 (L4 Task 직접 선택 시 생략) */
+  centerProcessLevel?: GraphCenterProcessLevel;
   depth: 1 | 2;
   includeKinds?: GraphNodeKind[];
   includeEdgeKinds?: GraphEdgeKind[];
@@ -54,6 +60,8 @@ export type OperationsGraphResult = {
   edges: OperationsGraphEdge[];
   summary: OperationsGraphSummary;
   centerNodeId: string;
+  /** 탐색 기준 노드 메타 — nodes 배열에는 포함하지 않음 */
+  centerNode?: OperationsGraphNode;
 };
 
 export type GraphSelectedNodeDetail = OperationsGraphNode & {

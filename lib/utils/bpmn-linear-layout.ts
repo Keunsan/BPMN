@@ -19,11 +19,11 @@ const END_ID = "EndEvent_1";
 const EVENT_SIZE = 36;
 const TASK_WIDTH = 140;
 const TASK_HEIGHT = 80;
-const H_GAP = 80;
-const V_GAP = 100;
+const H_GAP = 48;
+const V_GAP = 64;
 const ORIGIN_X = 120;
 const ORIGIN_Y = 120;
-const TASKS_PER_ROW = 8;
+const TASKS_PER_ROW = 10;
 
 /** XML 특수문자 이스케이프 */
 const escapeXml = (value: string): string =>

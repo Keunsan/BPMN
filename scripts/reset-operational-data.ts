@@ -16,8 +16,12 @@ const COUNT_QUERIES: Array<{ table: string; sql: string }> = [
   { table: "bpmn_model", sql: "SELECT COUNT(*) AS cnt FROM bpmn_model" },
   { table: "bpmn_element", sql: "SELECT COUNT(*) AS cnt FROM bpmn_element" },
   {
-    table: "task_system_mapping",
-    sql: "SELECT COUNT(*) AS cnt FROM task_system_mapping",
+    table: "task_system_screen_link",
+    sql: "SELECT COUNT(*) AS cnt FROM task_system_screen_link",
+  },
+  {
+    table: "task_system_link",
+    sql: "SELECT COUNT(*) AS cnt FROM task_system_link",
   },
   {
     table: "task_data_table_link",
@@ -104,8 +108,12 @@ const resetOperationalData = async (): Promise<void> => {
       { label: "task_predecessor", sql: "DELETE FROM task_predecessor" },
       { label: "task_role_mapping", sql: "DELETE FROM task_role_mapping" },
       {
-        label: "task_system_mapping",
-        sql: "DELETE FROM task_system_mapping",
+        label: "task_system_screen_link",
+        sql: "DELETE FROM task_system_screen_link",
+      },
+      {
+        label: "task_system_link",
+        sql: "DELETE FROM task_system_link",
       },
       {
         label: "task_interface_mapping",
@@ -168,7 +176,8 @@ const resetOperationalData = async (): Promise<void> => {
       "task_predecessor",
       "bpmn_model",
       "bpmn_element",
-      "task_system_mapping",
+      "task_system_screen_link",
+      "task_system_link",
       "task_data_table_link",
       "task_role_mapping",
       "task_interface_mapping",

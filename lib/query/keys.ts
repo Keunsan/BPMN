@@ -72,6 +72,11 @@ export const systemKeys = {
   screens: (systemId: number, moduleCode?: string) =>
     [...systemKeys.all, "screens", systemId, moduleCode ?? ""] as const,
   hierarchy: () => [...systemKeys.all, "hierarchy"] as const,
+  systemCatalog: (filters: Record<string, string | number | undefined>) =>
+    [...systemKeys.all, "system-catalog", filters] as const,
+  systemCatalogInfinite: (
+    filters: Record<string, string | number | undefined>,
+  ) => [...systemKeys.all, "system-catalog-infinite", filters] as const,
   screenCatalog: (filters: Record<string, string | number | undefined>) =>
     [...systemKeys.all, "screen-catalog", filters] as const,
   screenCatalogInfinite: (
