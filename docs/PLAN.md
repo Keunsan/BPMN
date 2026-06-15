@@ -1382,6 +1382,21 @@ PRD 섹션 9 참조:
 - [ ] **다국어 검수** ⭐
 - [ ] 성능 최적화
 - [ ] 배포 준비
+
+---
+
+## Phase 7: E2E 프로세스 카탈로그 (2026-06) ⭐
+
+전사 cross-domain E2E 흐름을 L1~L4 트리와 분리해 관리한다.
+
+| 항목 | 구현 |
+|------|------|
+| DB | `e2e_process`, `bpmn_model.model_kind` / `e2e_process_id` (migration 025) |
+| API | `/api/e2e-process`, `/api/e2e-process/by-l3/[nodeId]`, `/api/bpmn/l3/[nodeId]/l4-slice` |
+| UI | `/e2e-process`, 프로세스 맵 E2E 섹션, BPMN Editor E2E 모드, drill-down Viewer |
+| 분석 | 운영지식그래프 `centerKind=E2E`, Inspector E2E BPMN 링크 |
+| i18n | ko / en / zh-TW `e2eProcess`, `operationsGraph.inspector.*` |
+
 ---
 
 ## 📝 참고 사항
@@ -1395,6 +1410,6 @@ PRD 섹션 9 참조:
 ---
 
 *본 문서는 PAMS 개발을 위한 Cursor AI 기반 개발 계획서입니다.*
-*최종 수정일: 2026-06-06*
-*버전: 1.1 - 에러 핸들링 표준, 국제화(i18n) 추가 ⭐*
+*최종 수정일: 2026-06-15*
+*버전: 1.2 - E2E 프로세스 카탈로그, L4 drill-down ⭐*
 

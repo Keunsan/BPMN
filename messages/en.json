@@ -149,6 +149,8 @@
     "requestApproval": "Request approval",
     "tabInfo": "Basic info",
     "tabBpmnModels": "BPMN models",
+    "tabIncludedE2e": "Included E2E",
+    "includedE2eEmpty": "No E2E processes include this L3 as a Call Activity.",
     "tabTaskMetadata": "Task metadata",
     "tabHistory": "History",
     "tabCompare": "Compare",
@@ -240,6 +242,8 @@
     "newModel": "New Model",
     "searchPlaceholder": "Search model or process",
     "filterStatus": "Status",
+    "filterModelKind": "Model type",
+    "allModelKinds": "All types",
     "allStatus": "All statuses",
     "scopeFilterHint": "Select company and business unit to show BPMN models for that scope.",
     "sortUpdated": "Latest",
@@ -837,6 +841,9 @@
       "change": "Change history",
       "noData": "No operational data linked.",
       "placeholderHint": "Operational data will be connected later.",
+      "viewE2eBpmn": "View E2E BPMN",
+      "editL3Bpmn": "Edit L3 BPMN",
+      "openE2eCatalog": "E2E catalog",
       "fields": {
         "impact": {
           "scope": "Impact scope",

@@ -78,6 +78,14 @@ const getNodeData = (node: Node): GraphNodeData | undefined =>
 const getNodeById = (nodes: Node[], nodeId: string): Node | undefined =>
   nodes.find((node) => node.id === nodeId);
 
+const getNodeKindById = (
+  nodes: Node[],
+  nodeId: string,
+): GraphNodeKind | undefined => {
+  const node = getNodeById(nodes, nodeId);
+  return node ? getNodeKind(node) : undefined;
+};
+
 /** 프로세스 노드만 dagre로 배치한다 */
 const layoutProcessNodes = (
   nodes: Node[],
@@ -229,7 +237,7 @@ const layoutResourceNodes = (
     }
 
     const appIds = (childrenMap.get(taskNode.id) ?? []).filter(
-      (childId) => getNodeKind(getNodeById(nodes, childId)) === "APPLICATION",
+      (childId) => getNodeKindById(nodes, childId) === "APPLICATION",
     );
 
     const taskDim = dimensions.get(taskNode.id) ?? {
@@ -264,7 +272,7 @@ const layoutResourceNodes = (
       }
 
       const tableIds = (childrenMap.get(appId) ?? []).filter(
-        (childId) => getNodeKind(getNodeById(nodes, childId)) === "TABLE",
+        (childId) => getNodeKindById(nodes, childId) === "TABLE",
       );
 
       const tableDim = {
@@ -302,8 +310,7 @@ const layoutResourceNodes = (
 
       for (const tableId of tableIds) {
         const interfaceIds = (childrenMap.get(tableId) ?? []).filter(
-          (childId) =>
-            getNodeKind(getNodeById(nodes, childId)) === "INTERFACE",
+          (childId) => getNodeKindById(nodes, childId) === "INTERFACE",
         );
 
         for (const interfaceId of interfaceIds) {
@@ -320,8 +327,7 @@ const layoutResourceNodes = (
       }
 
       const directInterfaceIds = (childrenMap.get(appId) ?? []).filter(
-        (childId) =>
-          getNodeKind(getNodeById(nodes, childId)) === "INTERFACE",
+        (childId) => getNodeKindById(nodes, childId) === "INTERFACE",
       );
 
       for (const interfaceId of directInterfaceIds) {

@@ -149,6 +149,8 @@
     "requestApproval": "申請批准",
     "tabInfo": "基本資訊",
     "tabBpmnModels": "BPMN 模型",
+    "tabIncludedE2e": "包含的 E2E",
+    "includedE2eEmpty": "沒有 E2E 流程以此 L3 作為 Call Activity。",
     "tabTaskMetadata": "Task 元數據",
     "tabHistory": "變更紀錄",
     "tabCompare": "版本比較",
@@ -240,6 +242,8 @@
     "newModel": "新增模型",
     "searchPlaceholder": "搜尋模型或流程",
     "filterStatus": "狀態",
+    "filterModelKind": "模型類型",
+    "allModelKinds": "全部類型",
     "allStatus": "全部狀態",
     "scopeFilterHint": "選擇法人與事業部後，僅顯示該範圍的 BPMN 模型。",
     "sortUpdated": "最新",
@@ -836,6 +840,9 @@
       "change": "變更紀錄",
       "noData": "尚未連接營運資料。",
       "placeholderHint": "後續將連接營運資料。",
+      "viewE2eBpmn": "檢視 E2E BPMN",
+      "editL3Bpmn": "編輯 L3 BPMN",
+      "openE2eCatalog": "E2E 目錄",
       "fields": {
         "impact": {
           "scope": "影響範圍",

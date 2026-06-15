@@ -149,6 +149,8 @@
     "requestApproval": "승인 요청",
     "tabInfo": "기본정보",
     "tabBpmnModels": "BPMN 모델",
+    "tabIncludedE2e": "포함된 E2E",
+    "includedE2eEmpty": "이 L3를 Call Activity로 포함하는 E2E 프로세스가 없습니다.",
     "tabTaskMetadata": "Task 메타데이터",
     "tabHistory": "변경 이력",
     "tabCompare": "버전 비교",
@@ -240,6 +242,8 @@
     "newModel": "새 모델",
     "searchPlaceholder": "모델명 또는 프로세스 검색",
     "filterStatus": "상태",
+    "filterModelKind": "모델 유형",
+    "allModelKinds": "전체 유형",
     "allStatus": "전체 상태",
     "scopeFilterHint": "법인·사업부를 선택하면 해당 스코프의 BPMN만 표시됩니다.",
     "sortUpdated": "최신순",
@@ -836,6 +840,9 @@
       "change": "변경 이력",
       "noData": "연결된 운영 데이터가 없습니다.",
       "placeholderHint": "향후 운영 데이터가 연결됩니다.",
+      "viewE2eBpmn": "E2E BPMN 보기",
+      "editL3Bpmn": "L3 BPMN 편집",
+      "openE2eCatalog": "E2E 카탈로그",
       "fields": {
         "impact": {
           "scope": "영향 범위",

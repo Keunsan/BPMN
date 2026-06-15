@@ -2705,6 +2705,29 @@ STP-02-03-05
 4. CRUD 유형 및 주요 컬럼 입력
 5. 저장
 
+### 14.6 E2E 프로세스 카탈로그 ⭐ 신규
+
+L1~L4 `process_node` 트리와 **분리된 전사 E2E 프로세스 카탈로그**(`e2e_process`)를 운영한다.
+
+| 구분 | L3 Process BPMN | E2E BPMN (`model_kind = E2E`) |
+|------|-----------------|-------------------------------|
+| 소유 | `node_id` → L3 | `e2e_process_id` → E2E |
+| 주요 요소 | User Task(L4), Call Activity(L3) | Call Activity(L3) + Gateway/Event |
+| 용도 | 프로세스 오너 상세 | Process Architect 전사 cross-domain E2E |
+
+**진입점**
+
+| 화면 | E2E 노출 |
+|------|----------|
+| 전사 프로세스 맵 | L1~L4 트리 **아래 E2E 가상 섹션** (동일 화면, 계층 분리) |
+| E2E 프로세스 메뉴 | `/e2e-process` 전용 목록·관리 |
+| BPMN 목록 | `model_kind` 필터 (L3 / E2E) |
+| 운영 지식그래프 | E2E 중심 탐색, Inspector → E2E BPMN Viewer (Call Activity drill-down) |
+
+**Call Activity drill-down**: E2E BPMN에서 Call Activity 더블클릭 시 연결 L3의 현행 BPMN에서 L4 Task slice를 런타임 로드(읽기 전용). breadcrumb으로 상위 E2E 흐름으로 복귀.
+
+**스키마 확장**: `scripts/migrations/025_e2e_process.sql` — `e2e_process` 테이블, `bpmn_model.e2e_process_id`, `bpmn_model.model_kind`, nullable `node_id`.
+
 ---
 
 ## 15. 문서 이력
@@ -2717,6 +2740,7 @@ STP-02-03-05
 | 1.2 | 2026-06-06 | - | MSSQL 2017 호환 DDL 전면 수정 |
 | 1.3 | 2026-06-06 | - | Task 속성으로 변경, 데이터 테이블 외부 조회 방식으로 변경 |
 | 1.4 | 2026-06-06 | - | **에러 핸들링 표준 추가, 국제화(i18n) 추가 (한국어/영어/대만 번체)** ⭐ |
+| 1.5 | 2026-06-15 | - | **E2E 프로세스 카탈로그, E2E BPMN, L4 drill-down, 운영지식그래프 E2E 탐색** ⭐ |
 ---
 
 ## 16. 승인

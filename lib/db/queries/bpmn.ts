@@ -217,6 +217,18 @@ export const listBpmnVersionsByNode = async (
   return rows.map(mapBpmnModel);
 };
 
+export const listBpmnVersionsByE2eProcess = async (
+  e2eProcessId: number,
+): Promise<BpmnModel[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM bpmn_model
+     WHERE e2e_process_id = @e2eProcessId
+     ORDER BY created_at DESC`,
+    { e2eProcessId },
+  );
+  return rows.map(mapBpmnModel);
+};
+
 export const listBpmnElements = async (
   modelId: number,
 ): Promise<

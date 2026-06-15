@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBpmnList } from "@/lib/query/hooks/useBpmn";
+import { useE2eProcessesByL3NodeId } from "@/lib/query/hooks/useE2eProcess";
 import { useTaskAttributeList } from "@/lib/query/hooks/useMetadata";
 import {
   useProcessDetail,
@@ -21,6 +22,7 @@ import {
 import { Link, useRouter } from "@/lib/i18n/navigation";
 import { formatProcessScope } from "@/lib/utils/process-label";
 import { isEnterpriseScope } from "@/lib/utils/process-scope";
+import type { E2eProcessDto } from "@/types/e2e-process";
 import type { BpmnModelDto } from "@/types/bpmn";
 import type { TaskAttributeListItem } from "@/types/metadata";
 import type { ProcessHistoryDto, ProcessNodeDto } from "@/types/process";
@@ -104,10 +106,38 @@ export const ProcessDetail = ({
     [node, nodeId],
   );
 
+  const { data: includedE2eProcesses, isLoading: isIncludedE2eLoading } =
+    useE2eProcessesByL3NodeId(nodeId, node?.level === "L3");
+
   const { data: taskMetadataItems, isLoading: isTaskMetadataLoading } =
     useTaskAttributeList(taskMetadataFilters, {
       enabled: Boolean(node),
     });
+
+  const includedE2eColumns: DataTableColumn<E2eProcessDto>[] = [
+    { key: "code", header: t("code"), cell: (row) => row.code },
+    { key: "name", header: t("name"), cell: (row) => row.name },
+    {
+      key: "status",
+      header: t("status"),
+      cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "action",
+      header: t("viewDetail"),
+      className: "text-right",
+      cell: (row) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => router.push(`/e2e-process?selected=${row.e2eProcessId}`)}
+        >
+          {t("viewDetail")}
+        </Button>
+      ),
+    },
+  ];
 
   const historyColumns: DataTableColumn<ProcessHistoryDto>[] = [
     { key: "version", header: t("version"), cell: (r) => r.version },
@@ -256,6 +286,9 @@ export const ProcessDetail = ({
             <TabsTrigger value="info">{t("tabInfo")}</TabsTrigger>
             <TabsTrigger value="bpmn">{t("tabBpmnModels")}</TabsTrigger>
             <TabsTrigger value="taskMetadata">{t("tabTaskMetadata")}</TabsTrigger>
+            {node.level === "L3" ? (
+              <TabsTrigger value="includedE2e">{t("tabIncludedE2e")}</TabsTrigger>
+            ) : null}
             <TabsTrigger value="history">{t("tabHistory")}</TabsTrigger>
             <TabsTrigger value="compare">{t("tabCompare")}</TabsTrigger>
           </TabsList>
@@ -360,6 +393,23 @@ export const ProcessDetail = ({
               <EmptyState title={t("bpmnModelEmpty")} />
             )}
           </TabsContent>
+
+          {node.level === "L3" ? (
+            <TabsContent value="includedE2e">
+              {isIncludedE2eLoading ? (
+                <LoadingSpinner label={t("loading")} />
+              ) : includedE2eProcesses?.length ? (
+                <DataTable
+                  columns={includedE2eColumns}
+                  data={includedE2eProcesses}
+                  rowKey={(row) => row.e2eProcessId}
+                  storageKey="pams-process-included-e2e-grid"
+                />
+              ) : (
+                <EmptyState title={t("includedE2eEmpty")} />
+              )}
+            </TabsContent>
+          ) : null}
 
           <TabsContent value="taskMetadata">
             <div className="space-y-4">

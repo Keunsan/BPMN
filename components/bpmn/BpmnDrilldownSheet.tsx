@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { BpmnViewer } from "@/components/bpmn/BpmnViewer";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -53,11 +53,12 @@ export const BpmnDrilldownSheet = ({
           <SheetDescription>{t("drilldownDesc")}</SheetDescription>
           {target ? (
             <div className="pt-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/process?nodeId=${target.l3NodeId}`}>
-                  {t("openL3Process")}
-                </Link>
-              </Button>
+              <Link
+                href={`/process?nodeId=${target.l3NodeId}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {t("openL3Process")}
+              </Link>
             </div>
           ) : null}
         </SheetHeader>

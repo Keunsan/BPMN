@@ -33,11 +33,8 @@ const isProcessStatus = (value: string): value is ProcessStatus =>
 const isResourceKind = (kind: GraphNodeKind): boolean =>
   kind === "APPLICATION" || kind === "TABLE" || kind === "INTERFACE";
 
-const taskKindClassMap: Record<"TASK", string> = {
+const processFlowKindClassMap: Record<"TASK" | "L3" | "E2E", string> = {
   TASK: "pams-operations-graph-node-card--kind-task",
-};
-
-const l3KindClassMap: Record<"L3" | "E2E", string> = {
   L3: "pams-operations-graph-node-card--kind-l3",
   E2E: "pams-operations-graph-node-card--kind-e2e",
 };
@@ -214,7 +211,7 @@ const GraphTaskNodeCard = (props: NodeProps<Node<GraphNodeData>>) => (
   <GraphProcessFlowNodeCard
     {...props}
     kind="TASK"
-    kindClassMap={taskKindClassMap}
+    kindClassMap={processFlowKindClassMap}
   />
 );
 
@@ -222,7 +219,7 @@ const GraphL3FlowNodeCard = (props: NodeProps<Node<GraphNodeData>>) => (
   <GraphProcessFlowNodeCard
     {...props}
     kind="L3"
-    kindClassMap={l3KindClassMap}
+    kindClassMap={processFlowKindClassMap}
   />
 );
 
@@ -230,7 +227,7 @@ const GraphE2eFlowNodeCard = (props: NodeProps<Node<GraphNodeData>>) => (
   <GraphProcessFlowNodeCard
     {...props}
     kind="E2E"
-    kindClassMap={l3KindClassMap}
+    kindClassMap={processFlowKindClassMap}
   />
 );
 

@@ -289,6 +289,7 @@ export const OperationsGraphWorkspace = () => {
       >
         <GraphInspectorPanel
           graph={graph}
+          centerNode={graph?.centerNode}
           selectedNodeId={selectedNodeId}
           onSelectNode={(nodeId) => void setSelectedNodeId(nodeId)}
         />

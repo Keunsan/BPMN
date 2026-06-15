@@ -59,7 +59,7 @@ import {
   useDuplicateBpmn,
 } from "@/lib/query/hooks/useBpmn";
 import { useProcessTree } from "@/lib/query/hooks/useProcess";
-import type { BpmnModelStatus } from "@/types/bpmn";
+import type { BpmnModelKind, BpmnModelStatus } from "@/types/bpmn";
 import type { ProcessNodeTree } from "@/types/process";
 
 /** BPMN 모델 카드/그리드 목록 */
@@ -72,6 +72,9 @@ export const BpmnModelList = () => {
   const [statusFilter, setStatusFilter] = useState<BpmnModelStatus | "ALL">(
     "ALL",
   );
+  const [modelKindFilter, setModelKindFilter] = useState<BpmnModelKind | "ALL">(
+    "ALL",
+  );
   const [sort, setSort] = useState<"updated" | "name">("updated");
   const [companyCode, setCompanyCode] = useState("");
   const [businessUnitCode, setBusinessUnitCode] = useState("");
@@ -80,10 +83,18 @@ export const BpmnModelList = () => {
     statusFilter === "ALL" ? t("allStatus") : ts(statusFilter);
   const sortLabel = sort === "updated" ? t("sortUpdated") : t("sortName");
 
+  const modelKindFilterLabel =
+    modelKindFilter === "ALL"
+      ? t("allModelKinds")
+      : modelKindFilter === "E2E"
+        ? t("modelKindE2e")
+        : t("modelKindL3");
+
   const { data: models, isLoading, error, refetch } = useBpmnList({
     isCurrent: true,
     search: debouncedSearch || undefined,
     status: statusFilter === "ALL" ? undefined : statusFilter,
+    modelKind: modelKindFilter === "ALL" ? undefined : modelKindFilter,
     sort,
     companyCode: companyCode || undefined,
     businessUnitCode: businessUnitCode || undefined,
@@ -175,6 +186,31 @@ export const BpmnModelList = () => {
                 </SelectContent>
               </Select>
             </FilterField>
+            <FilterField label={t("filterModelKind")}>
+              <Select
+                value={modelKindFilter}
+                onValueChange={(v) =>
+                  v && setModelKindFilter(v as BpmnModelKind | "ALL")
+                }
+              >
+                <SelectTrigger variant="filter">
+                  <SelectValue placeholder={t("filterModelKind")}>
+                    {modelKindFilterLabel}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent variant="filter">
+                  <SelectItem variant="filter" value="ALL">
+                    {t("allModelKinds")}
+                  </SelectItem>
+                  <SelectItem variant="filter" value="L3_PROCESS">
+                    {t("modelKindL3")}
+                  </SelectItem>
+                  <SelectItem variant="filter" value="E2E">
+                    {t("modelKindE2e")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
             <FilterField label={t("sortLabel")}>
               <Select
                 value={sort}
@@ -241,7 +277,9 @@ export const BpmnModelList = () => {
                     <CardContent className="p-0">
                       <p className="truncate font-medium">{model.modelName}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {model.processCode} · v{model.version}
+                        {model.modelKind === "E2E"
+                          ? `${model.e2eProcessCode ?? "E2E"} · v${model.version}`
+                          : `${model.processCode} · v${model.version}`}
                       </p>
                     </CardContent>
                   </div>

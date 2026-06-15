@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
+import * as e2eQueries from "@/lib/db/queries/e2e-process";
 import * as graphQueries from "@/lib/db/queries/operations-graph";
 import type {
   GraphEdgeKind,
@@ -224,6 +225,8 @@ export const buildOperationsGraph = async (
         if (!e2e) {
           throw new ApiError("E404", "E2E process not found", 404);
         }
+        const modelId =
+          await e2eQueries.findCurrentBpmnModelIdByE2eProcessId(e2eProcessId);
         centerNodeMeta = {
           id: buildGraphNodeId("E2E", e2e.e2eProcessId),
           kind: "E2E",
@@ -231,6 +234,7 @@ export const buildOperationsGraph = async (
           code: e2e.code,
           status: e2e.status,
           sourceId: e2e.e2eProcessId,
+          meta: { e2eProcessId: e2e.e2eProcessId, modelId },
         };
       }
 

@@ -121,6 +121,25 @@ export const getBpmnModelHistory = async (
   );
 };
 
+/** E2E 프로세스별 버전 이력 */
+export const getBpmnModelHistoryByE2e = async (
+  e2eProcessId: number,
+): Promise<BpmnModelDto[]> => {
+  const versions = await bpmnQueries.listBpmnVersionsByE2eProcess(e2eProcessId);
+  const e2e = await e2eQueries.findE2eProcessById(e2eProcessId);
+
+  return Promise.all(
+    versions.map((v) =>
+      toBpmnModelDto(
+        v,
+        e2e
+          ? { e2eProcessCode: e2e.code, e2eProcessName: e2e.name }
+          : undefined,
+      ),
+    ),
+  );
+};
+
 /** BPMN 모델 생성 */
 export const createBpmnModel = async (
   dto: CreateBpmnDto,

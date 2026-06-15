@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { E2eBpmnViewerSheet } from "@/components/bpmn/E2eBpmnViewerSheet";
 import { EmptyState } from "@/components/common/EmptyState";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Link } from "@/lib/i18n/navigation";
 import { cn } from "@/lib/utils";
 import type { ProcessStatus } from "@/types/process";
 import type {
@@ -45,6 +48,7 @@ const OPERATIONS_FIELD_KEYS: Record<OperationsSectionKey, string[]> = {
 
 type GraphInspectorPanelProps = {
   graph?: OperationsGraphResult;
+  centerNode?: OperationsGraphNode;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 };
@@ -208,34 +212,43 @@ const OperationsDataSection = ({
 /** 우측 노드 Inspector — 선택 노드 상세·운영 메타 */
 export const GraphInspectorPanel = ({
   graph,
+  centerNode,
   selectedNodeId,
   onSelectNode,
 }: GraphInspectorPanelProps) => {
   const t = useTranslations("operationsGraph");
   const ts = useTranslations("status");
+  const [e2eViewerTarget, setE2eViewerTarget] = useState<{
+    e2eProcessId: number;
+    label: string;
+    code?: string;
+    modelId?: number | null;
+  } | null>(null);
 
-  const node = useMemo(
-    () => graph?.nodes.find((item) => item.id === selectedNodeId),
-    [graph, selectedNodeId],
-  );
+  const node = useMemo(() => {
+    if (!graph) {
+      return undefined;
+    }
+    if (selectedNodeId) {
+      return graph.nodes.find((item) => item.id === selectedNodeId);
+    }
+    return centerNode ?? graph.centerNode;
+  }, [graph, selectedNodeId, centerNode]);
 
   const relatedEntries = useMemo(
-    () =>
-      graph && selectedNodeId
-        ? findRelatedEntries(graph, selectedNodeId)
-        : [],
-    [graph, selectedNodeId],
+    () => (graph && node ? findRelatedEntries(graph, node.id) : []),
+    [graph, node],
   );
 
   const connections = useMemo(
     () =>
-      graph && selectedNodeId
-        ? countConnections(graph, selectedNodeId)
+      graph && node
+        ? countConnections(graph, node.id)
         : { incoming: 0, outgoing: 0, total: 0 },
-    [graph, selectedNodeId],
+    [graph, node],
   );
 
-  if (!selectedNodeId || !graph) {
+  if (!graph) {
     return (
       <div className="pams-graph-inspector pams-graph-inspector--empty">
         <EmptyState
@@ -250,7 +263,11 @@ export const GraphInspectorPanel = ({
   if (!node) {
     return (
       <div className="pams-graph-inspector pams-graph-inspector--empty">
-        <EmptyState title={t("inspector.notFound")} className="py-10" />
+        <EmptyState
+          title={t("inspector.emptyTitle")}
+          description={t("inspector.emptyDescription")}
+          className="py-10"
+        />
       </div>
     );
   }
@@ -259,8 +276,34 @@ export const GraphInspectorPanel = ({
   const description = node.meta?.description
     ? String(node.meta.description)
     : null;
+  const e2eCenter =
+    graph.centerNode?.kind === "E2E"
+      ? graph.centerNode
+      : node.kind === "E2E"
+        ? node
+        : null;
+  const e2eViewerId = e2eCenter ? Number(e2eCenter.sourceId) : null;
+  const e2eViewerModelId =
+    e2eCenter && typeof e2eCenter.meta?.modelId === "number"
+      ? e2eCenter.meta.modelId
+      : null;
+  const inE2eFlow = Boolean(node.meta?.inE2eFlow);
+  const l3NodeId = node.kind === "L3" ? Number(node.sourceId) : null;
+
+  const openE2eViewer = () => {
+    if (!e2eViewerId || !Number.isFinite(e2eViewerId)) {
+      return;
+    }
+    setE2eViewerTarget({
+      e2eProcessId: e2eViewerId,
+      label: e2eCenter?.label ?? node.label,
+      code: e2eCenter?.code ?? node.code,
+      modelId: e2eViewerModelId,
+    });
+  };
 
   return (
+    <>
     <div className="pams-graph-inspector">
       <header className="pams-graph-inspector__hero">
         <div className="pams-graph-inspector__hero-top">
@@ -309,6 +352,26 @@ export const GraphInspectorPanel = ({
           />
         </dl>
       </header>
+
+      {e2eCenter || inE2eFlow ? (
+        <section className="pams-graph-inspector__actions border-b px-4 py-3">
+          <div className="flex flex-wrap gap-2">
+            {e2eCenter ? (
+              <Button type="button" size="sm" onClick={openE2eViewer}>
+                {t("inspector.viewE2eBpmn")}
+              </Button>
+            ) : null}
+            {inE2eFlow && l3NodeId ? (
+              <Link
+                href={`/process?nodeId=${l3NodeId}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {t("inspector.editL3Bpmn")}
+              </Link>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <InspectorSection title={t("inspector.description")}>
         <p
@@ -375,5 +438,13 @@ export const GraphInspectorPanel = ({
         {t("inspector.placeholderHint")}
       </p>
     </div>
+    <E2eBpmnViewerSheet
+      e2eProcessId={e2eViewerTarget?.e2eProcessId ?? null}
+      e2eLabel={e2eViewerTarget?.label}
+      e2eCode={e2eViewerTarget?.code}
+      modelId={e2eViewerTarget?.modelId}
+      onClose={() => setE2eViewerTarget(null)}
+    />
+    </>
   );
 };

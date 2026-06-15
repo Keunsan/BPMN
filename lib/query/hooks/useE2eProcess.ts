@@ -112,3 +112,11 @@ export const useL4Slice = (nodeId: number, enabled = false) =>
       } | null>(`/api/bpmn/l3/${nodeId}/l4-slice`),
     enabled: enabled && nodeId > 0,
   });
+
+export const useE2eProcessesByL3NodeId = (nodeId: number, enabled = true) =>
+  useQuery({
+    queryKey: [...e2eProcessKeys.all, "by-l3", nodeId] as const,
+    queryFn: () =>
+      apiGet<E2eProcessDto[]>(`/api/e2e-process/by-l3/${nodeId}`),
+    enabled: enabled && nodeId > 0,
+  });

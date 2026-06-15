@@ -4,6 +4,7 @@ import {
   deleteBpmnModel,
   getBpmnModelDetail,
   getBpmnModelHistory,
+  getBpmnModelHistoryByE2e,
   updateBpmnModel,
 } from "@/lib/services/bpmn.service";
 
@@ -22,13 +23,14 @@ export const GET = withApiHandler(async ({ request, params }) => {
 
 
   if (format === "history") {
-
     const detail = await getBpmnModelDetail(modelId);
-
-    const data = await getBpmnModelHistory(detail.nodeId);
-
+    const data =
+      detail.modelKind === "E2E" && detail.e2eProcessId
+        ? await getBpmnModelHistoryByE2e(detail.e2eProcessId)
+        : detail.nodeId
+          ? await getBpmnModelHistory(detail.nodeId)
+          : [];
     return { data };
-
   }
 
 
