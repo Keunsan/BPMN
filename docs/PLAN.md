@@ -10,8 +10,26 @@
 | **프로젝트명** | PAMS (Process Architecture Management System) |
 | **개발 방식** | Cursor AI + Vibe Coding |
 | **기술 스택** | Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui, MSSQL 2017, Supabase, bpmn.js |
-| **총 개발 기간** | MVP 3개월 (12주) |
+| **총 개발 기간** | MVP 3개월 (12주) + E2E/분석 확장 |
 | **목표** | 전사 업무 아키텍처와 BPMN, 시스템 운영 메타데이터를 통합하는 플랫폼 구축 |
+| **현재 위치** | **Phase 4~5** (2026-06-16) — Layer C 핵심·운영지식그래프·E2E 완료 |
+
+---
+
+## ✅ 구현 현황 요약 (2026-06-16)
+
+| Phase | 완료 | 미완 |
+|-------|------|------|
+| **0** | Next.js·i18n·MSSQL(025)·Query/Service | Supabase Auth ⏸️ |
+| **1** | 레이아웃·API·에러·공통 UI | |
+| **2** | L1~L4·승인·버전·Scope/Variant·표준/변형 비교 | |
+| **3** | BPMN·Call Activity·선행 동기화·버전비교 | |
+| **4** | Task속성·선행·시스템(2-tier)·외부테이블·데이터연결·시스템/외부API/공통코드 마스터 | RACI·KPI/리스크·문서·조직/역할 |
+| **5** | **운영 지식그래프** | 대시·영향도·검색·히트맵·내보내기 |
+| **7** | **E2E 카탈로그·E2E BPMN·drill-down** | |
+| **6** | — | E2E테스트·성능·배포 |
+
+**마이그레이션**: `scripts/migrations/001`~`025` · **주요 추가**: `018` Scope/Variant · `022` Call Activity · `023` Task-System 2-tier · `025` E2E
 
 ---
 
@@ -40,19 +58,21 @@
 ## 🗂️ 개발 Phase 구조
 
 ```
-Phase 0: 환경 설정 (Week 1) - 다국어 기반 설정 포함 ⭐
+Phase 0: 환경 설정 (Week 1) ✅
     ↓
-Phase 1: 기반 구조 (Week 2) - 에러 핸들링 표준 적용 ⭐
+Phase 1: 기반 구조 (Week 2) ✅
     ↓
-Phase 2: Layer A - 프로세스 계층 (Week 3-4) - 다국어 입력 UI ⭐
+Phase 2: Layer A — 프로세스 계층 (Week 3-4) ✅ (+ Scope/Variant)
     ↓
-Phase 3: Layer B - BPMN 모델링 (Week 5-6)
+Phase 3: Layer B — BPMN (Week 5-6) ✅ (+ Call Activity)
     ↓
-Phase 4: Layer C - 메타데이터 (Week 7-9) - 다국어 Task 속성 ⭐
+Phase 4: Layer C — 메타데이터 (Week 7-9) 🔄 (핵심 완료, RACI/KPI/문서 잔여)
     ↓
-Phase 5: 분석/검색 기능 (Week 10-11)
+Phase 5: 분석/검색 (Week 10-11) 🔄 (운영지식그래프 ✅, 나머지 📋)
     ↓
-Phase 6: 통합 테스트 및 마무리 (Week 12) - 다국어 검수 ⭐
+Phase 7: E2E 프로세스 카탈로그 (2026-06) ✅
+    ↓
+Phase 6: 통합 테스트·마무리 (Week 12) 📋
 ```
 
 ---
@@ -789,10 +809,10 @@ task_system_mapping 테이블 활용
 ```
 
 **체크리스트:**
-- [ ] 시스템 마스터 CRUD
-- [ ] 모듈/화면 관리
-- [ ] 태스크-시스템 연결 UI
-- [ ] API 구현
+- [x] 시스템 마스터 CRUD — `SystemMasterManagement`, `/api/admin/systems`
+- [x] 모듈/화면 관리 — hierarchy API, screen catalog
+- [x] 태스크-시스템 연결 UI — `TaskSystemMapping` (시스템→화면 2-tier, migration 023)
+- [x] API 구현 — `/api/metadata/tasks/[nodeId]/systems`
 
 #### Week 8, Day 3-5: 외부 테이블 연결
 
@@ -841,11 +861,11 @@ task_data_table_link 테이블 활용
 ```
 
 **체크리스트:**
-- [ ] 외부 테이블 조회 UI
-- [ ] 외부 API 클라이언트
-- [ ] 테이블 연결 UI
-- [ ] API 구현
-- [ ] Mock 데이터 지원
+- [x] 외부 테이블 조회 UI — `ExternalTableBrowser`
+- [x] 외부 API 클라이언트 — `lib/external/`, `/api/external/systems`
+- [x] 테이블 연결 UI — `DataTableLink`
+- [x] API 구현 — `/api/metadata/tasks/[nodeId]/data-tables`
+- [x] 외부 API 설정 — `ExternalApiSettingsManagement`, migration 013
 
 #### Week 9, Day 1-2: RACI 매트릭스
 
@@ -864,8 +884,8 @@ task_role_mapping 테이블 활용
 ```
 
 **체크리스트:**
-- [ ] 조직/역할 마스터 관리
-- [ ] RACI 매핑 UI
+- [ ] 조직/역할 마스터 관리 — Placeholder
+- [ ] RACI 매핑 UI — `/metadata/raci` → Task 속성 리다이렉트
 - [ ] 매트릭스 뷰
 - [ ] API 구현
 
@@ -977,6 +997,22 @@ PRD 6.2.4 참조:
 - [ ] 데이터 영향도 분석
 - [ ] 시각화 차트
 - [ ] Excel 다운로드
+
+#### Week 10, Day 4-5: 운영 지식그래프 ⭐ (선행 구현)
+
+```
+구현:
+- /analysis/operations-graph — Explorer·Canvas·Inspector
+- operations-graph.service.ts — BFS 탐색, centerKind=E2E|L3|SYSTEM
+- E2E BPMN Viewer, Call Activity drill-down 연동
+- i18n: operationsGraph.*
+```
+
+**체크리스트:**
+- [x] 그래프 API — `/api/analysis/operations-graph`
+- [x] 캔버스·노드카드·레이아웃 훅
+- [x] E2E 중심 탐색·Inspector BPMN 링크
+- [ ] L2 오케스트레이션 뷰
 
 #### Week 10, Day 4-5: 통합 검색 (다국어)
 
@@ -1161,13 +1197,12 @@ pams/
 │   │   ├── (main)/
 │   │   │   ├── dashboard/page.tsx
 │   │   │   ├── process/
-│   │   │   │   ├── page.tsx
-│   │   │   │   ├── [nodeId]/page.tsx
-│   │   │   │   └── new/page.tsx
+│   │   │   ├── e2e-process/           # E2E 카탈로그 ⭐
 │   │   │   ├── bpmn/
 │   │   │   ├── metadata/
 │   │   │   ├── data/
 │   │   │   ├── analysis/
+│   │   │   │   └── operations-graph/  # 운영 지식그래프 ⭐
 │   │   │   └── admin/
 │   │   │       └── i18n/page.tsx      # 다국어 관리 ⭐
 │   │   └── layout.tsx
@@ -1190,15 +1225,19 @@ pams/
 │   │   ├── ErrorToast.tsx              # 에러 Toast ⭐
 │   │   └── ...
 │   ├── process/
+│   ├── e2e-process/                   # E2E ⭐
 │   ├── bpmn/
 │   ├── metadata/
-│   └── data/
+│   ├── data/
+│   └── analysis/operations-graph/     # 운영 지식그래프 ⭐
 ├── lib/
 │   ├── db/
 │   │   └── queries/
 │   ├── services/                        # 비즈니스 로직 ⭐ 신규
 │   │   ├── process.service.ts
 │   │   ├── bpmn.service.ts
+│   │   ├── e2e-process.service.ts     # ⭐
+│   │   ├── operations-graph.service.ts # ⭐
 │   │   └── metadata.service.ts
 │   ├── external/
 │   ├── supabase/
@@ -1327,75 +1366,49 @@ PRD 섹션 9 참조:
 
 ---
 
-## ✅ 전체 체크리스트 (업데이트)
+## ✅ 전체 체크리스트 (2026-06-16)
 
-### Phase 0 (Week 1)
-- [ ] 프로젝트 초기화
-- [ ] **다국어(i18n) 설정** ⭐
-- [ ] 데이터베이스 설정
-- [ ] **다국어 테이블 생성** ⭐
-- [ ] **에러 코드 테이블 생성** ⭐
-- [ ] Supabase 인증 설정
+### Phase 0 — ✅ (Auth ⏸️)
+- [x] 프로젝트·i18n·DB(025)·에러코드·Query/Service
 
-### Phase 1 (Week 2)
-- [ ] 레이아웃 구조
-- [ ] **언어 선택 컴포넌트** ⭐
-- [ ] 타입 정의
-- [ ] API 기반 구조
-- [ ] **에러 핸들링 유틸리티** ⭐
-- [ ] 공통 컴포넌트
-- [ ] **ErrorToast 컴포넌트** ⭐
+### Phase 1 — ✅
+- [x] 레이아웃·언어선택·API·에러·공통 UI
 
-### Phase 2 (Week 3-4)
-- [ ] 프로세스 트리
-- [ ] **다국어 프로세스명 표시** ⭐
-- [ ] 프로세스 CRUD
-- [ ] **다국어 입력 UI (MultiLangInput)** ⭐
-- [ ] 버전 관리
-- [ ] 승인 워크플로우
+### Phase 2 — ✅
+- [x] 프로세스 트리·CRUD·다국어·버전·승인·Scope/Variant·표준/변형 비교
 
-### Phase 3 (Week 5-6)
-- [ ] BPMN 에디터
-- [ ] BPMN 저장/로드
-- [ ] 요소-프로세스 연결
-- [ ] 버전 비교
+### Phase 3 — ✅
+- [x] BPMN 에디터·저장·Task↔L4·Call Activity↔L3·선행 동기화·버전비교
 
-### Phase 4 (Week 7-9)
-- [ ] Task 속성 관리
-- [ ] **Task 속성 다국어 입력** ⭐
-- [ ] 시스템 연계 매핑
-- [ ] 외부 테이블 연결
-- [ ] RACI 매트릭스
-- [ ] KPI/리스크/통제
-- [ ] 문서 연결
+### Phase 4 — 🔄
+- [x] Task 속성·선행·시스템(2-tier)·외부테이블·데이터연결·시스템/외부API/공통코드
+- [ ] RACI·KPI/리스크/통제·문서·조직/역할
 
-### Phase 5 (Week 10-11)
-- [ ] 영향도 분석
-- [ ] 통합 검색
-- [ ] **다국어 검색** ⭐
-- [ ] 대시보드
-- [ ] 내보내기 기능
+### Phase 5 — 🔄
+- [x] 운영 지식그래프
+- [ ] 영향도·통합검색·대시보드 실데이터·내보내기·히트맵
 
-### Phase 6 (Week 12)
-- [ ] 통합 테스트
-- [ ] **다국어 전환 테스트** ⭐
-- [ ] **다국어 검수** ⭐
-- [ ] 성능 최적화
-- [ ] 배포 준비
+### Phase 7 — ✅
+- [x] E2E 카탈로그·E2E BPMN·L4 drill-down·프로세스맵 E2E 섹션
+
+### Phase 6 — 📋
+- [ ] E2E테스트·다국어 검수·성능·배포
 
 ---
 
-## Phase 7: E2E 프로세스 카탈로그 (2026-06) ⭐
+## Phase 7: E2E 프로세스 카탈로그 (2026-06) ✅
 
-전사 cross-domain E2E 흐름을 L1~L4 트리와 분리해 관리한다.
+전사 cross-domain E2E 흐름을 L1~L4 트리와 분리 관리.
 
 | 항목 | 구현 |
 |------|------|
-| DB | `e2e_process`, `bpmn_model.model_kind` / `e2e_process_id` (migration 025) |
-| API | `/api/e2e-process`, `/api/e2e-process/by-l3/[nodeId]`, `/api/bpmn/l3/[nodeId]/l4-slice` |
-| UI | `/e2e-process`, 프로세스 맵 E2E 섹션, BPMN Editor E2E 모드, drill-down Viewer |
-| 분석 | 운영지식그래프 `centerKind=E2E`, Inspector E2E BPMN 링크 |
-| i18n | ko / en / zh-TW `e2eProcess`, `operationsGraph.inspector.*` |
+| DB | `e2e_process`, `bpmn_model.model_kind` / `e2e_process_id` (025) |
+| API | `/api/e2e-process`, `/by-l3/[nodeId]`, `/api/bpmn/l3/[nodeId]/l4-slice` |
+| UI | `/e2e-process`, 프로세스맵 E2E 섹션, BPMN E2E 모드, `E2eBpmnViewerSheet`, `BpmnDrilldownViewer` |
+| 분석 | 운영지식그래프 `centerKind=E2E`, Inspector E2E BPMN·drill-down |
+| i18n | `e2eProcess`, `operationsGraph.inspector.*` |
+
+**체크리스트:** [x] 전항목
 
 ---
 
@@ -1410,6 +1423,6 @@ PRD 섹션 9 참조:
 ---
 
 *본 문서는 PAMS 개발을 위한 Cursor AI 기반 개발 계획서입니다.*
-*최종 수정일: 2026-06-15*
-*버전: 1.2 - E2E 프로세스 카탈로그, L4 drill-down ⭐*
+*최종 수정일: 2026-06-16*
+*버전: 1.3 — Layer C·운영지식그래프·Scope/Variant 구현 현황 반영*
 
