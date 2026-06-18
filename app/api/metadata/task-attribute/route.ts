@@ -27,6 +27,7 @@ export const GET = withApiHandler(async ({ request, locale }) => {
     search: searchParams.get("search") ?? undefined,
     level: levelParam === "L3" || levelParam === "L4" ? levelParam : undefined,
     nodeId: parsePositiveNumber(searchParams.get("nodeId")),
+    e2eProcessId: parsePositiveNumber(searchParams.get("e2eProcessId")),
     bpmnModelId: parsePositiveNumber(searchParams.get("bpmnModelId")),
   };
 

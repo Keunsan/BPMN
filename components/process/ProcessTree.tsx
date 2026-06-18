@@ -81,6 +81,10 @@ type ProcessTreeProps = {
   showLevelControls?: boolean;
   /** picker에서 선택 가능한 레벨 (미지정 시 전체) */
   selectableLevels?: ProcessLevel[];
+  /** 외부 검색어 — 지정 시 내부 SearchBar를 숨김 */
+  search?: string;
+  /** SearchBar 표시 여부 (기본: search 미지정 시 true) */
+  showSearch?: boolean;
 };
 
 type TreeNodeItemProps = {
@@ -292,6 +296,8 @@ export const ProcessTree = ({
   showLevelControls = true,
   scopeFilters,
   selectableLevels,
+  search: externalSearch,
+  showSearch,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
   const selectableLevelSet = useMemo(
@@ -300,8 +306,11 @@ export const ProcessTree = ({
   );
   const t = useTranslations("process");
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebounce(search);
+  const [internalSearch, setInternalSearch] = useState("");
+  const useExternalSearch = externalSearch !== undefined;
+  const showSearchBar = showSearch ?? !useExternalSearch;
+  const querySearch = useExternalSearch ? externalSearch : internalSearch;
+  const debouncedSearch = useDebounce(querySearch);
   const [deleteTarget, setDeleteTarget] = useState<ProcessNodeTree | null>(null);
   const [variantTarget, setVariantTarget] = useState<ProcessNodeTree | null>(null);
   const hasInitializedExpansion = useRef(false);
@@ -491,8 +500,8 @@ export const ProcessTree = ({
   const searchRow = (
     <div className="flex shrink-0 items-center gap-2">
       <SearchBar
-        value={search}
-        onChange={setSearch}
+        value={querySearch}
+        onChange={setInternalSearch}
         placeholder={t("searchPlaceholder")}
         className="flex-1"
       />
@@ -536,7 +545,7 @@ export const ProcessTree = ({
         className,
       )}
     >
-      {searchRow}
+      {showSearchBar ? searchRow : null}
       {showLevelControls && Boolean(tree?.length) && (
         <TreeLevelExpandControls
           levels={PROCESS_LEVELS}

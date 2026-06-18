@@ -129,6 +129,7 @@ export interface TaskAttributeListFilters {
   search?: string;
   level?: "L3" | "L4";
   nodeId?: number;
+  e2eProcessId?: number;
   bpmnModelId?: number;
 }
 

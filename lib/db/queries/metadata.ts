@@ -133,13 +133,43 @@ export const listTaskAttributes = async (
     params.level = filters.level;
   }
 
-  if (filters.nodeId) {
-    conditions.push("pn.node_id = @nodeId");
+  let scopeCte = "";
+  let scopeJoin = "";
+
+  if (filters.e2eProcessId) {
+    scopeCte = `WITH e2e_roots AS (
+         SELECT DISTINCT be.linked_node_id AS node_id
+         FROM bpmn_model bm
+         INNER JOIN bpmn_element be ON be.model_id = bm.model_id
+         WHERE bm.e2e_process_id = @e2eProcessId
+           AND bm.is_current = 1
+           AND be.linked_node_id IS NOT NULL
+       ),
+       descendants AS (
+         SELECT node_id FROM e2e_roots
+         UNION ALL
+         SELECT child.node_id
+         FROM process_node child
+         INNER JOIN descendants parent ON child.parent_node_id = parent.node_id
+       )`;
+    scopeJoin = "INNER JOIN descendants d ON pn.node_id = d.node_id";
+    params.e2eProcessId = filters.e2eProcessId;
+  } else if (filters.nodeId) {
+    scopeCte = `WITH descendants AS (
+         SELECT node_id
+         FROM process_node
+         WHERE node_id = @nodeId
+         UNION ALL
+         SELECT child.node_id
+         FROM process_node child
+         INNER JOIN descendants parent ON child.parent_node_id = parent.node_id
+       )`;
+    scopeJoin = "INNER JOIN descendants d ON pn.node_id = d.node_id";
     params.nodeId = filters.nodeId;
   }
 
-  // nodeId가 있으면 해당 Task 속성은 BPMN 연결 여부와 무관하게 표시한다.
-  if (filters.bpmnModelId && !filters.nodeId) {
+  // nodeId·e2eProcessId가 있으면 해당 Task 속성은 BPMN 연결 여부와 무관하게 표시한다.
+  if (filters.bpmnModelId && !filters.nodeId && !filters.e2eProcessId) {
     conditions.push(
       `EXISTS (
          SELECT 1
@@ -181,7 +211,8 @@ export const listTaskAttributes = async (
   }
 
   const rows = await query<Record<string, unknown>>(
-    `SELECT
+    `${scopeCte}
+     SELECT
        ta.attr_id,
        ta.node_id,
        COALESCE(tai_locale.definition, tai_ko.definition, ta.definition) AS definition,
@@ -211,6 +242,7 @@ export const listTaskAttributes = async (
        bpmn.element_name AS bpmn_element_name
      FROM task_attribute ta
      INNER JOIN process_node pn ON ta.node_id = pn.node_id
+     ${scopeJoin}
      LEFT JOIN task_attribute_i18n tai_locale
        ON ta.attr_id = tai_locale.attr_id AND tai_locale.locale = @locale
      LEFT JOIN task_attribute_i18n tai_ko

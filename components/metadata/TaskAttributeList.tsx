@@ -1,16 +1,13 @@
 "use client";
 
-import { ClipboardList, ExternalLink } from "lucide-react";
+import { ClipboardList, ExternalLink, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import {
-  FilterField,
-  FilterPanel,
-  ListPageBody,
   ListPageLayout,
   PageActions,
   PageContent,
@@ -19,14 +16,9 @@ import {
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
+import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
+import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -38,28 +30,60 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Link } from "@/lib/i18n/navigation";
 import { useTaskAttributeList } from "@/lib/query/hooks/useMetadata";
 import type { TaskAttributeListItem } from "@/types/metadata";
+import type { E2eProcessDto } from "@/types/e2e-process";
+import type { ProcessNodeTree } from "@/types/process";
 
-/** BPMN에서 등록한 Task 속성 목록 */
+type TaskAttributeSelection =
+  | { kind: "process"; node: ProcessNodeTree }
+  | { kind: "e2e"; process: E2eProcessDto };
+
+/** BPMN에서 등록한 Task 속성 목록 — 프로세스 트리 선택 기준 */
 export const TaskAttributeList = () => {
   const t = useTranslations("metadata");
   const tc = useTranslations("common");
+  const ts = useTranslations("systemMapping");
+  const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
+    useProcessScopeParams();
   const [search, setSearch] = useState("");
-  const [levelFilter, setLevelFilter] = useState<"ALL" | "L3" | "L4">("ALL");
+  const [selection, setSelection] = useState<TaskAttributeSelection | null>(null);
   const [detailNodeId, setDetailNodeId] = useState<number | null>(null);
   const sheetBodyRef = useRef<HTMLDivElement>(null);
   const debouncedSearch = useDebounce(search, 300);
 
+  const handleScopeChange = useCallback(
+    (scope: Parameters<typeof setScope>[0]) => {
+      setSelection(null);
+      setScope(scope);
+    },
+    [setScope],
+  );
+
+  const handleSelectProcess = useCallback((node: ProcessNodeTree) => {
+    setSelection({ kind: "process", node });
+  }, []);
+
+  const handleSelectE2e = useCallback((process: E2eProcessDto) => {
+    setSelection({ kind: "e2e", process });
+  }, []);
+
   const filters = useMemo(
     () => ({
       search: debouncedSearch || undefined,
-      level: levelFilter === "ALL" ? undefined : levelFilter,
+      nodeId: selection?.kind === "process" ? selection.node.nodeId : undefined,
+      e2eProcessId:
+        selection?.kind === "e2e" ? selection.process.e2eProcessId : undefined,
     }),
-    [debouncedSearch, levelFilter],
+    [debouncedSearch, selection],
   );
-  const levelFilterLabel =
-    levelFilter === "ALL" ? t("allLevels") : levelFilter;
 
-  const { data: items, isLoading, error, refetch } = useTaskAttributeList(filters);
+  const {
+    data: items,
+    isLoading,
+    error,
+    refetch,
+  } = useTaskAttributeList(filters, {
+    enabled: Boolean(selection),
+  });
 
   const selectedItem = useMemo(
     () => items?.find((item) => item.nodeId === detailNodeId) ?? null,
@@ -265,23 +289,54 @@ export const TaskAttributeList = () => {
     sheetBodyRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [detailNodeId]);
 
-  if (isLoading) {
-    return <LoadingSpinner label={t("loading")} className="min-h-[50vh]" />;
-  }
+  const renderListBody = () => {
+    if (!selection) {
+      return <EmptyState title={t("selectProcessHint")} className="min-h-[320px]" />;
+    }
 
-  if (error) {
+    if (isLoading) {
+      return <LoadingSpinner label={t("loading")} className="min-h-[320px]" />;
+    }
+
+    if (error) {
+      return (
+        <EmptyState
+          title={t("loadError")}
+          action={
+            <Button variant="outline" onClick={() => void refetch()}>
+              {t("retry")}
+            </Button>
+          }
+          className="min-h-[320px]"
+        />
+      );
+    }
+
     return (
-      <EmptyState
-        title={t("loadError")}
-        action={
-          <Button variant="outline" onClick={() => void refetch()}>
-            {t("retry")}
-          </Button>
+      <DataGrid
+        title={t("listTitle")}
+        count={items?.length ?? 0}
+        countSuffix={tc("countUnit")}
+        icon
+        toolbar={
+          <SearchBar
+            variant="filter"
+            className="w-[220px]"
+            value={search}
+            onChange={setSearch}
+            placeholder={t("listSearchPlaceholder")}
+          />
         }
-        className="min-h-[50vh]"
+        columns={listColumns}
+        data={items ?? []}
+        rowKey={(item) => item.attrId}
+        storageKey="pams-task-attributes-grid"
+        emptyMessage={t("listEmpty")}
+        onRowClick={(item) => setDetailNodeId(item.nodeId)}
+        fillHeight
       />
     );
-  }
+  };
 
   return (
     <ListPageLayout>
@@ -296,53 +351,55 @@ export const TaskAttributeList = () => {
           />
         }
       />
-      <ListPageBody
-        filter={
-          <FilterPanel>
-            <FilterField label={t("listSearchPlaceholder")}>
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder={t("listSearchPlaceholder")}
-              />
-            </FilterField>
-            <FilterField label={t("levelFilter")}>
-              <Select
-                value={levelFilter}
-                onValueChange={(value) =>
-                  value && setLevelFilter(value as "ALL" | "L3" | "L4")
-                }
-              >
-                <SelectTrigger variant="filter">
-                  <SelectValue>{levelFilterLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent variant="filter">
-                  <SelectItem variant="filter" value="ALL">{t("allLevels")}</SelectItem>
-                  <SelectItem variant="filter" value="L3">L3</SelectItem>
-                  <SelectItem variant="filter" value="L4">L4</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-          </FilterPanel>
+      <TaskMappingSideLayout
+        storageKey="pams-task-mapping-side-panel-width"
+        defaultWidth={300}
+        splitterLabel={ts("panelResizeHorizontal")}
+        companyCode={companyCode}
+        businessUnitCode={businessUnitCode}
+        onScopeChange={handleScopeChange}
+        scopeFilters={scopeFilters}
+        selectedProcessId={
+          selection?.kind === "process" ? selection.node.nodeId : undefined
         }
-        content={
-          <PageContent>
-            <DataGrid
-              title={t("listTitle")}
-              count={items?.length ?? 0}
-              countSuffix={tc("countUnit")}
-              icon
-              columns={listColumns}
-              data={items ?? []}
-              rowKey={(item) => item.attrId}
-              storageKey="pams-task-attributes-grid"
-              emptyMessage={t("listEmpty")}
-              onRowClick={(item) => setDetailNodeId(item.nodeId)}
-              fillHeight
-            />
+        selectedE2eId={
+          selection?.kind === "e2e"
+            ? selection.process.e2eProcessId
+            : undefined
+        }
+        onSelectProcess={handleSelectProcess}
+        onSelectE2e={handleSelectE2e}
+      >
+        <PageContent bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5">
+            {selection ? (
+              <div className="shrink-0 rounded-lg border border-slate-200/85 bg-white px-3 py-2 text-xs shadow-sm dark:border-slate-600/65 dark:bg-slate-900/40">
+                {selection.kind === "e2e" ? (
+                  <>
+                    <GitBranch className="mr-1 inline size-3.5 text-sky-600" />
+                    <span className="font-medium">{selection.process.name}</span>
+                    <span className="ml-2 font-mono text-slate-500">
+                      {selection.process.code}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">E2E</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">{selection.node.name}</span>
+                    <span className="ml-2 font-mono text-slate-500">
+                      {selection.node.code}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">
+                      {selection.node.level}
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : null}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {renderListBody()}
+            </div>
           </PageContent>
-        }
-      />
+      </TaskMappingSideLayout>
 
       <Sheet
         open={detailNodeId !== null}

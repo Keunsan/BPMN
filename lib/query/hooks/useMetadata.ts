@@ -28,6 +28,9 @@ export const useTaskAttributeList = (
   if (filters.nodeId) {
     params.set("nodeId", String(filters.nodeId));
   }
+  if (filters.e2eProcessId) {
+    params.set("e2eProcessId", String(filters.e2eProcessId));
+  }
   if (filters.bpmnModelId) {
     params.set("bpmnModelId", String(filters.bpmnModelId));
   }

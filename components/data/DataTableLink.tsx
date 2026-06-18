@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { ListPageLayout, PageHeader } from "@/components/common/layout";
+import { ListPageLayout, PageHeader, PanelSplitter } from "@/components/common/layout";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
+import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useVerticalPanelResize } from "@/hooks/useVerticalPanelResize";
 import {
   useCreateTaskDataTableLink,
@@ -28,21 +29,12 @@ import {
   useExternalTables,
   useTaskDataTableLinks,
 } from "@/lib/query/hooks/useExternalTables";
-import { useProcessTree } from "@/lib/query/hooks/useProcess";
 import { useSystems } from "@/lib/query/hooks/useSystems";
-import { cn } from "@/lib/utils";
 import { formatSystemLabel } from "@/lib/utils/system-label";
 import type { TaskDataTableLinkDto } from "@/types/data-table";
 import type { ExternalTable } from "@/types/external";
 import type { CrudType, DataLinkType } from "@/types/metadata";
 import type { ProcessNodeTree } from "@/types/process";
-
-type TaskOption = {
-  nodeId: number;
-  code: string;
-  name: string;
-  level: string;
-};
 
 type AvailableTableRow = ExternalTable & {
   systemId: number;
@@ -66,59 +58,11 @@ const CRUD_TYPES: CrudType[] = [
 ];
 const ALL_FILTER = "__ALL__";
 
-const flattenProcesses = (nodes: ProcessNodeTree[] = []): TaskOption[] =>
-  nodes.flatMap((node) => [
-    ...(node.level === "L3" || node.level === "L4"
-      ? [
-          {
-            nodeId: node.nodeId,
-            code: node.code,
-            name: node.name,
-            level: node.level,
-          },
-        ]
-      : []),
-    ...flattenProcesses(node.children ?? []),
-  ]);
-
 const tableRowKey = (row: {
   systemId: number;
   schemaName: string | null;
   tableName: string;
 }) => `${row.systemId}:${row.schemaName ?? ""}:${row.tableName}`;
-
-const PanelSplitter = ({
-  orientation,
-  onPointerDown,
-  isResizing,
-  label,
-}: {
-  orientation: "vertical" | "horizontal";
-  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-  isResizing: boolean;
-  label: string;
-}) => (
-  <div
-    role="separator"
-    aria-orientation={orientation}
-    aria-label={label}
-    className={cn(
-      "relative z-20 shrink-0 touch-none select-none bg-transparent transition-colors hover:bg-primary/15 active:bg-primary/25",
-      orientation === "vertical"
-        ? "flex h-1.5 w-full cursor-row-resize items-center justify-center"
-        : "hidden w-1.5 cursor-col-resize items-center justify-center md:flex",
-      isResizing && "bg-primary/25",
-    )}
-    onPointerDown={onPointerDown}
-  >
-    <div
-      className={cn(
-        "pointer-events-none rounded-full bg-border",
-        orientation === "vertical" ? "h-0.5 w-10" : "h-10 w-0.5",
-      )}
-    />
-  </div>
-);
 
 /** Task와 외부 데이터 테이블 연결 — 좌측 태스크 · 우측 테이블 다중 연결 */
 export const DataTableLink = () => {
@@ -126,9 +70,11 @@ export const DataTableLink = () => {
   const ts = useTranslations("systemMapping");
   const te = useTranslations("externalTables");
   const tc = useTranslations("common");
+  const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
+    useProcessScopeParams();
 
   const [nodeId, setNodeId] = useState(0);
-  const [taskSearch, setTaskSearch] = useState("");
+  const [selectedTask, setSelectedTask] = useState<ProcessNodeTree | null>(null);
   const [systemId, setSystemId] = useState(0);
   const [schemaName, setSchemaName] = useState("");
   const [tableSearch, setTableSearch] = useState("");
@@ -142,7 +88,6 @@ export const DataTableLink = () => {
   const debouncedSchema = useDebounce(schemaName, 300);
   const debouncedTableSearch = useDebounce(tableSearch, 300);
 
-  const { data: tree, isLoading: treeLoading } = useProcessTree();
   const { data: systems } = useSystems({ isActive: true });
   const { data: links, isLoading: linksLoading, refetch } =
     useTaskDataTableLinks(nodeId);
@@ -168,17 +113,6 @@ export const DataTableLink = () => {
   });
 
   const {
-    width: taskPanelWidth,
-    isResizing: isResizingTaskPanel,
-    handleResizePointerDown: handleTaskPanelResize,
-  } = useHorizontalPanelResize({
-    storageKey: "pams-data-table-link-task-panel-width",
-    defaultWidth: 400,
-    minWidth: 280,
-    maxWidth: 640,
-  });
-
-  const {
     height: linkedPanelHeight,
     isResizing: isResizingLinkedPanel,
     handleResizePointerDown: handleLinkedPanelResize,
@@ -189,20 +123,6 @@ export const DataTableLink = () => {
     maxHeight: 520,
   });
 
-  const taskOptions = useMemo(() => flattenProcesses(tree), [tree]);
-  const filteredTasks = useMemo(() => {
-    const keyword = taskSearch.trim().toLowerCase();
-    if (!keyword) {
-      return taskOptions;
-    }
-    return taskOptions.filter(
-      (task) =>
-        task.code.toLowerCase().includes(keyword) ||
-        task.name.toLowerCase().includes(keyword),
-    );
-  }, [taskOptions, taskSearch]);
-
-  const selectedTask = taskOptions.find((task) => task.nodeId === nodeId);
   const selectedSystem = systems?.find(
     (system) => Number(system.systemId) === systemId,
   );
@@ -248,9 +168,20 @@ export const DataTableLink = () => {
     setSelectedTableKeys(new Set());
   }, []);
 
-  const selectTask = useCallback(
-    (nextNodeId: number) => {
-      setNodeId(nextNodeId);
+  const handleScopeChange = useCallback(
+    (scope: Parameters<typeof setScope>[0]) => {
+      setSelectedTask(null);
+      setNodeId(0);
+      resetTableSelection();
+      setScope(scope);
+    },
+    [resetTableSelection, setScope],
+  );
+
+  const handleSelectProcess = useCallback(
+    (node: ProcessNodeTree) => {
+      setSelectedTask(node);
+      setNodeId(node.nodeId);
       resetTableSelection();
     },
     [resetTableSelection],
@@ -317,57 +248,6 @@ export const DataTableLink = () => {
     setIsCritical(false);
     await refetch();
   };
-
-  const taskColumns = useMemo<DataGridColumn<TaskOption>[]>(
-    () => [
-      {
-        key: "no",
-        header: "No.",
-        width: 48,
-        minWidth: 44,
-        align: "center",
-        cell: (_task, rowIndex) => rowIndex + 1,
-      },
-      {
-        key: "code",
-        header: ts("taskCode"),
-        width: 112,
-        minWidth: 96,
-        sortable: true,
-        filter: "text",
-        value: (task) => task.code,
-        cell: (task) => (
-          <span className="font-mono text-[11px]">{task.code}</span>
-        ),
-      },
-      {
-        key: "level",
-        header: ts("level"),
-        width: 52,
-        minWidth: 44,
-        align: "center",
-        sortable: true,
-        filter: "select",
-        value: (task) => task.level,
-        cell: (task) => (
-          <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-            {task.level}
-          </Badge>
-        ),
-      },
-      {
-        key: "name",
-        header: ts("taskName"),
-        width: 180,
-        minWidth: 140,
-        sortable: true,
-        filter: "text",
-        value: (task) => task.name,
-        cell: (task) => <span className="font-medium">{task.name}</span>,
-      },
-    ],
-    [ts],
-  );
 
   const linkedColumns = useMemo<DataGridColumn<TaskDataTableLinkDto>[]>(
     () => [
@@ -779,60 +659,30 @@ export const DataTableLink = () => {
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <div
-          className="flex min-h-[220px] w-full shrink-0 flex-col overflow-hidden md:min-h-0 md:w-auto"
-          style={{ width: taskPanelWidth }}
-        >
-          <DataGrid
-            title={ts("taskList")}
-            count={filteredTasks.length}
-            countSuffix={tc("countUnit")}
-            icon
-            toolbar={
-              <SearchBar
-                variant="filter"
-                className="w-[160px]"
-                value={taskSearch}
-                onChange={setTaskSearch}
-                placeholder={ts("taskSearchPlaceholder")}
-              />
-            }
-            columns={taskColumns}
-            data={filteredTasks}
-            rowKey={(task) => task.nodeId}
-            storageKey="pams-data-table-link-task-grid"
-            selectedRowKey={nodeId || undefined}
-            onRowClick={(task) => selectTask(task.nodeId)}
-            emptyMessage={ts("emptyTasks")}
-            body={
-              treeLoading ? (
-                <LoadingSpinner className="min-h-[240px]" />
-              ) : undefined
-            }
-            fillHeight
-          />
-        </div>
-
-        <PanelSplitter
-          orientation="horizontal"
-          label={ts("panelResizeHorizontal")}
-          isResizing={isResizingTaskPanel}
-          onPointerDown={handleTaskPanelResize}
-        />
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <TaskMappingSideLayout
+        storageKey="pams-data-table-link-task-panel-width"
+        defaultWidth={300}
+        splitterLabel={ts("panelResizeHorizontal")}
+        companyCode={companyCode}
+        businessUnitCode={businessUnitCode}
+        onScopeChange={handleScopeChange}
+        scopeFilters={scopeFilters}
+        selectedProcessId={selectedTask?.nodeId}
+        onSelectProcess={handleSelectProcess}
+        selectableLevels={["L4"]}
+        e2eSelectable={false}
+      >
           {selectedTask ? (
             <div className="mb-1.5 shrink-0 rounded-lg border border-slate-200/85 bg-white px-3 py-2 text-xs shadow-sm dark:border-slate-600/65 dark:bg-slate-900/40">
               <span className="font-medium">{selectedTask.name}</span>
               <span className="ml-2 font-mono text-slate-500">
                 {selectedTask.code}
               </span>
+              <span className="ml-2 text-muted-foreground">L4</span>
             </div>
           ) : null}
           {renderRightBody()}
-        </div>
-      </div>
+      </TaskMappingSideLayout>
     </ListPageLayout>
   );
 };

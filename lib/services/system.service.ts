@@ -57,16 +57,16 @@ const assertName = (value: string | undefined, field: string): string => {
   return normalized;
 };
 
-/** Task 매핑 가능한 L3/L4 프로세스인지 확인한다. */
+/** Task 매핑 가능한 L4 프로세스인지 확인한다. */
 const assertTaskNode = async (nodeId: number): Promise<void> => {
   const node = await processQueries.findProcessById(nodeId);
   if (!node) {
     throw new ApiError("E302", "Process not found", 404, undefined, "nodeId");
   }
-  if (node.level !== "L3" && node.level !== "L4") {
+  if (node.level !== "L4") {
     throw new ApiError(
       "E405",
-      "System mapping can only be managed for L3/L4 nodes",
+      "System mapping can only be managed for L4 tasks",
       400,
       undefined,
       "nodeId",

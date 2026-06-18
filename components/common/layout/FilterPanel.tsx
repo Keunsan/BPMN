@@ -37,7 +37,8 @@ export const FilterPanel = ({
   const filterPanelCollapsed = useUIStore((state) => state.filterPanelCollapsed);
 
   const renderChildren = () => {
-    const fields = showCollapseToggle
+    const collapseInField = showCollapseToggle && !showTitle;
+    const fields = collapseInField
       ? Children.map(Children.toArray(children), (child, fieldIndex) => {
           if (!isValidElement(child)) {
             return child;
@@ -89,10 +90,11 @@ export const FilterPanel = ({
       )}
     >
       {showTitle ? (
-        <div className="shrink-0 border-b px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
           <h2 className="text-xs font-semibold text-foreground">
             {title ?? t("integratedSearch")}
           </h2>
+          {showCollapseToggle ? <FilterPanelCollapseToggle compact /> : null}
         </div>
       ) : null}
       <div

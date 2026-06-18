@@ -9,16 +9,16 @@ import type {
   UpsertTaskDataTableLinkDto,
 } from "@/types/data-table";
 
-/** 데이터 연결 대상 L3/L4 프로세스인지 확인한다. */
+/** 데이터 연결 대상 L4 프로세스인지 확인한다. */
 const assertTaskNode = async (nodeId: number): Promise<void> => {
   const node = await processQueries.findProcessById(nodeId);
   if (!node) {
     throw new ApiError("E302", "Process not found", 404, undefined, "nodeId");
   }
-  if (node.level !== "L3" && node.level !== "L4") {
+  if (node.level !== "L4") {
     throw new ApiError(
       "E405",
-      "Data table links can only be managed for L3/L4 nodes",
+      "Data table links can only be managed for L4 tasks",
       400,
       undefined,
       "nodeId",
