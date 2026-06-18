@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { MultiLangInput, type MultiLangValue } from "@/components/common/MultiLangInput";
+import { ApiError } from "@/lib/api/error-handler";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -159,13 +160,25 @@ export const ProcessForm = ({
     };
 
     if (mode === "create") {
-      const result = await createMutation.mutateAsync(payload);
-      if (result) {
-        if (onSuccess) {
-          onSuccess(result);
-        } else {
-          router.push(`/process/${result.nodeId}`);
+      try {
+        const result = await createMutation.mutateAsync(payload);
+        if (result) {
+          if (onSuccess) {
+            onSuccess(result);
+          } else {
+            router.push(`/process/${result.nodeId}`);
+          }
         }
+      } catch (error) {
+        if (error instanceof ApiError && error.field === "code") {
+          if (values.autoCode) {
+            form.setError("root", { message: error.message });
+          } else {
+            form.setError("code", { message: error.message });
+          }
+          return;
+        }
+        throw error;
       }
     } else if (initialData) {
       const result = await updateMutation.mutateAsync({ ...payload, i18n });

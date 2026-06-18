@@ -71,6 +71,7 @@ export const ProcessListClient = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-process-list-filter-panel-width"
         filter={
           <ProcessScopeFilter
             companyCode={companyCode}

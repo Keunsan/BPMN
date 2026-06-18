@@ -5,6 +5,7 @@ import type {
   CreateProcessInput,
   ProcessDeleteBpmnModelImpact,
   ProcessDeleteBpmnTaskLink,
+  ProcessDeleteDescendantProcess,
   ProcessDeleteImpact,
   ProcessDeleteImpactCount,
   ProcessDeleteImpactKind,
@@ -175,6 +176,58 @@ export const countVariantsForStandard = async (
   return row?.cnt ?? 0;
 };
 
+/** 표준 노드에 연결된 변형 목록 */
+export const listVariantsForStandard = async (
+  standardNodeId: number,
+): Promise<ProcessNode[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM process_node
+     WHERE variant_of = @standardNodeId
+     ORDER BY company_code, business_unit_code, code`,
+    { standardNodeId },
+  );
+  return rows.map(mapProcessNode);
+};
+
+/** 하위 프로세스 전체(모든 깊이)를 조회한다 */
+export const listDescendantProcesses = async (
+  nodeId: number,
+): Promise<ProcessDeleteDescendantProcess[]> => {
+  const rows = await query<Record<string, unknown>>(
+    `WITH descendants AS (
+       SELECT
+         node_id,
+         code,
+         name,
+         level,
+         1 AS depth
+       FROM process_node
+       WHERE parent_node_id = @nodeId
+       UNION ALL
+       SELECT
+         pn.node_id,
+         pn.code,
+         pn.name,
+         pn.level,
+         d.depth + 1
+       FROM process_node pn
+       INNER JOIN descendants d ON pn.parent_node_id = d.node_id
+     )
+     SELECT node_id AS nodeId, code, name, level, depth
+     FROM descendants
+     ORDER BY depth DESC, code`,
+    { nodeId },
+  );
+
+  return rows.map((row) => ({
+    nodeId: row.nodeId as number,
+    code: row.code as string,
+    name: row.name as string,
+    level: row.level as ProcessDeleteDescendantProcess["level"],
+    depth: row.depth as number,
+  }));
+};
+
 /** 직계 자식 프로세스 노드를 조회한다 */
 export const listChildProcesses = async (
   parentNodeId: number,
@@ -251,7 +304,27 @@ const deleteImpactCountQueries: Array<{
 export const getProcessDeleteImpact = async (
   nodeId: number,
 ): Promise<ProcessDeleteImpact> => {
+  const current = await findProcessById(nodeId);
+  if (!current) {
+    throw new Error("Process not found");
+  }
+
   const childProcessCount = await countChildProcesses(nodeId);
+  const descendantProcesses = await listDescendantProcesses(nodeId);
+  const variantCount =
+    current.variantOf == null
+      ? await countVariantsForStandard(nodeId)
+      : 0;
+  const blockedByVariants = current.variantOf == null && variantCount > 0;
+  const blockedByChildren =
+    (current.level === "L1" || current.level === "L2") &&
+    descendantProcesses.length > 0;
+  const cascadeChildProcesses =
+    current.level === "L3"
+      ? descendantProcesses.filter(
+          (item) => item.depth === 1 && item.level === "L4",
+        )
+      : [];
   const bpmnTaskLinkRows = await query<Record<string, unknown>>(
     `SELECT
        be.element_id AS elementId,
@@ -260,11 +333,14 @@ export const getProcessDeleteImpact = async (
        be.element_type AS elementType,
        bm.model_id AS modelId,
        bm.model_name AS modelName,
-       owner.code AS modelProcessCode,
-       owner.name AS modelProcessName
+       COALESCE(owner.code, e2e.code, 'E2E') AS modelProcessCode,
+       COALESCE(owner.name, e2e.name, bm.model_name) AS modelProcessName
      FROM bpmn_element be
      INNER JOIN bpmn_model bm ON bm.model_id = be.model_id
-     INNER JOIN process_node owner ON owner.node_id = bm.node_id
+     LEFT JOIN process_node owner
+       ON owner.node_id = bm.node_id AND bm.model_kind = 'L3_PROCESS'
+     LEFT JOIN e2e_process e2e
+       ON e2e.e2e_process_id = bm.e2e_process_id AND bm.model_kind = 'E2E'
      WHERE be.linked_node_id = @nodeId
      ORDER BY bm.model_name, be.element_id`,
     { nodeId },
@@ -313,34 +389,68 @@ export const getProcessDeleteImpact = async (
     }
   }
 
-  const hasDependencies =
+  const hasLinkedData =
     bpmnTaskLinks.length > 0 ||
     ownedBpmnModels.length > 0 ||
     metadataCounts.length > 0;
+  const hasDependencies =
+    hasLinkedData ||
+    (current.level === "L3" && cascadeChildProcesses.length > 0);
 
   return {
     nodeId,
+    level: current.level,
     childProcessCount,
+    variantCount,
+    blockedByChildren,
+    blockedByVariants,
+    descendantProcesses,
+    cascadeChildProcesses,
     bpmnTaskLinks,
     ownedBpmnModels,
     metadataCounts,
     hasDependencies,
-    canCascadeDelete: childProcessCount === 0,
+    canCascadeDelete: !blockedByChildren && !blockedByVariants,
   };
 };
 
-/** 상위코드 + 순번 자동 생성 */
+/** 형제 코드 접미 순번의 최댓값을 구한다 — COUNT+1 방식은 삭제 후 중복을 유발한다 */
+const maxSiblingCodeSeq = (codes: string[], prefix: string): number => {
+  let maxSeq = 0;
+  for (const code of codes) {
+    if (!code.startsWith(prefix)) {
+      continue;
+    }
+    const suffix = code.slice(prefix.length);
+    const match = /^(\d+)$/.exec(suffix);
+    if (match) {
+      maxSeq = Math.max(maxSeq, Number.parseInt(match[1], 10));
+    }
+  }
+  return maxSeq;
+};
+
+/** 상위코드 + 순번 자동 생성 — 기존 코드 최대 순번 기준, 충돌 시 증가 */
 export const generateProcessCode = async (
   parentNodeId: number | null,
 ): Promise<string> => {
   if (!parentNodeId) {
-    const row = await queryOne<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt
+    const rows = await query<{ code: string }>(
+      `SELECT code
        FROM process_node
        WHERE parent_node_id IS NULL AND variant_of IS NULL`,
     );
-    const seq = String((row?.cnt ?? 0) + 1).padStart(2, "0");
-    return `STP-${seq}`;
+    const maxSeq = maxSiblingCodeSeq(
+      rows.map((row) => row.code),
+      "STP-",
+    );
+    let seq = maxSeq + 1;
+    let code = `STP-${String(seq).padStart(2, "0")}`;
+    while (await findProcessByCode(code)) {
+      seq += 1;
+      code = `STP-${String(seq).padStart(2, "0")}`;
+    }
+    return code;
   }
 
   const parent = await findProcessById(parentNodeId);
@@ -348,9 +458,21 @@ export const generateProcessCode = async (
     throw new Error("Parent not found");
   }
 
-  const siblingCount = await countChildProcesses(parentNodeId);
-  const seq = String(siblingCount + 1).padStart(2, "0");
-  return `${parent.code}-${seq}`;
+  const rows = await query<{ code: string }>(
+    `SELECT code FROM process_node WHERE parent_node_id = @parentNodeId`,
+    { parentNodeId },
+  );
+  const prefix = `${parent.code}-`;
+  let seq = maxSiblingCodeSeq(
+    rows.map((row) => row.code),
+    prefix,
+  ) + 1;
+  let code = `${prefix}${String(seq).padStart(2, "0")}`;
+  while (await findProcessByCode(code)) {
+    seq += 1;
+    code = `${prefix}${String(seq).padStart(2, "0")}`;
+  }
+  return code;
 };
 
 /** i18n upsert */
@@ -488,69 +610,80 @@ export const updateProcess = async (
   return row ? mapProcessNode(row) : null;
 };
 
-/** 프로세스와 직접 종속된 번역/이력 데이터를 함께 삭제한다. */
+/** 프로세스와 연결 데이터를 DB에서 완전히 삭제한다 */
 export const deleteProcess = async (
   nodeId: number,
-  options: { cascade?: boolean } = {},
 ): Promise<boolean> => {
   return transaction(async (txRequest) => {
-    if (options.cascade) {
-      await txRequest(`DELETE FROM bpmn_element WHERE linked_node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(
-        `DELETE be
-         FROM bpmn_element be
-         INNER JOIN bpmn_model bm ON bm.model_id = be.model_id
-         WHERE bm.node_id = @nodeId`,
-        { nodeId },
-      );
-      await txRequest(`DELETE FROM bpmn_model WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(
-        `DELETE FROM task_attribute_i18n
-         WHERE attr_id IN (
-           SELECT attr_id FROM task_attribute WHERE node_id = @nodeId
-         )`,
-        { nodeId },
-      );
-      await txRequest(
-        `DELETE FROM task_predecessor
-         WHERE node_id = @nodeId OR predecessor_node_id = @nodeId`,
-        { nodeId },
-      );
-      await txRequest(`DELETE FROM task_role_mapping WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(`DELETE FROM task_system_link WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(
-        `DELETE FROM task_interface_mapping WHERE node_id = @nodeId`,
-        { nodeId },
-      );
-      await txRequest(
-        `DELETE FROM task_data_table_link WHERE node_id = @nodeId`,
-        { nodeId },
-      );
-      await txRequest(`DELETE FROM task_kpi_mapping WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(`DELETE FROM task_risk_mapping WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(`DELETE FROM task_control_mapping WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-      await txRequest(
-        `DELETE FROM task_document_mapping WHERE node_id = @nodeId`,
-        { nodeId },
-      );
-      await txRequest(`DELETE FROM task_attribute WHERE node_id = @nodeId`, {
-        nodeId,
-      });
-    }
+    await txRequest(
+      `DELETE FROM approval_history
+       WHERE request_id IN (
+         SELECT request_id
+         FROM approval_request
+         WHERE entity_type = 'PROCESS_NODE' AND entity_id = @nodeId
+       )`,
+      { nodeId },
+    );
+    await txRequest(
+      `DELETE FROM approval_request
+       WHERE entity_type = 'PROCESS_NODE' AND entity_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(`DELETE FROM bpmn_element WHERE linked_node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(
+      `DELETE be
+       FROM bpmn_element be
+       INNER JOIN bpmn_model bm ON bm.model_id = be.model_id
+       WHERE bm.node_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(`DELETE FROM bpmn_model WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(
+      `DELETE FROM task_attribute_i18n
+       WHERE attr_id IN (
+         SELECT attr_id FROM task_attribute WHERE node_id = @nodeId
+       )`,
+      { nodeId },
+    );
+    await txRequest(
+      `DELETE FROM task_predecessor
+       WHERE node_id = @nodeId OR predecessor_node_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(`DELETE FROM task_role_mapping WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(`DELETE FROM task_system_link WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(
+      `DELETE FROM task_interface_mapping WHERE node_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(
+      `DELETE FROM task_data_table_link WHERE node_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(`DELETE FROM task_kpi_mapping WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(`DELETE FROM task_risk_mapping WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(`DELETE FROM task_control_mapping WHERE node_id = @nodeId`, {
+      nodeId,
+    });
+    await txRequest(
+      `DELETE FROM task_document_mapping WHERE node_id = @nodeId`,
+      { nodeId },
+    );
+    await txRequest(`DELETE FROM task_attribute WHERE node_id = @nodeId`, {
+      nodeId,
+    });
 
     await txRequest(`DELETE FROM process_node_i18n WHERE node_id = @nodeId`, {
       nodeId,

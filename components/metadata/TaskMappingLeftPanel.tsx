@@ -1,7 +1,5 @@
 "use client";
 
-import { useTranslations } from "next-intl";
-
 import { FilterPanel } from "@/components/common/layout";
 import { TaskAttributeProcessTree } from "@/components/metadata/TaskAttributeProcessTree";
 import { ProcessScopeFilter } from "@/components/process/ProcessScopeFilter";
@@ -23,7 +21,6 @@ type TaskMappingLeftPanelProps = {
     scope: Pick<ProcessFilters, "companyCode" | "businessUnitCode">,
   ) => void;
   scopeFilters: Pick<ProcessFilters, "companyCode" | "businessUnitCode">;
-  title?: string;
   className?: string;
 };
 
@@ -41,18 +38,10 @@ export const TaskMappingLeftPanel = ({
   businessUnitCode,
   onScopeChange,
   scopeFilters,
-  title,
   className,
 }: TaskMappingLeftPanelProps) => {
-  const t = useTranslations("metadata");
-
   return (
-    <FilterPanel
-      showTitle
-      showCollapseToggle
-      title={title ?? t("processTree")}
-      className={cn("h-full w-full", className)}
-    >
+    <FilterPanel className={cn("h-full w-full", className)}>
       <ProcessScopeFilter
         embedded
         companyCode={companyCode}

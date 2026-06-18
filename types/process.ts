@@ -230,9 +230,25 @@ export interface ProcessDeleteBpmnModelImpact {
   elementCount: number;
 }
 
+export interface ProcessDeleteDescendantProcess {
+  nodeId: number;
+  code: string;
+  name: string;
+  level: ProcessLevel;
+  depth: number;
+}
+
 export interface ProcessDeleteImpact {
   nodeId: number;
+  level: ProcessLevel;
   childProcessCount: number;
+  variantCount: number;
+  blockedByChildren: boolean;
+  blockedByVariants: boolean;
+  /** L1/L2 차단 시 안내용 — 모든 하위 프로세스 */
+  descendantProcesses: ProcessDeleteDescendantProcess[];
+  /** L3 삭제 시 함께 삭제되는 직계 L4 */
+  cascadeChildProcesses: ProcessDeleteDescendantProcess[];
   bpmnTaskLinks: ProcessDeleteBpmnTaskLink[];
   ownedBpmnModels: ProcessDeleteBpmnModelImpact[];
   metadataCounts: ProcessDeleteImpactCount[];

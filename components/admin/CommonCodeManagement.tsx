@@ -406,6 +406,7 @@ export const CommonCodeManagement = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-common-code-filter-panel-width"
         filter={
           <FilterPanel>
             <FilterField label={t("groupSearchPlaceholder")}>

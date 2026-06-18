@@ -10,7 +10,7 @@ import {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
-type UseHorizontalPanelResizeOptions = {
+export type UseHorizontalPanelResizeOptions = {
   storageKey: string;
   defaultWidth: number;
   minWidth: number;

@@ -79,9 +79,11 @@ export const ProcessCompareClient = () => {
         icon={GitCompare}
       />
       <ListPageBody
+        filterStorageKey="pams-process-compare-filter-panel-width"
         filter={
-          <>
+          <FilterPanel>
             <ProcessScopeFilter
+              embedded
               companyCode={companyCode}
               businessUnitCode={businessUnitCode}
               onScopeChange={({ companyCode: nextCompany, businessUnitCode: nextBu }) => {
@@ -89,8 +91,7 @@ export const ProcessCompareClient = () => {
                 setBusinessUnitCode(nextBu ?? "");
               }}
             />
-            <FilterPanel showTitle={false}>
-              <FilterField label={t("variant.selectStandard")}>
+            <FilterField label={t("variant.selectStandard")}>
                 {isTreeLoading ? (
                   <LoadingSpinner label={t("loading")} />
                 ) : (
@@ -115,8 +116,7 @@ export const ProcessCompareClient = () => {
                   </Select>
                 )}
               </FilterField>
-            </FilterPanel>
-          </>
+          </FilterPanel>
         }
         content={
           <PageContent>

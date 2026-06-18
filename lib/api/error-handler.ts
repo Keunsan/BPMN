@@ -169,5 +169,20 @@ export function toApiError(error: unknown, traceId?: string): ApiError {
     return new ApiError("E502", message, 502, message, undefined, traceId);
   }
 
+  const isFkConstraintError =
+    message.includes("REFERENCE constraint") ||
+    message.includes("FK_");
+
+  if (isFkConstraintError) {
+    return new ApiError(
+      "E409",
+      "Linked data exists. Confirm cascade delete before deleting this process.",
+      409,
+      message,
+      undefined,
+      traceId,
+    );
+  }
+
   return new ApiError("E501", message, 500, message, undefined, traceId);
 }

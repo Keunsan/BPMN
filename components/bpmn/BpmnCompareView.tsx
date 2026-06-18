@@ -90,6 +90,7 @@ export const BpmnCompareView = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-bpmn-compare-filter-panel-width"
         filter={
           <FilterPanel>
             <FilterField label={t("leftVersion")}>

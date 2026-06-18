@@ -2,6 +2,7 @@ export { CollapsibleSidePanel } from "@/components/common/layout/CollapsibleSide
 export { ContentPanel } from "@/components/common/layout/ContentPanel";
 export { FilterField } from "@/components/common/layout/FilterField";
 export { FilterPanel } from "@/components/common/layout/FilterPanel";
+export { FilterPanelSideBody } from "@/components/common/layout/FilterPanelSideBody";
 export { ListPageBody } from "@/components/common/layout/ListPageBody";
 export { ListPageLayout } from "@/components/common/layout/ListPageLayout";
 export { PageActions } from "@/components/common/layout/PageActions";

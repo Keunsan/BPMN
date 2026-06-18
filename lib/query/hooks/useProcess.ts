@@ -64,7 +64,12 @@ export const useCreateProcess = () => {
       qc.invalidateQueries({ queryKey: processKeys.all });
     },
     onError: (error) => {
-      if (error instanceof ApiError) showErrorToast(error);
+      if (error instanceof ApiError) {
+        if (error.field) {
+          return;
+        }
+        showErrorToast(error);
+      }
     },
   });
 };
@@ -89,16 +94,8 @@ export const useUpdateProcess = (nodeId: number) => {
 export const useDeleteProcess = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      nodeId,
-      cascade = false,
-    }: {
-      nodeId: number;
-      cascade?: boolean;
-    }) =>
-      apiDelete<{ deleted: boolean }>(`/api/process/${nodeId}`, {
-        params: { cascade },
-      }),
+    mutationFn: (nodeId: number) =>
+      apiDelete<{ deleted: boolean }>(`/api/process/${nodeId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: processKeys.all });
     },

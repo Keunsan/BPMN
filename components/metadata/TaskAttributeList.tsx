@@ -15,7 +15,11 @@ import {
 } from "@/components/common/layout";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
+import {
+  TaskAttributeForm,
+  TaskAttributeSheetHeaderActions,
+  TaskAttributeSheetProvider,
+} from "@/components/metadata/TaskAttributeForm";
 import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
 import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
 import { Button } from "@/components/ui/button";
@@ -412,36 +416,41 @@ export const TaskAttributeList = () => {
       >
         <SheetContent
           className="flex h-full !w-[min(800px,96vw)] !max-w-none flex-col gap-0 overflow-hidden p-0 sm:!max-w-none"
-          showCloseButton
+          showCloseButton={false}
         >
-          <SheetHeader className="shrink-0 border-b px-6 py-4">
-            <SheetTitle className="truncate text-base font-semibold">
-              {selectedItem
-                ? `${selectedItem.processCode} — ${selectedItem.processName}`
-                : t("listTitle")}
-            </SheetTitle>
-            <SheetDescription className="line-clamp-2">
-              {selectedItem?.bpmnElementName
-                ? t("detailSheetDescWithBpmn", {
-                    model: selectedItem.bpmnModelName ?? "",
-                    task: selectedItem.bpmnElementName,
-                  })
-                : t("detailSheetDesc")}
-            </SheetDescription>
-          </SheetHeader>
+          <TaskAttributeSheetProvider>
+            <SheetHeader className="shrink-0 gap-1 border-b px-6 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <SheetTitle className="min-w-0 flex-1 truncate text-base font-semibold">
+                  {selectedItem
+                    ? `${selectedItem.processCode} — ${selectedItem.processName}`
+                    : t("listTitle")}
+                </SheetTitle>
+                <TaskAttributeSheetHeaderActions />
+              </div>
+              <SheetDescription className="line-clamp-2">
+                {selectedItem?.bpmnElementName
+                  ? t("detailSheetDescWithBpmn", {
+                      model: selectedItem.bpmnModelName ?? "",
+                      task: selectedItem.bpmnElementName,
+                    })
+                  : t("detailSheetDesc")}
+              </SheetDescription>
+            </SheetHeader>
 
-          <div
-            ref={sheetBodyRef}
-            className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4"
-          >
-            {detailNodeId !== null && (
-              <TaskAttributeForm
-                key={detailNodeId}
-                nodeId={detailNodeId}
-                variant="sheet"
-              />
-            )}
-          </div>
+            <div
+              ref={sheetBodyRef}
+              className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4"
+            >
+              {detailNodeId !== null && (
+                <TaskAttributeForm
+                  key={detailNodeId}
+                  nodeId={detailNodeId}
+                  variant="sheet"
+                />
+              )}
+            </div>
+          </TaskAttributeSheetProvider>
         </SheetContent>
       </Sheet>
     </ListPageLayout>

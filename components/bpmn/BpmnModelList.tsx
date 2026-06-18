@@ -144,6 +144,7 @@ export const BpmnModelList = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-bpmn-list-filter-panel-width"
         filter={
           <FilterPanel>
             <ProcessScopeFilter

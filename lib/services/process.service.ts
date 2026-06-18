@@ -662,42 +662,37 @@ export const compareStandardVariant = async (
   };
 };
 
-/** 프로세스 삭제 */
-export const deleteProcess = async (
-  nodeId: number,
-  options: { cascade?: boolean } = {},
-): Promise<void> => {
+/** 프로세스 삭제 — L3는 직계 L4까지, L1/L2·변형 보유 시 제한 */
+export const deleteProcess = async (nodeId: number): Promise<void> => {
   const current = await processQueries.findProcessById(nodeId);
   if (!current) {
     throw new ApiError("E302", "Process not found", 404);
   }
 
-  if (current.variantOf == null) {
-    const variantCount = await processQueries.countVariantsForStandard(nodeId);
-    if (variantCount > 0) {
-      throw new ApiError(
-        "E401",
-        "Cannot delete standard process with existing variants",
-        400,
-      );
-    }
-  }
-
   const impact = await processQueries.getProcessDeleteImpact(nodeId);
-  if (impact.childProcessCount > 0) {
-    throw new ApiError("E401", "Cannot delete: child processes exist", 400);
-  }
-  if (impact.hasDependencies && !options.cascade) {
+
+  if (impact.blockedByVariants) {
     throw new ApiError(
-      "E409",
-      "Linked data exists. Confirm cascade delete before deleting this process.",
-      409,
+      "E401",
+      "Cannot delete standard process with existing variants",
+      400,
     );
   }
 
-  const deleted = await processQueries.deleteProcess(nodeId, options);
-  if (!deleted) {
-    throw new ApiError("E502", "Failed to delete process", 500);
+  if (impact.blockedByChildren) {
+    throw new ApiError("E401", "Cannot delete: child processes exist", 400);
+  }
+
+  const deleteOrder = [
+    ...impact.cascadeChildProcesses.map((child) => child.nodeId),
+    nodeId,
+  ];
+
+  for (const targetNodeId of deleteOrder) {
+    const deleted = await processQueries.deleteProcess(targetNodeId);
+    if (!deleted) {
+      throw new ApiError("E502", "Failed to delete process", 500);
+    }
   }
 };
 

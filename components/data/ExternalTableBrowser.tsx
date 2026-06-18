@@ -709,8 +709,8 @@ export const ExternalTableBrowser = ({
       />
 
       <ListPageBody
-
-        filter={<FilterPanel>{filterFields}</FilterPanel>}
+        filterStorageKey="pams-external-tables-filter-panel-width"
+        filter={<FilterPanel className="h-full w-full">{filterFields}</FilterPanel>}
 
         content={
           <PageContent>

@@ -2,7 +2,15 @@
 
 import { ChevronDown, ChevronRight, Save } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -17,6 +25,7 @@ import {
 } from "@/components/metadata/PredecessorSelect";
 import { TaskLinkedResourcesSummary } from "@/components/metadata/TaskLinkedResourcesSummary";
 import { Button } from "@/components/ui/button";
+import { SheetClose } from "@/components/ui/sheet";
 import {
   Card,
   CardContent,
@@ -110,6 +119,100 @@ type TaskAttributeEditorProps = {
   attribute: TaskAttributeDto | null;
   autoPredecessor?: PredecessorSelection | null;
   variant: "page" | "sheet";
+};
+
+type TaskAttributeSheetToolbarState = {
+  isSaving: boolean;
+  dirty: boolean;
+  lastSavedAt: Date | null;
+  onSave: () => void;
+};
+
+type TaskAttributeSheetContextValue = {
+  toolbar: TaskAttributeSheetToolbarState | null;
+  registerToolbar: (state: TaskAttributeSheetToolbarState | null) => void;
+};
+
+const TaskAttributeSheetContext =
+  createContext<TaskAttributeSheetContextValue | null>(null);
+
+/** 시트 상세 — 헤더 저장·닫기와 폼 상태를 연결한다. */
+export const TaskAttributeSheetProvider = ({
+  children,
+}: {
+  children: ReactNode;
+}) => {
+  const [toolbar, setToolbar] = useState<TaskAttributeSheetToolbarState | null>(
+    null,
+  );
+  const registerToolbar = useCallback(
+    (state: TaskAttributeSheetToolbarState | null) => {
+      setToolbar(state);
+    },
+    [],
+  );
+  const value = useMemo(
+    () => ({ toolbar, registerToolbar }),
+    [registerToolbar, toolbar],
+  );
+
+  return (
+    <TaskAttributeSheetContext.Provider value={value}>
+      {children}
+    </TaskAttributeSheetContext.Provider>
+  );
+};
+
+/** 시트 헤더 제목 행 우측 — 저장 상태·저장·닫기 */
+export const TaskAttributeSheetHeaderActions = () => {
+  const t = useTranslations("metadata");
+  const tc = useTranslations("common");
+  const sheetContext = useContext(TaskAttributeSheetContext);
+  const toolbar = sheetContext?.toolbar;
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      {toolbar ? (
+        <>
+          <span
+            className={cn(
+              "text-xs text-muted-foreground",
+              toolbar.dirty && "text-amber-600",
+            )}
+          >
+            {toolbar.isSaving
+              ? t("saving")
+              : toolbar.dirty
+                ? t("unsaved")
+                : toolbar.lastSavedAt
+                  ? t("autoSaved")
+                  : t("saved")}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            disabled={toolbar.isSaving}
+            onClick={toolbar.onSave}
+          >
+            <Save className="size-4" />
+            {t("save")}
+          </Button>
+        </>
+      ) : null}
+      <SheetClose
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="pams-page-action-outline"
+          />
+        }
+      >
+        {tc("close")}
+      </SheetClose>
+    </div>
+  );
 };
 
 const emptyI18n = (): TaskAttributeI18nMap => ({
@@ -402,9 +505,36 @@ const TaskAttributeEditor = ({
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isSheet = variant === "sheet";
+  const sheetContext = useContext(TaskAttributeSheetContext);
   const frequencyLabel = scalar.frequency
     ? t(`frequencyOptions.${scalar.frequency}`)
     : undefined;
+
+  useEffect(() => {
+    if (!isSheet || !sheetContext) {
+      return;
+    }
+
+    sheetContext.registerToolbar({
+      isSaving,
+      dirty,
+      lastSavedAt,
+      onSave: () => {
+        void save(true);
+      },
+    });
+
+    return () => {
+      sheetContext.registerToolbar(null);
+    };
+  }, [
+    dirty,
+    isSaving,
+    isSheet,
+    lastSavedAt,
+    save,
+    sheetContext,
+  ]);
 
   return (
     <form
@@ -417,48 +547,36 @@ const TaskAttributeEditor = ({
         void save(true);
       }}
     >
-      <div
-        className={cn(
-          "flex gap-3 border-b pb-4",
-          isSheet
-            ? "sticky top-0 z-10 flex-row items-center justify-between bg-popover py-3"
-            : "flex-col sm:flex-row sm:items-center sm:justify-between",
-        )}
-      >
-        {!isSheet && (
+      {!isSheet && (
+        <div className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-muted-foreground">{t("breadcrumb")}</p>
             <h1 className="text-2xl font-semibold">
               {process.code} {process.displayName ?? process.name}
             </h1>
           </div>
-        )}
-        <div
-          className={cn(
-            "flex items-center gap-3",
-            isSheet && "ml-auto w-full justify-end",
-          )}
-        >
-          <span
-            className={cn(
-              "text-xs text-muted-foreground",
-              dirty && "text-amber-600",
-            )}
-          >
-            {isSaving
-              ? t("saving")
-              : dirty
-                ? t("unsaved")
-                : lastSavedAt
-                  ? t("autoSaved")
-                  : t("saved")}
-          </span>
-          <Button type="submit" disabled={isSaving} size={isSheet ? "sm" : "default"}>
-            <Save className="size-4" />
-            {t("save")}
-          </Button>
+          <div className="flex items-center gap-3">
+            <span
+              className={cn(
+                "text-xs text-muted-foreground",
+                dirty && "text-amber-600",
+              )}
+            >
+              {isSaving
+                ? t("saving")
+                : dirty
+                  ? t("unsaved")
+                  : lastSavedAt
+                    ? t("autoSaved")
+                    : t("saved")}
+            </span>
+            <Button type="submit" disabled={isSaving}>
+              <Save className="size-4" />
+              {t("save")}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <SectionCard
         id="definition"

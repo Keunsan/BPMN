@@ -1,0 +1,51 @@
+---
+description: 좌측 조회조건 패널(FilterPanel) 접기·가로 리사이즈 규칙
+globs: components/common/layout/FilterPanel.tsx,components/common/layout/FilterField.tsx,components/common/layout/filter-panel-context.tsx,components/common/layout/FilterPanelSideBody.tsx,components/common/layout/ListPageBody.tsx,components/metadata/TaskMappingSideLayout.tsx,hooks/useFilterPanelSideLayout.ts
+alwaysApply: false
+---
+
+# FilterPanel 접기 버튼 (확정 패턴)
+
+`FilterPanel` / `FilterField` / `filter-panel-context` 수정 시 아래 방식을 유지한다.
+
+## 배치
+
+- **버튼은 패널당 하나**, 첫 `FilterField` **라벨 행 우측**에 표시 (별도 상단 행 ✗).
+- `showTitle={true}`이면 제목 바 우측에만 표시 (`collapseInFirstField` 비활성).
+- 참고 UI: BPMN 버전 비교 (`BpmnCompareView`).
+
+## 슬롯 소유권 (`filter-panel-context.tsx`)
+
+- `useFilterPanelSlotContextValue`가 `hostFieldIdRef`로 **첫 호출 `fieldId`만** 호스트로 고정.
+- `FilterField`는 `useId()` + `isCollapseToggleHost(fieldId)`로 슬롯 여부 판별.
+- 렌더마다 ref 초기화·`claimCollapseToggle()` 같은 **호출 순서 의존 패턴 금지** — 자식만 리렌더될 때 버튼이 사라짐.
+
+## `ProcessScopeFilter` embedded
+
+- `embedded`로 상위 `FilterPanel`에 넣을 때도 context가 하위 `FilterField`까지 전달됨.
+- 첫 `FilterField`(보통 법인)만 버튼을 받고, 형제·중첩 필드에는 중복 표시하지 않음.
+
+## 공통 본문 레이아웃 (`FilterPanelSideBody`)
+
+좌측 조회조건 + 우측 콘텐츠 화면은 **`FilterPanelSideBody`**(또는 이를 쓰는 `ListPageBody` / `TaskMappingSideLayout`)로 통일한다.
+
+- `useFilterPanelSideLayout` + `PanelSplitter` `orientation="horizontal"`.
+- `storageKey`로 너비 localStorage 영속화 — **화면마다 고유 키** (`filterStorageKey`).
+- 기본 너비: 목록 `280` / Task 매핑 `300` (`maxWidth` 480 vs 640).
+- `FilterPanel` 펼침: `h-full min-h-0 w-full` — **세로는 부모 래퍼를 꽉 채움**, 너비는 부모 래퍼가 담당.
+- i18n: `common.filterPanelResizeHorizontal`.
+- **`filterPanelCollapsed` 연동**:
+  - 접힘: 래퍼 `FILTER_PANEL_COLLAPSED_WIDTH_PX`(32).
+  - 접힘: 가로 `PanelSplitter` 미렌더, 리사이즈 비활성.
+
+### 사용처
+
+- **목록형**: `ListPageBody` + `filter` + `filterStorageKey` (필터 없으면 `content`만).
+- **Task 매핑**: `TaskMappingSideLayout` → 내부적으로 `FilterPanelSideBody`.
+
+## 금지
+
+- 패널 최상단에 접기 버튼만 따로 두기 (라벨과 수직 정렬 어긋남).
+- `Children.map` + `fieldIndex`로 직접 자식만 슬롯 부여.
+- `filterPanelCollapsed`인데 가로 `PanelSplitter`를 남겨 두기.
+- `ListPageBody`에 필터가 있는데 `filterStorageKey` 생략.

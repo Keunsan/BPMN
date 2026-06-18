@@ -19,3 +19,6 @@ export const listPageContentBodyClass = "flex min-h-0 flex-1 flex-col";
 
 /** FilterPanel 필드 세로 간격 */
 export const filterPanelFieldStackClass = "space-y-4";
+
+/** FilterPanel 접힘 너비(px) — Tailwind `w-8`(2rem)과 동일 */
+export const FILTER_PANEL_COLLAPSED_WIDTH_PX = 32;

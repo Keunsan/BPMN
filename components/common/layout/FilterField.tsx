@@ -1,7 +1,8 @@
 "use client";
 
-import { FilterPanelCollapseToggle } from "@/components/common/FilterPanelCollapseToggle";
-import { useFilterPanelFieldSlot } from "@/components/common/layout/filter-panel-context";
+import { useId } from "react";
+
+import { useFilterPanelSlot } from "@/components/common/layout/filter-panel-context";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +11,7 @@ type FilterFieldProps = {
   required?: boolean;
   children: React.ReactNode;
   className?: string;
-  /** 라벨 행 우측 액션 — 미지정 시 FilterPanel showCollapseToggle 첫 필드에 토글 표시 */
+  /** 라벨 행 우측 액션 — 미지정 시 FilterPanel 첫 필드에 접기 버튼 표시 */
   labelAction?: React.ReactNode;
 };
 
@@ -22,12 +23,13 @@ export const FilterField = ({
   className,
   labelAction,
 }: FilterFieldProps) => {
-  const { fieldIndex, showCollapseToggle } = useFilterPanelFieldSlot();
+  const fieldId = useId();
+  const slot = useFilterPanelSlot();
   const resolvedLabelAction =
     labelAction ??
-    (showCollapseToggle && fieldIndex === 0 ? (
-      <FilterPanelCollapseToggle compact />
-    ) : null);
+    (slot?.showCollapseToggle && slot.isCollapseToggleHost(fieldId)
+      ? slot.collapseToggle
+      : null);
 
   return (
     <div className={cn("pams-filter-field space-y-1.5", className)}>

@@ -398,15 +398,43 @@ export const ProcessTree = ({
       return null;
     }
 
-    if (impact.childProcessCount > 0) {
+    if (impact.blockedByVariants) {
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-          {t("deleteBlockedByChildren", { count: impact.childProcessCount })}
+          <p className="font-medium text-destructive">{t("deleteBlockedByVariants")}</p>
+          <p className="mt-1 text-muted-foreground">
+            {t("deleteBlockedByVariantsHint", { count: impact.variantCount })}
+          </p>
         </div>
       );
     }
 
-    if (!impact.hasDependencies) {
+    if (impact.blockedByChildren) {
+      return (
+        <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium text-destructive">
+            {t("deleteBlockedByChildren", { count: impact.descendantProcesses.length })}
+          </p>
+          <p className="text-muted-foreground">{t("deleteBlockedByChildrenHint")}</p>
+          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+            {impact.descendantProcesses.map((child) => (
+              <li key={child.nodeId}>
+                {child.code} · {child.name}
+                <span className="ml-1">({child.level})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
+    const hasCascadeChildren = impact.cascadeChildProcesses.length > 0;
+    const hasLinkedData =
+      impact.bpmnTaskLinks.length > 0 ||
+      impact.ownedBpmnModels.length > 0 ||
+      impact.metadataCounts.length > 0;
+
+    if (!hasCascadeChildren && !hasLinkedData) {
       return (
         <p className="text-sm text-muted-foreground">{t("deleteNoLinkedData")}</p>
       );
@@ -414,7 +442,22 @@ export const ProcessTree = ({
 
     return (
       <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm">
-        <p className="font-medium text-destructive">{t("deleteImpactWarning")}</p>
+        <p className="font-medium text-destructive">
+          {hasCascadeChildren ? t("deleteImpactChildWarning") : t("deleteImpactWarning")}
+        </p>
+        {hasCascadeChildren && (
+          <section className="space-y-1">
+            <p className="font-medium">{t("deleteImpactChildProcesses")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {impact.cascadeChildProcesses.map((child) => (
+                <li key={child.nodeId}>
+                  {child.code} · {child.name}
+                  <span className="ml-1">({child.level})</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {impact.bpmnTaskLinks.length > 0 && (
           <section className="space-y-1">
             <p className="font-medium">{t("deleteImpactBpmnTasks")}</p>
@@ -579,30 +622,22 @@ export const ProcessTree = ({
         onOpenChange={handleDeleteDialogOpenChange}
         title={t("deleteConfirmTitle")}
         description={t("deleteConfirmDesc", { name: deleteTarget?.name ?? "" })}
-        confirmLabel={
-          deleteImpactMutation.data?.hasDependencies
-            ? t("deleteCascadeConfirm")
-            : undefined
-        }
+        confirmLabel={t("deleteCascadeConfirm")}
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) {
-            deleteMutation.mutate(
-              {
-                nodeId: deleteTarget.nodeId,
-                cascade: deleteImpactMutation.data?.hasDependencies ?? false,
-              },
-              {
-                onSuccess: () => handleDeleteDialogOpenChange(false),
-              },
-            );
+            deleteMutation.mutate(deleteTarget.nodeId, {
+              onSuccess: () => handleDeleteDialogOpenChange(false),
+            });
           }
         }}
         loading={deleteMutation.isPending || deleteImpactMutation.isPending}
         confirmDisabled={
           !deleteImpactMutation.data ||
-          deleteImpactMutation.data.childProcessCount > 0 ||
-          deleteImpactMutation.isError
+          deleteImpactMutation.isError ||
+          deleteImpactMutation.data.blockedByChildren ||
+          deleteImpactMutation.data.blockedByVariants ||
+          !deleteImpactMutation.data.canCascadeDelete
         }
       >
         {renderDeleteImpact(deleteImpactMutation.data)}

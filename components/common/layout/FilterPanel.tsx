@@ -1,10 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Children, isValidElement } from "react";
+import { useMemo } from "react";
 
 import { FilterPanelCollapseToggle } from "@/components/common/FilterPanelCollapseToggle";
-import { FilterPanelContext } from "@/components/common/layout/filter-panel-context";
+import {
+  FilterPanelSlotContext,
+  useFilterPanelSlotContextValue,
+} from "@/components/common/layout/filter-panel-context";
 import {
   filterPanelFieldStackClass,
   pamsPanelCardClass,
@@ -19,7 +22,7 @@ type FilterPanelProps = {
   showTitle?: boolean;
   /** card — 패널 전체를 카드로 표현한다 */
   variant?: "default" | "card";
-  /** true면 첫 번째 FilterField 라벨 행 우측에 패널 접기 버튼 표시 */
+  /** true면 첫 FilterField 라벨 행 우측에 패널 접기 버튼 표시 */
   showCollapseToggle?: boolean;
   className?: string;
 };
@@ -36,27 +39,24 @@ export const FilterPanel = ({
   const t = useTranslations("common");
   const filterPanelCollapsed = useUIStore((state) => state.filterPanelCollapsed);
 
-  const renderChildren = () => {
-    const collapseInField = showCollapseToggle && !showTitle;
-    const fields = collapseInField
-      ? Children.map(Children.toArray(children), (child, fieldIndex) => {
-          if (!isValidElement(child)) {
-            return child;
-          }
+  const collapseInFirstField = showCollapseToggle && !showTitle;
+  const collapseToggle = useMemo(
+    () => <FilterPanelCollapseToggle compact />,
+    [],
+  );
+  const slotContext = useFilterPanelSlotContextValue(
+    collapseInFirstField,
+    collapseToggle,
+  );
 
-          return (
-            <FilterPanelContext.Provider
-              key={child.key ?? fieldIndex}
-              value={{
-                fieldIndex,
-                showCollapseToggle: true,
-              }}
-            >
-              {child}
-            </FilterPanelContext.Provider>
-          );
-        })
-      : children;
+  const renderChildren = () => {
+    const fields = collapseInFirstField ? (
+      <FilterPanelSlotContext.Provider value={slotContext}>
+        {children}
+      </FilterPanelSlotContext.Provider>
+    ) : (
+      children
+    );
 
     if (variant === "card") {
       return <div className={filterPanelFieldStackClass}>{fields}</div>;
@@ -69,7 +69,7 @@ export const FilterPanel = ({
     return (
       <aside
         className={cn(
-          "flex w-8 shrink-0 flex-col self-stretch transition-[width] duration-200",
+          "flex h-full min-h-0 w-8 shrink-0 flex-col self-stretch transition-[width] duration-200",
           className,
         )}
       >
@@ -83,7 +83,7 @@ export const FilterPanel = ({
   return (
     <aside
       className={cn(
-        "flex w-[280px] shrink-0 flex-col self-stretch transition-[width] duration-200",
+        "flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col self-stretch transition-[width] duration-200",
         variant === "default" && "border-r bg-card",
         variant === "card" && pamsPanelCardClass,
         className,

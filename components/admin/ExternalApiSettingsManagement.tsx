@@ -170,6 +170,7 @@ export const ExternalApiSettingsManagement = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-external-api-filter-panel-width"
         filter={
           <FilterPanel>
             <FilterField label={t("systemSearch")}>

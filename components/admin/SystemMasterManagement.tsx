@@ -307,6 +307,7 @@ export const SystemMasterManagement = () => {
         }
       />
       <ListPageBody
+        filterStorageKey="pams-system-master-filter-panel-width"
         filter={
           <FilterPanel>
             <FilterField label={t("systemSearch")}>

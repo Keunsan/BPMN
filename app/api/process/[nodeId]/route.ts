@@ -24,10 +24,9 @@ export const PUT = withApiHandler(async ({ request, locale, params }) => {
 });
 
 /** DELETE /api/process/[nodeId] — 노드 삭제 */
-export const DELETE = withApiHandler(async ({ request, params }) => {
+export const DELETE = withApiHandler(async ({ params }) => {
   await requireAuth();
   const nodeId = Number(params.nodeId);
-  const cascade = request.nextUrl.searchParams.get("cascade") === "true";
-  await deleteProcess(nodeId, { cascade });
+  await deleteProcess(nodeId);
   return { data: { deleted: true } };
 });
