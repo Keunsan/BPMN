@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PAMS — 전사 프로세스 관리 UI 목업</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --sidebar-bg: #0f172a;
+      --sidebar-text: #94a3b8;
+      --sidebar-active: #1e293b;
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --l1: #2563eb;
+      --l2: #059669;
+      --l3: #d97706;
+      --l4: #7c3aed;
+      --nav-w: 220px;
+      --header-h: 52px;
+      --filter-w: 260px;
+      --sheet-w: 480px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Doc shell ── */
+    .doc-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .doc-nav {
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      background: var(--surface); border-right: 1px solid var(--border);
+      padding: 1.25rem 0.75rem;
+    }
+    .doc-nav h1 { font-size: 0.8125rem; font-weight: 700; padding: 0 0.75rem 1rem; }
+    .doc-nav a {
+      display: block; padding: 0.3rem 0.75rem; border-radius: 6px;
+      color: var(--muted); text-decoration: none; font-size: 0.8125rem;
+    }
+    .doc-nav a:hover, .doc-nav a.on { background: var(--accent-soft); color: var(--accent); }
+    .doc-nav .grp {
+      font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted); padding: 0.75rem 0.75rem 0.25rem;
+    }
+    .doc-main { padding: 1.5rem 2rem 3rem; max-width: 1400px; }
+
+    .doc-intro {
+      background: linear-gradient(135deg, #1e3a5f, #2563eb);
+      color: #fff; border-radius: 12px; padding: 1.75rem; margin-bottom: 1.5rem;
+    }
+    .doc-intro h2 { font-size: 1.375rem; margin-bottom: 0.35rem; }
+    .doc-intro p { opacity: 0.85; font-size: 0.875rem; max-width: 720px; }
+    .doc-intro .meta { margin-top: 0.75rem; font-size: 0.75rem; opacity: 0.7; }
+
+    .mock-section { margin-bottom: 3rem; scroll-margin-top: 1rem; }
+    .mock-section > .sec-head { margin-bottom: 0.75rem; }
+    .mock-section > .sec-head h3 { font-size: 1.125rem; font-weight: 700; }
+    .mock-section > .sec-head .sid {
+      font-family: Consolas, monospace; font-size: 0.6875rem;
+      color: var(--accent); font-weight: 600;
+    }
+    .mock-section > .sec-head p { color: var(--muted); font-size: 0.8125rem; margin-top: 0.25rem; }
+    .mock-tag {
+      display: inline-block; font-size: 0.6875rem; font-weight: 600;
+      padding: 0.15rem 0.5rem; border-radius: 999px; margin-right: 0.35rem;
+    }
+    .tag-cur { background: #f1f5f9; color: var(--muted); }
+    .tag-sheet { background: #fef3c7; color: #b45309; }
+
+    .note-box {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      padding: 0.75rem 1rem; font-size: 0.8125rem; color: #92400e; margin-bottom: 0.75rem;
+    }
+
+    /* ── PAMS App Frame ── */
+    .pams-app {
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(15,23,42,0.08);
+      background: var(--bg);
+      height: 680px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .pams-topbar {
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 1rem; gap: 0.75rem;
+      flex-shrink: 0;
+    }
+    .pams-logo { font-weight: 800; font-size: 0.9375rem; color: var(--accent); letter-spacing: -0.02em; }
+    .pams-breadcrumb { font-size: 0.75rem; color: var(--muted); flex: 1; }
+    .pams-breadcrumb b { color: var(--text); font-weight: 600; }
+    .pams-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: 0.6875rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .pams-body { display: flex; flex: 1; min-height: 0; }
+
+    .pams-sidebar {
+      width: var(--nav-w); background: var(--sidebar-bg);
+      padding: 0.75rem 0; flex-shrink: 0; overflow-y: auto;
+    }
+    .pams-sidebar .nav-grp {
+      font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #475569; padding: 0.75rem 1rem 0.25rem;
+    }
+    .pams-sidebar .nav-item {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 1rem; font-size: 0.75rem; color: var(--sidebar-text);
+    }
+    .pams-sidebar .nav-item.active {
+      background: var(--sidebar-active); color: #fff;
+      border-left: 3px solid var(--accent);
+    }
+    .pams-sidebar .nav-item .ico { width: 16px; text-align: center; opacity: 0.7; }
+    .pams-sidebar .nav-item.sub { padding-left: 2rem; font-size: 0.6875rem; }
+
+    .pams-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; padding: 6px; gap: 6px; }
+
+    /* ── Page header ── */
+    .page-header {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 0.85rem; height: 44px; flex-shrink: 0;
+    }
+    .page-header-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .page-header-icon {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: var(--accent-soft); color: var(--accent);
+      display: flex; align-items: center; justify-content: center; font-size: 0.875rem;
+    }
+    .page-header h2 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .page-header .desc {
+      font-size: 10px; color: var(--muted); padding-left: 0.5rem;
+      border-left: 1px solid var(--border); margin-left: 0.5rem;
+    }
+
+    /* ── List body: filter + content ── */
+    .list-body { display: flex; flex: 1; min-height: 0; gap: 0; }
+
+    .filter-panel {
+      width: var(--filter-w); flex-shrink: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+      padding: 0.85rem; display: flex; flex-direction: column; gap: 0.85rem;
+      overflow-y: auto;
+    }
+    .filter-field label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.6875rem; font-weight: 600; color: var(--muted); margin-bottom: 0.35rem;
+    }
+    .filter-hint { font-size: 11px; color: var(--muted); line-height: 1.4; padding: 0 2px; }
+
+    .splitter {
+      width: 4px; flex-shrink: 0; cursor: col-resize;
+      background: transparent; position: relative;
+    }
+    .splitter::after {
+      content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 3px; height: 32px; border-radius: 2px; background: var(--border-strong);
+    }
+
+    .content-area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+    .content-panel {
+      flex: 1; min-height: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .content-panel-head {
+      padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border);
+      font-size: 0.8125rem; font-weight: 600;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .content-panel-body { flex: 1; overflow-y: auto; padding: 0.85rem; }
+
+    /* ── Shared UI ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem;
+      font-weight: 600; border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); cursor: default; white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-outline { background: var(--surface); }
+    .btn-sm { padding: 0.25rem 0.55rem; font-size: 0.6875rem; }
+    .btn-icon { padding: 0.25rem; width: 28px; height: 28px; justify-content: center; }
+
+    .input, .select, .textarea {
+      width: 100%; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.75rem; background: var(--surface);
+      color: var(--text); font-family: inherit;
+    }
+    .textarea { min-height: 72px; resize: vertical; }
+
+    .search-row { display: flex; gap: 0.5rem; margin-bottom: 0.65rem; }
+    .search-input { flex: 1; padding-left: 2rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%2364748b' viewBox='0 0 24 24'%3E%3Cpath d='M21 21l-4.35-4.35M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: 0.55rem center;
+    }
+
+    .level-controls {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.65rem;
+      font-size: 0.6875rem;
+    }
+    .level-chip {
+      padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid var(--border);
+      background: var(--surface); cursor: default; font-weight: 600;
+    }
+    .level-chip.on { background: var(--accent-soft); border-color: #bfdbfe; }
+    .level-chip.l1 { color: var(--l1); }
+    .level-chip.l2 { color: var(--l2); }
+    .level-chip.l3 { color: var(--l3); }
+    .level-chip.l4 { color: var(--l4); }
+
+    /* ── Process tree ── */
+    .tree { list-style: none; }
+    .tree-node {
+      display: flex; align-items: center; gap: 0.25rem;
+      padding: 0.2rem 0.35rem 0.2rem 0; border-radius: 6px;
+      font-size: 0.8125rem; cursor: default;
+    }
+    .tree-node:hover { background: #f1f5f9; }
+    .tree-node.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .tree-toggle { width: 18px; text-align: center; color: var(--muted); font-size: 0.625rem; flex-shrink: 0; }
+    .tree-grip { color: #cbd5e1; font-size: 0.625rem; flex-shrink: 0; cursor: grab; }
+    .tree-icon { flex-shrink: 0; font-size: 0.75rem; }
+    .tree-icon.l1 { color: var(--l1); }
+    .tree-icon.l2 { color: var(--l2); }
+    .tree-icon.l3 { color: var(--l3); }
+    .tree-icon.l4 { color: var(--l4); }
+    .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-count { font-size: 0.6875rem; color: var(--muted); flex-shrink: 0; }
+    .tree-more { opacity: 0; font-size: 0.75rem; color: var(--muted); padding: 0 0.2rem; }
+    .tree-node:hover .tree-more { opacity: 1; }
+
+    .badge {
+      display: inline-block; padding: 0.05rem 0.4rem; border-radius: 999px;
+      font-size: 0.5625rem; font-weight: 700; flex-shrink: 0;
+    }
+    .badge-published { background: #ecfdf5; color: var(--success); }
+    .badge-draft { background: #f1f5f9; color: var(--muted); }
+    .badge-scoped { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+    .badge-variant { background: #f1f5f9; color: var(--muted); }
+
+    /* ── E2E section ── */
+    .e2e-section { margin-top: 0.85rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .e2e-title {
+      font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.4rem;
+      display: flex; align-items: center; gap: 0.35rem;
+    }
+    .e2e-item {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.5rem; border-radius: 6px; font-size: 0.8125rem;
+    }
+    .e2e-item:hover { background: #f1f5f9; }
+
+    /* ── Sheet (등록/상세 패널) ── */
+    .sheet-overlay {
+      position: absolute; inset: 0; background: rgba(15,23,42,0.25);
+      display: flex; justify-content: flex-end; z-index: 10;
+    }
+    .sheet-panel {
+      width: var(--sheet-w); max-width: calc(100% - 2rem);
+      background: var(--surface); border-left: 1px solid var(--border);
+      box-shadow: -8px 0 32px rgba(15,23,42,0.12);
+      display: flex; flex-direction: column; overflow: hidden;
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    .sheet-form { padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; }
+    .sheet-form h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.25rem; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-label {
+      display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.35rem;
+    }
+    .form-label .req { color: var(--danger); margin-left: 2px; }
+
+    .lang-tabs {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0.65rem;
+    }
+    .lang-tab {
+      padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 600;
+      color: var(--muted); border-bottom: 2px solid transparent; cursor: default;
+    }
+    .lang-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+    .form-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; }
+    .form-check input { width: 16px; height: 16px; }
+
+    .scope-box {
+      border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem;
+      background: #fafbfc; margin-bottom: 1rem;
+    }
+    .scope-box .title { font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .scope-radios { display: flex; gap: 1.25rem; font-size: 0.8125rem; }
+    .scope-radios label { display: flex; align-items: center; gap: 0.35rem; }
+
+    .form-actions { display: flex; gap: 0.5rem; padding-top: 0.5rem; }
+
+    /* ── Detail sheet tabs ── */
+    .detail-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+    .detail-header .code { font-family: Consolas, monospace; font-size: 0.75rem; color: var(--muted); }
+    .detail-header h3 { font-size: 1.125rem; font-weight: 600; margin: 0.25rem 0; }
+    .detail-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .detail-actions { display: flex; gap: 0.4rem; margin-top: 0.65rem; }
+
+    .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 1rem; flex-shrink: 0; }
+    .tab {
+      padding: 0.55rem 0.75rem; font-size: 0.75rem; font-weight: 600;
+      color: var(--muted); border-bottom: 2px solid transparent; cursor: default;
+    }
+    .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { padding: 1rem 1.25rem; overflow-y: auto; flex: 1; }
+    .info-grid { display: grid; grid-template-columns: 120px 1fr; gap: 0.5rem 1rem; font-size: 0.8125rem; }
+    .info-grid dt { color: var(--muted); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="doc-layout">
+    <nav class="doc-nav">
+      <h1>전사 프로세스 관리<br>UI 목업</h1>
+      <div class="grp">화면</div>
+      <a href="#main" class="on">1. 메인 (트리 목록)</a>
+      <a href="#register">2. 등록 패널 (Sheet)</a>
+      <a href="#register-l3">3. L3 등록 (범위 선택)</a>
+      <a href="#detail">4. 상세 패널 (참고)</a>
+      <div class="grp">컨텍스트</div>
+      <a href="#context">화면 구조 · IA</a>
+      <a href="#ask-ai">AI 문의 가이드</a>
+    </nav>
+
+    <main class="doc-main">
+      <div class="doc-intro">
+        <h2>PAMS — 전사 프로세스 관리</h2>
+        <p>
+          Next.js 16 기반 PAMS(Process Asset Management System)의 <strong>전사 프로세스 관리</strong> 화면 UI 목업입니다.
+          L1~L4 계층 트리, 법인·사업부 scope 필터, E2E 프로세스 섹션, 오른쪽 Sheet 패널(등록·상세)을 포함합니다.
+          다른 AI에게 UX·비주얼 디자인 개선 방향을 문의할 때 이 문서를 첨부하세요.
+        </p>
+        <div class="meta">Route: /ko/process · Component: ProcessListClient · 2026-06-19</div>
+      </div>
+
+      <!-- ═══ 1. Main view ═══ -->
+      <section class="mock-section" id="main">
+        <div class="sec-head">
+          <span class="sid">SCREEN-01</span>
+          <h3>메인 화면 — 프로세스 트리 목록</h3>
+          <p>
+            <span class="mock-tag tag-cur">현재 구현</span>
+            좌측 scope 필터 + 우측 L1~L4 트리. 노드 클릭 시 오른쪽 Sheet에서 상세 표시.
+          </p>
+        </div>
+
+        <div class="pams-app" id="app-main">
+          <div class="pams-topbar">
+            <div class="pams-logo">PAMS</div>
+            <div class="pams-breadcrumb">프로세스 관리 / <b>전사 프로세스 관리</b></div>
+            <div class="pams-avatar">김</div>
+          </div>
+          <div class="pams-body">
+            <aside class="pams-sidebar">
+              <div class="nav-grp">프로세스 관리</div>
+              <div class="nav-item active"><span class="ico">⬡</span> 전사 프로세스 관리</div>
+              <div class="nav-item sub"><span class="ico">↳</span> E2E 프로세스</div>
+              <div class="nav-item sub"><span class="ico">↳</span> 표준/변형 비교</div>
+              <div class="nav-grp">BPMN</div>
+              <div class="nav-item"><span class="ico">◇</span> 모델 목록</div>
+              <div class="nav-grp">메타데이터</div>
+              <div class="nav-item"><span class="ico">▣</span> Task 속성 관리</div>
+            </aside>
+            <div class="pams-content">
+              <header class="page-header">
+                <div class="page-header-left">
+                  <div class="page-header-icon">⬡</div>
+                  <h2>전사 프로세스 관리</h2>
+                  <span class="desc">코드 또는 명칭 검색</span>
+                </div>
+                <button class="btn btn-primary btn-sm" type="button">+ 등록</button>
+              </header>
+
+              <div class="list-body">
+                <aside class="filter-panel">
+                  <div class="filter-field">
+                    <label>법인 <span style="font-weight:400;color:#94a3b8">◀</span></label>
+                    <select class="select"><option>전체 법인</option><option>QNC</option><option>ABC Corp</option></select>
+                  </div>
+                  <div class="filter-field">
+                    <label>사업부</label>
+                    <select class="select"><option>전체 사업부</option><option>CO</option><option>영업</option></select>
+                  </div>
+                  <p class="filter-hint">전체 법인·전체 사업부는 모든 scope의 프로세스 카탈로그를 표시합니다.</p>
+                </aside>
+                <div class="splitter" aria-hidden="true"></div>
+                <div class="content-area">
+                  <div class="content-panel">
+                    <div class="content-panel-head">⬡ 전사 프로세스 관리</div>
+                    <div class="content-panel-body">
+                      <div class="search-row">
+                        <input class="input search-input" type="search" placeholder="코드 또는 명칭 검색" value="" />
+                        <button class="btn btn-primary btn-sm" type="button">+ 등록</button>
+                      </div>
+                      <div class="level-controls">
+                        <span style="color:var(--muted);margin-right:0.25rem">레벨 펼치기</span>
+                        <span class="level-chip l1 on">L1</span>
+                        <span class="level-chip l2 on">L2</span>
+                        <span class="level-chip l3">L3</span>
+                        <span class="level-chip l4">L4</span>
+                      </div>
+
+                      <ul class="tree">
+                        <li>
+                          <div class="tree-node">
+                            <span class="tree-grip">⠿</span>
+                            <span class="tree-toggle">▼</span>
+                            <span class="tree-icon l1">⎇</span>
+                            <span class="tree-label">STP — 전략·기획</span>
+                            <span class="tree-count">(3)</span>
+                            <span class="badge badge-published">배포됨</span>
+                            <span class="tree-more">⋯</span>
+                          </div>
+                          <ul class="tree" style="padding-left:16px">
+                            <li>
+                              <div class="tree-node">
+                                <span class="tree-grip">⠿</span>
+                                <span class="tree-toggle">▼</span>
+                                <span class="tree-icon l2">⎇</span>
+                                <span class="tree-label">STP-01 — 경영전략 수립</span>
+                                <span class="tree-count">(2)</span>
+                                <span class="badge badge-published">배포됨</span>
+                                <span class="tree-more">⋯</span>
+                              </div>
+                              <ul class="tree" style="padding-left:16px">
+                                <li>
+                                  <div class="tree-node sel">
+                                    <span class="tree-grip">⠿</span>
+                                    <span class="tree-toggle">▼</span>
+                                    <span class="tree-icon l3">⎇</span>
+                                    <span class="tree-label">STP-01-01 — 전략과제 도출</span>
+                                    <span class="tree-count">(4)</span>
+                                    <span class="badge badge-published">배포됨</span>
+                                    <span class="tree-more">⋯</span>
+                                  </div>
+                                  <ul class="tree" style="padding-left:16px">
+                                    <li>
+                                      <div class="tree-node">
+                                        <span class="tree-grip">⠿</span>
+                                        <span class="tree-toggle">&nbsp;</span>
+                                        <span class="tree-icon l4">⎇</span>
+                                        <span class="tree-label">STP-01-01-01 — 환경분석</span>
+                                        <span class="badge badge-draft">초안</span>
+                                        <span class="tree-more">⋯</span>
+                                      </div>
+                                    </li>
+                                    <li>
+                                      <div class="tree-node">
+                                        <span class="tree-grip">⠿</span>
+                                        <span class="tree-toggle">&nbsp;</span>
+                                        <span class="tree-icon l4">⎇</span>
+                                        <span class="tree-label">STP-01-01-02 — SWOT 분석</span>
+                                        <span class="badge badge-published">배포됨</span>
+                                        <span class="tree-more">⋯</span>
+                                      </div>
+                                    </li>
+                                  </ul>
+                                </li>
+                                <li>
+                                  <div class="tree-node">
+                                    <span class="tree-grip">⠿</span>
+                                    <span class="tree-toggle">▶</span>
+                                    <span class="tree-icon l3">⎇</span>
+                                    <span class="tree-label">STP-01-02 — KPI 설정</span>
+                                    <span class="tree-count">(3)</span>
+                                    <span class="badge badge-scoped">전용</span>
+                                    <span class="badge badge-published">배포됨</span>
+                                    <span class="tree-more">⋯</span>
+                                  </div>
+                                </li>
+                              </ul>
+                            </li>
+                          </ul>
+                        </li>
+                        <li>
+                          <div class="tree-node">
+                            <span class="tree-grip">⠿</span>
+                            <span class="tree-toggle">▶</span>
+                            <span class="tree-icon l1">⎇</span>
+                            <span class="tree-label">OPR — 운영</span>
+                            <span class="tree-count">(5)</span>
+                            <span class="badge badge-published">배포됨</span>
+                            <span class="tree-more">⋯</span>
+                          </div>
+                        </li>
+                        <li>
+                          <div class="tree-node">
+                            <span class="tree-grip">⠿</span>
+                            <span class="tree-toggle">▶</span>
+                            <span class="tree-icon l1">⎇</span>
+                            <span class="tree-label">SUP — 지원</span>
+                            <span class="tree-count">(4)</span>
+                            <span class="badge badge-published">배포됨</span>
+                            <span class="tree-more">⋯</span>
+                          </div>
+                        </li>
+                      </ul>
+
+                      <div class="e2e-section">
+                        <div class="e2e-title"><span style="color:#0284c7">⎇</span> E2E 프로세스</div>
+                        <div class="e2e-item">
+                          <span style="color:#0284c7">⎇</span>
+                          <span style="flex:1">E2E-001 — 수주~납품 End-to-End</span>
+                          <span class="badge badge-published">배포됨</span>
+                        </div>
+                        <div class="e2e-item">
+                          <span style="color:#0284c7">⎇</span>
+                          <span style="flex:1">E2E-002 — 구매~정산 흐름</span>
+                          <span class="badge badge-draft">초안</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 2. Register sheet (L1) ═══ -->
+      <section class="mock-section" id="register">
+        <div class="sec-head">
+          <span class="sid">SCREEN-02</span>
+          <h3>등록 패널 — L1 프로세스 신규 등록</h3>
+          <p>
+            <span class="mock-tag tag-sheet">Sheet (우측 슬라이드)</span>
+            헤더 또는 트리 내 「+ 등록」 클릭 시 열림. 실제 구현은 Dialog가 아닌 <code>Sheet side="right"</code> (최대 768px).
+          </p>
+        </div>
+        <div class="note-box">
+          상단 「등록」 버튼 → <code>parentId: null</code> → L1 루트 프로세스 등록. 적용 범위(scope) 필드는 L3 등록 시에만 표시됩니다.
+        </div>
+
+        <div class="pams-app">
+          <div class="pams-topbar">
+            <div class="pams-logo">PAMS</div>
+            <div class="pams-breadcrumb">프로세스 관리 / <b>전사 프로세스 관리</b></div>
+            <div class="pams-avatar">김</div>
+          </div>
+          <div class="pams-body">
+            <aside class="pams-sidebar">
+              <div class="nav-grp">프로세스 관리</div>
+              <div class="nav-item active"><span class="ico">⬡</span> 전사 프로세스 관리</div>
+            </aside>
+            <div class="pams-content" style="opacity:0.6;pointer-events:none">
+              <header class="page-header">
+                <div class="page-header-left">
+                  <div class="page-header-icon">⬡</div>
+                  <h2>전사 프로세스 관리</h2>
+                </div>
+                <button class="btn btn-primary btn-sm" type="button">+ 등록</button>
+              </header>
+              <div class="list-body">
+                <aside class="filter-panel"><p class="filter-hint">… (배경 화면)</p></aside>
+                <div class="content-area"><div class="content-panel" style="min-height:400px"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sheet-overlay">
+            <div class="sheet-panel">
+              <form class="sheet-form">
+                <h3>프로세스 등록</h3>
+
+                <div class="form-group">
+                  <label class="form-label">프로세스명 <span class="req">*</span></label>
+                  <div class="lang-tabs">
+                    <span class="lang-tab on">한국어</span>
+                    <span class="lang-tab">English</span>
+                    <span class="lang-tab">繁體中文</span>
+                  </div>
+                  <input class="input" type="text" placeholder="프로세스명 입력" value="" />
+                  <textarea class="textarea" placeholder="설명 입력" style="margin-top:0.5rem"></textarea>
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-check">
+                    <input type="checkbox" checked id="auto-code" />
+                    <label for="auto-code">코드 자동 생성</label>
+                  </div>
+                  <div></div>
+                  <div class="form-group">
+                    <label class="form-label">상태</label>
+                    <select class="select"><option>초안</option><option>검토 중</option><option>승인됨</option><option>배포됨</option></select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">버전</label>
+                    <input class="input" type="text" value="1.0.0" />
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button class="btn btn-primary" type="button">저장</button>
+                  <button class="btn btn-outline" type="button">취소</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 3. Register L3 with scope ═══ -->
+      <section class="mock-section" id="register-l3">
+        <div class="sec-head">
+          <span class="sid">SCREEN-03</span>
+          <h3>등록 패널 — L3 하위 추가 (적용 범위 선택)</h3>
+          <p>
+            <span class="mock-tag tag-sheet">Sheet</span>
+            트리 노드 ⋯ 메뉴 → 「하위 추가」 시 해당 레벨의 자식(L3) 등록. 전사 공통 vs 법인·사업부 전용 선택.
+          </p>
+        </div>
+
+        <div class="pams-app" style="height:720px">
+          <div class="pams-topbar">
+            <div class="pams-logo">PAMS</div>
+            <div class="pams-breadcrumb">프로세스 관리 / <b>전사 프로세스 관리</b></div>
+            <div class="pams-avatar">김</div>
+          </div>
+          <div class="pams-body">
+            <div class="pams-content" style="opacity:0.5;pointer-events:none;flex:1">
+              <header class="page-header"><h2 style="padding:0.5rem">…</h2></header>
+            </div>
+          </div>
+          <div class="sheet-overlay">
+            <div class="sheet-panel" style="width:520px">
+              <form class="sheet-form">
+                <h3>프로세스 등록</h3>
+                <p style="font-size:0.75rem;color:var(--muted);margin:-0.75rem 0 1rem">
+                  상위: STP-01 — 경영전략 수립 (L2) → 신규 L3
+                </p>
+
+                <div class="form-group">
+                  <label class="form-label">프로세스명 <span class="req">*</span></label>
+                  <div class="lang-tabs">
+                    <span class="lang-tab on">한국어</span>
+                    <span class="lang-tab">English</span>
+                    <span class="lang-tab">繁體中文</span>
+                  </div>
+                  <input class="input" type="text" placeholder="프로세스명 입력" />
+                  <textarea class="textarea" placeholder="설명 입력" style="margin-top:0.5rem"></textarea>
+                </div>
+
+                <div class="scope-box">
+                  <div class="title">적용 범위</div>
+                  <div class="scope-radios">
+                    <label><input type="radio" name="scope" checked /> 전사 공통 (QNC · CO)</label>
+                    <label><input type="radio" name="scope" /> 법인·사업부 전용</label>
+                  </div>
+                  <!-- scoped 선택 시 아래 필드 표시 -->
+                  <div style="display:none;margin-top:0.75rem" class="form-grid">
+                    <div class="form-group">
+                      <label class="form-label">법인</label>
+                      <select class="select"><option>법인을 선택하세요</option></select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">사업부</label>
+                      <select class="select"><option>사업부를 선택하세요</option></select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-check">
+                    <input type="checkbox" checked />
+                    <label>코드 자동 생성</label>
+                  </div>
+                  <div></div>
+                  <div class="form-group">
+                    <label class="form-label">상태</label>
+                    <select class="select"><option selected>초안</option></select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">버전</label>
+                    <input class="input" value="1.0.0" />
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button class="btn btn-primary">저장</button>
+                  <button class="btn btn-outline">취소</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 4. Detail sheet ═══ -->
+      <section class="mock-section" id="detail">
+        <div class="sec-head">
+          <span class="sid">SCREEN-04</span>
+          <h3>상세 패널 — 노드 선택 시 (참고)</h3>
+          <p>
+            <span class="mock-tag tag-cur">현재 구현</span>
+            트리 노드 클릭 → 동일 Sheet에서 ProcessDetail 표시. 탭: 기본정보 · BPMN 모델 · 포함된 E2E · Task 메타데이터 · 변경 이력 · 버전 비교
+          </p>
+        </div>
+
+        <div class="pams-app" style="height:640px">
+          <div class="pams-topbar">
+            <div class="pams-logo">PAMS</div>
+            <div class="pams-breadcrumb">프로세스 관리 / <b>전사 프로세스 관리</b></div>
+            <div class="pams-avatar">김</div>
+          </div>
+          <div class="pams-body">
+            <div class="pams-content" style="opacity:0.45;pointer-events:none;flex:1"></div>
+          </div>
+          <div class="sheet-overlay">
+            <div class="sheet-panel" style="width:560px">
+              <div class="detail-header">
+                <div class="code">STP-01-01 · L3</div>
+                <h3>전략과제 도출</h3>
+                <div class="detail-meta">
+                  <span class="badge badge-published">배포됨</span>
+                  <span style="font-size:0.75rem;color:var(--muted)">v1.2.0</span>
+                  <span style="font-size:0.75rem;color:var(--muted)">전사 공통 (QNC · CO)</span>
+                </div>
+                <div class="detail-actions">
+                  <button class="btn btn-outline btn-sm">수정</button>
+                  <button class="btn btn-outline btn-sm">승인 요청</button>
+                </div>
+              </div>
+              <div class="tabs">
+                <span class="tab on">기본정보</span>
+                <span class="tab">BPMN 모델</span>
+                <span class="tab">포함된 E2E</span>
+                <span class="tab">Task 메타데이터</span>
+                <span class="tab">변경 이력</span>
+              </div>
+              <div class="tab-content">
+                <dl class="info-grid">
+                  <dt>코드</dt><dd>STP-01-01</dd>
+                  <dt>레벨</dt><dd>L3</dd>
+                  <dt>상태</dt><dd>배포됨</dd>
+                  <dt>버전</dt><dd>1.2.0</dd>
+                  <dt>적용 범위</dt><dd>전사 공통 (QNC · CO)</dd>
+                  <dt>설명</dt><dd>경영전략 수립 프로세스의 핵심 L3 단계로, 전략과제를 도출하고 우선순위를 설정합니다.</dd>
+                  <dt>하위 L4</dt><dd>4건</dd>
+                  <dt>변형</dt><dd>2건</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ Context ═══ -->
+      <section class="mock-section" id="context">
+        <div class="sec-head">
+          <h3>화면 구조 · 정보 아키텍처</h3>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;font-size:0.8125rem">
+          <pre style="font-family:Consolas,monospace;font-size:0.75rem;line-height:1.6;overflow-x:auto">ListPageLayout
+├── PageHeader (아이콘 + "전사 프로세스 관리" + 설명 + [등록])
+├── ListPageBody
+│   ├── FilterPanel (좌, 리사이즈 가능)
+│   │   ├── 법인 Select
+│   │   ├── 사업부 Select
+│   │   └── scope 안내 문구
+│   └── PageContent (우)
+│       └── ContentPanel
+│           ├── ProcessTree
+│           │   ├── SearchBar + [등록]
+│           │   ├── TreeLevelExpandControls (L1~L4)
+│           │   └── L1~L4 트리 (DnD, 상태 뱃지, ⋯ 메뉴)
+│           └── E2eProcessTreeSection
+└── Sheet (side=right, max 768px)
+    ├── ProcessForm (등록/수정)
+    ├── ProcessDetail (상세 + 탭)
+    └── E2eProcessForm / E2eProcessDetail</pre>
+
+          <h4 style="margin:1rem 0 0.5rem;font-size:0.875rem">트리 노드 ⋯ 메뉴</h4>
+          <ul style="padding-left:1.25rem;color:var(--muted)">
+            <li>상세 보기</li>
+            <li>하위 추가</li>
+            <li>변형 생성 (L3/L4)</li>
+            <li>삭제</li>
+          </ul>
+
+          <h4 style="margin:1rem 0 0.5rem;font-size:0.875rem">레벨별 색상 (현재)</h4>
+          <ul style="padding-left:1.25rem">
+            <li><span style="color:var(--l1)">L1 — blue-600</span></li>
+            <li><span style="color:var(--l2)">L2 — emerald-600</span></li>
+            <li><span style="color:var(--l3)">L3 — amber-600</span></li>
+            <li><span style="color:var(--l4)">L4 — violet-600</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ═══ AI guide ═══ -->
+      <section class="mock-section" id="ask-ai">
+        <div class="sec-head">
+          <h3>다른 AI에게 문의할 때 — 프롬프트 예시</h3>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;font-size:0.8125rem">
+          <p style="margin-bottom:0.75rem;color:var(--muted)">아래 텍스트를 복사해 디자인 AI(ChatGPT, Claude 등)에 붙여넣으세요. 이 HTML 파일을 함께 첨부하면 더 정확합니다.</p>
+          <blockquote style="border-left:3px solid var(--accent);padding:0.75rem 1rem;background:#f8fafc;font-size:0.8125rem;line-height:1.6">
+            B2B 엔터프라이즈 프로세스 관리(PAMS) 시스템의 「전사 프로세스 관리」 화면 UI 목업을 첨부합니다.<br><br>
+            <strong>현재 구성:</strong><br>
+            - 좌측: 법인·사업부 scope 필터 (리사이즈 가능 패널)<br>
+            - 중앙: L1~L4 계층 프로세스 트리 + 검색 + 레벨 펼치기 + E2E 프로세스 목록<br>
+            - 우측 Sheet: 프로세스 등록/상세 (768px)<br><br>
+            <strong>문의:</strong><br>
+            1. 정보 밀도가 높은 트리 UI의 가독성·계층 구분을 어떻게 개선할 수 있을까요?<br>
+            2. 등록 Sheet 폼의 필드 순서·그룹핑·적용 범위(scope) UX를 더 직관적으로 만들려면?<br>
+            3. 필터 패널 + 트리 + Sheet 3단 구조의 레이아웃·반응형 전략은?<br>
+            4. 전사 공통/법인 전용/변형 뱃지 표현을 더 명확히 하려면?<br>
+            5. Shadcn/Tailwind 기반 B2B SaaS 톤에 맞는 비주얼 리파인 방향을 제안해 주세요.
+          </blockquote>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
