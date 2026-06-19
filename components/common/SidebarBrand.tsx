@@ -35,10 +35,10 @@ export const SidebarBrand = () => {
       </div>
       {!sidebarCollapsed && (
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold leading-tight">
+          <p className="truncate text-lg font-semibold leading-tight">
             {t("app.title")}
           </p>
-          <p className="truncate text-[11px] leading-snug text-muted-foreground">
+          <p className="truncate text-sm leading-snug text-muted-foreground">
             {t("app.description")}
           </p>
         </div>

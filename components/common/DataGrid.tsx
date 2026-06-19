@@ -425,7 +425,7 @@ export const DataGrid = <T,>({
         )}
 
         {loadingMore ? (
-          <div className="py-2 text-center text-[11px] text-slate-400">
+          <div className="py-2 text-center text-sm text-slate-400">
             {t("loading")}
           </div>
         ) : null}
@@ -535,7 +535,7 @@ const ColumnFilter = <T,>({
             ) : null}
           </div>
         ) : options.length === 0 ? (
-          <p className="px-1 py-2 text-center text-[11px] text-muted-foreground">
+          <p className="px-1 py-2 text-center text-sm text-muted-foreground">
             {emptyLabel}
           </p>
         ) : (
@@ -543,7 +543,7 @@ const ColumnFilter = <T,>({
             {isActive ? (
               <button
                 type="button"
-                className="mb-1 self-end text-[11px] text-sky-600 hover:underline"
+                className="mb-1 self-end text-sm text-sky-600 hover:underline"
                 onClick={() => header.column.setFilterValue(undefined)}
               >
                 {clearLabel}
@@ -593,7 +593,7 @@ export const DataGridStatusBadge = ({
 }) => (
   <span
     className={cn(
-      "inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium",
+      "inline-flex h-5 items-center rounded-full px-2 text-xs font-medium",
       active
         ? "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300"
         : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",

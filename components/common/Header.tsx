@@ -49,7 +49,7 @@ export function Header() {
           readOnly
           aria-label={t("common.search")}
         />
-        <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+        <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-xs font-medium text-muted-foreground sm:inline-flex">
           Ctrl+K
         </kbd>
       </div>

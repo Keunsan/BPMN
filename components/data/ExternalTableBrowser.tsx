@@ -330,7 +330,7 @@ export const ExternalTableBrowser = ({
 
         cell: (table) => (
 
-          <span className="font-mono text-[11px]">{table.tableName}</span>
+          <span className="font-mono text-sm">{table.tableName}</span>
 
         ),
 
@@ -378,7 +378,7 @@ export const ExternalTableBrowser = ({
 
             variant="outline"
 
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-sm"
 
             onClick={(event) => {
 
@@ -782,7 +782,7 @@ const ColumnPanel = ({
 
         cell: (column) => (
 
-          <span className="font-mono text-[11px]">{column.columnName}</span>
+          <span className="font-mono text-sm">{column.columnName}</span>
 
         ),
 
@@ -830,7 +830,7 @@ const ColumnPanel = ({
 
             variant={column.isPrimaryKey ? "default" : "secondary"}
 
-            className="h-5 px-1.5 text-[10px]"
+            className="h-5 px-1.5 text-xs"
 
           >
 
@@ -940,7 +940,7 @@ const ColumnPanel = ({
 
           variant="outline"
 
-          className="h-7 px-2 text-[11px]"
+          className="h-7 px-2 text-sm"
 
           disabled={!table}
 

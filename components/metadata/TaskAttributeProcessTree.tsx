@@ -114,7 +114,7 @@ export const TaskAttributeProcessTree = ({
                 >
                   <GitBranch className="size-3.5 shrink-0 text-sky-600" />
                   <span className="min-w-0 flex-1 truncate">
-                    <span className="font-mono text-[11px] text-muted-foreground">
+                    <span className="font-mono text-sm text-muted-foreground">
                       {item.code}
                     </span>
                     <span className="ml-1.5">{item.name}</span>

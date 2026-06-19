@@ -95,16 +95,16 @@ export const ProcessScopeFilter = ({
 
       {!embedded &&
         (!companyCode || !businessUnitCode ? (
-          <p className="px-1 text-[11px] text-muted-foreground">
+          <p className="px-1 text-sm text-muted-foreground">
             {t("scope.catalogViewHint")}
           </p>
         ) : companyCode === ENTERPRISE_COMPANY_CODE &&
             businessUnitCode === ENTERPRISE_BUSINESS_UNIT_CODE ? (
-          <p className="px-1 text-[11px] text-muted-foreground">
+          <p className="px-1 text-sm text-muted-foreground">
             {t("scope.enterpriseViewHint")}
           </p>
         ) : (
-          <p className="px-1 text-[11px] text-muted-foreground">
+          <p className="px-1 text-sm text-muted-foreground">
             {t("scope.organizationViewHint")}
           </p>
         ))}

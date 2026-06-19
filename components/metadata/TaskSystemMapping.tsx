@@ -345,7 +345,7 @@ export const TaskSystemMapping = () => {
         value: (link) => (link.isPrimary ? t("primaryYes") : ""),
         cell: (link) =>
           link.isPrimary ? (
-            <Badge className="h-5 px-1.5 text-[10px]">{t("primaryYes")}</Badge>
+            <Badge className="h-5 px-1.5 text-xs">{t("primaryYes")}</Badge>
           ) : (
             <span className="text-muted-foreground">-</span>
           ),
@@ -371,7 +371,7 @@ export const TaskSystemMapping = () => {
             type="button"
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-sm"
             onClick={(event) => {
               event.stopPropagation();
               deleteLink.mutate(link.linkId);
@@ -399,7 +399,7 @@ export const TaskSystemMapping = () => {
         filter: "select",
         value: (screen) => screen.moduleCode,
         cell: (screen) => (
-          <span className="font-mono text-[11px]">{screen.moduleCode}</span>
+          <span className="font-mono text-sm">{screen.moduleCode}</span>
         ),
       },
       {
@@ -411,7 +411,7 @@ export const TaskSystemMapping = () => {
         filter: "text",
         value: (screen) => screen.menuId,
         cell: (screen) => (
-          <span className="font-mono text-[11px]">{screen.menuId}</span>
+          <span className="font-mono text-sm">{screen.menuId}</span>
         ),
       },
       {
@@ -435,7 +435,7 @@ export const TaskSystemMapping = () => {
         filter: "text",
         value: (screen) => screen.menuPath ?? "",
         cell: (screen) => (
-          <span className="line-clamp-2 text-[11px] text-slate-600">
+          <span className="line-clamp-2 text-sm text-slate-600">
             {screen.menuPath ?? "-"}
           </span>
         ),
@@ -451,7 +451,7 @@ export const TaskSystemMapping = () => {
             type="button"
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-sm"
             onClick={() => deleteScreenLink.mutate(screen.screenLinkId)}
           >
             <Trash2 className="size-3.5" />
@@ -590,7 +590,7 @@ export const TaskSystemMapping = () => {
         filter: "select",
         value: (item) => item.moduleCode ?? "",
         cell: (item) => (
-          <span className="font-mono text-[11px]">{item.moduleCode}</span>
+          <span className="font-mono text-sm">{item.moduleCode}</span>
         ),
       },
       {
@@ -602,7 +602,7 @@ export const TaskSystemMapping = () => {
         filter: "text",
         value: (item) => item.menuId ?? "",
         cell: (item) => (
-          <span className="font-mono text-[11px]">{item.menuId}</span>
+          <span className="font-mono text-sm">{item.menuId}</span>
         ),
       },
       {
@@ -624,7 +624,7 @@ export const TaskSystemMapping = () => {
         filter: "text",
         value: (item) => item.menuPath ?? "",
         cell: (item) => (
-          <span className="line-clamp-2 text-[11px] text-slate-600">
+          <span className="line-clamp-2 text-sm text-slate-600">
             {item.menuPath ?? "-"}
           </span>
         ),
@@ -694,7 +694,7 @@ export const TaskSystemMapping = () => {
           countSuffix={tc("countUnit")}
           icon
           toolbar={
-            <span className="text-[11px] text-slate-500">
+            <span className="text-sm text-slate-500">
               {t("loadedCount", {
                 loaded: systemCatalogItems.length,
                 total: systemCatalogTotal,
@@ -736,7 +736,7 @@ export const TaskSystemMapping = () => {
           type="button"
           size="sm"
           variant="ghost"
-          className="ml-2 h-6 px-2 text-[11px]"
+          className="ml-2 h-6 px-2 text-sm"
           onClick={() => {
             setLinkId(0);
             resetScreenSelection();
@@ -780,7 +780,7 @@ export const TaskSystemMapping = () => {
             countSuffix={tc("countUnit")}
             icon
             toolbar={
-              <span className="text-[11px] text-slate-500">
+              <span className="text-sm text-slate-500">
                 {t("loadedCount", {
                   loaded: screenCatalogItems.length,
                   total: screenCatalogTotal,

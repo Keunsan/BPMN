@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { showErrorToast } from "@/components/common/ErrorToast";
 import { ApiError } from "@/lib/api/error-handler";
-import { apiGet, apiPost, apiPut } from "@/lib/api/client";
+import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api/client";
 import { metadataKeys } from "@/lib/query/keys";
+import type {
+  SaveResult,
+  TaskAttributeBatchRequest,
+} from "@/types/editable-data-grid";
 import type {
   TaskAttributeDto,
   TaskAttributeListFilters,
@@ -88,6 +92,22 @@ export const useUpdateTaskAttribute = (nodeId: number) => {
       qc.invalidateQueries({
         queryKey: metadataKeys.taskAttribute(data.nodeId),
       });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) showErrorToast(error);
+    },
+  });
+};
+
+/** Task 속성 일괄 저장 mutation */
+export const useBatchSaveTaskAttributes = () => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: TaskAttributeBatchRequest) =>
+      apiPatch<SaveResult>("/api/metadata/task-attribute/batch", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: metadataKeys.all });
     },
     onError: (error) => {
       if (error instanceof ApiError) showErrorToast(error);

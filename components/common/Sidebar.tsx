@@ -48,7 +48,7 @@ const IconNav = () => {
                     )}
                   >
                     <Icon className="size-5 shrink-0" />
-                    <span className="line-clamp-2 w-full text-[10px] leading-tight font-medium">
+                    <span className="line-clamp-2 w-full text-xs leading-tight font-medium">
                       {t(child.labelKey)}
                     </span>
                   </GuardedLink>
@@ -206,10 +206,10 @@ export function MobileSidebar() {
             P
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold leading-tight">
+            <p className="truncate text-lg font-semibold leading-tight">
               {t("app.title")}
             </p>
-            <p className="truncate text-[11px] leading-snug text-muted-foreground">
+            <p className="truncate text-sm leading-snug text-muted-foreground">
               {t("app.description")}
             </p>
           </div>
@@ -217,7 +217,7 @@ export function MobileSidebar() {
         <nav className="flex-1 overflow-y-auto p-2">
           {sidebarNav.map((group) => (
             <div key={group.labelKey} className="mb-2">
-              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t(group.labelKey)}
               </p>
               <ul className="space-y-0.5">

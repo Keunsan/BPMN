@@ -3,6 +3,10 @@ import "server-only";
 import { ApiError } from "@/lib/api/error-handler";
 import type { Locale } from "@/lib/i18n/config";
 import type {
+  TaskAttributeBatchRequest,
+  SaveResult,
+} from "@/types/editable-data-grid";
+import type {
   TaskAttributeDto,
   TaskAttributeI18nMap,
   TaskAttributeListFilters,
@@ -10,9 +14,11 @@ import type {
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
+import type { ProcessStatus } from "@/types/process";
 
 import * as metadataQueries from "@/lib/db/queries/metadata";
 import * as processQueries from "@/lib/db/queries/process";
+import { updateProcess } from "@/lib/services/process.service";
 
 /** 요청 DTO에서 한국어 기본 컬럼을 구성한다. */
 const withKoFallback = (dto: UpsertTaskAttributeDto): UpsertTaskAttributeDto => {
@@ -192,4 +198,139 @@ export const upsertTaskAttribute = async (
   }
 
   return result;
+};
+
+/** Task 속성 일괄 저장 — 행별 부분 성공 결과 반환 */
+export const batchUpsertTaskAttributes = async (
+  payload: TaskAttributeBatchRequest,
+  locale: Locale,
+  userId?: number,
+): Promise<SaveResult> => {
+  const results: SaveResult["results"] = [];
+
+  for (const item of payload.updates) {
+    const nodeId = Number(item.id);
+    if (!Number.isInteger(nodeId) || nodeId <= 0) {
+      results.push({
+        id: item.id,
+        status: "error",
+        errors: { id: "Invalid node id" },
+      });
+      continue;
+    }
+
+    try {
+      const fields = item.changedFields;
+      const processPatch: {
+        name?: string;
+        status?: ProcessStatus;
+        ownerOrgId?: number | null;
+      } = {};
+
+      if (fields.processName !== undefined) {
+        processPatch.name = String(fields.processName);
+      }
+      if (fields.processStatus !== undefined) {
+        processPatch.status = fields.processStatus as ProcessStatus;
+      }
+      if (fields.ownerOrgId !== undefined) {
+        processPatch.ownerOrgId =
+          fields.ownerOrgId == null || fields.ownerOrgId === ""
+            ? null
+            : Number(fields.ownerOrgId);
+      }
+
+      if (Object.keys(processPatch).length > 0) {
+        await updateProcess(
+          nodeId,
+          {
+            ...processPatch,
+            i18n: processPatch.name
+              ? { ko: { name: processPatch.name } }
+              : undefined,
+          },
+          locale,
+          userId,
+        );
+      }
+
+      const attributePatch: UpsertTaskAttributeDto = { nodeId };
+      if (fields.definition !== undefined) {
+        attributePatch.definition = fields.definition;
+        attributePatch.i18n = {
+          ko: { definition: fields.definition },
+        };
+      }
+      if (fields.purpose !== undefined) {
+        attributePatch.purpose = fields.purpose;
+        attributePatch.i18n = {
+          ...attributePatch.i18n,
+          ko: { ...attributePatch.i18n?.ko, purpose: fields.purpose },
+        };
+      }
+
+      const hasAttributeChanges =
+        fields.definition !== undefined || fields.purpose !== undefined;
+
+      if (hasAttributeChanges) {
+        await upsertTaskAttribute(attributePatch, locale, userId);
+      }
+
+      // TODO: linkedSystemId 일괄 저장 — 시스템 연계 API 확정 후 연동
+      results.push({ id: item.id, status: "ok" });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "Save failed";
+      const fieldErrors: Record<string, string> = {};
+      if (item.changedFields.processName !== undefined) {
+        fieldErrors.processName = message;
+      }
+      if (item.changedFields.definition !== undefined) {
+        fieldErrors.definition = message;
+      }
+      if (Object.keys(fieldErrors).length === 0) {
+        fieldErrors._row = message;
+      }
+      results.push({ id: item.id, status: "error", errors: fieldErrors });
+    }
+  }
+
+  for (const item of payload.creates) {
+    try {
+      if (!item.nodeId || !Number.isInteger(item.nodeId)) {
+        results.push({
+          tempId: item.tempId,
+          status: "error",
+          errors: { nodeId: "New task row requires nodeId" },
+        });
+        continue;
+      }
+      await upsertTaskAttribute(
+        {
+          nodeId: item.nodeId,
+          definition: item.definition ?? null,
+          purpose: item.purpose ?? null,
+          i18n: {
+            ko: {
+              definition: item.definition ?? null,
+              purpose: item.purpose ?? null,
+            },
+          },
+        },
+        locale,
+        userId,
+      );
+      results.push({ tempId: item.tempId, id: String(item.nodeId), status: "ok" });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "Create failed";
+      results.push({
+        tempId: item.tempId,
+        status: "error",
+        errors: { _row: message },
+      });
+    }
+  }
+
+  return { results };
 };

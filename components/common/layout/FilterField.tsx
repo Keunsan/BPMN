@@ -34,7 +34,7 @@ export const FilterField = ({
   return (
     <div className={cn("pams-filter-field space-y-1.5", className)}>
       <div className="flex items-center justify-between gap-2">
-        <Label className="min-w-0 flex-1 truncate text-[10px] font-normal text-slate-400 dark:text-slate-500">
+        <Label className="min-w-0 flex-1 truncate text-xs font-normal text-slate-400 dark:text-slate-500">
           {label}
           {required && <span className="ml-0.5 text-destructive">*</span>}
         </Label>

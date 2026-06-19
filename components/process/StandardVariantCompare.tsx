@@ -155,7 +155,7 @@ export const StandardVariantCompare = ({
         filter: "text",
         value: (row) => row.key,
         cell: (row) => (
-          <span className="font-mono text-[11px]">{row.key}</span>
+          <span className="font-mono text-sm">{row.key}</span>
         ),
       },
       {

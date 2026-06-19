@@ -31,12 +31,12 @@ export const PanelTitleBar = ({
           <span className="inline-flex size-2.5 shrink-0 rounded-[3px] bg-primary" />
         ) : null}
         {title ? (
-          <span className="truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100">
+          <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
             {title}
           </span>
         ) : null}
         {count !== undefined ? (
-          <span className="shrink-0 text-[12px] text-slate-500 dark:text-slate-400">
+          <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
             ({count.toLocaleString()}
             {countSuffix ? ` ${countSuffix}` : ""})
           </span>

@@ -39,7 +39,7 @@ export const PageHeader = ({
         </div>
       )}
       <div className="flex min-w-0 items-center gap-2">
-        <h1 className="shrink-0 truncate text-[14px] font-semibold leading-none tracking-tight">
+        <h1 className="shrink-0 truncate text-base font-semibold leading-none tracking-tight">
           {title}
         </h1>
         {description && (
@@ -48,7 +48,7 @@ export const PageHeader = ({
               className="hidden h-3 w-px shrink-0 bg-border sm:block"
               aria-hidden
             />
-            <p className="min-w-0 truncate text-[10px] leading-none text-muted-foreground/70">
+            <p className="min-w-0 truncate text-xs leading-none text-muted-foreground/70">
               {description}
             </p>
           </>

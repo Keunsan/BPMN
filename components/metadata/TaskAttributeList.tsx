@@ -1,11 +1,10 @@
 "use client";
 
-import { ClipboardList, ExternalLink, GitBranch } from "lucide-react";
+import { ClipboardList, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { DataGrid, type DataGridColumn } from "@/components/common/DataGrid";
-import { EmptyState } from "@/components/common/EmptyState";
+import { EmptyState } from "@/components/pams/empty-state";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import {
   ListPageLayout,
@@ -13,16 +12,23 @@ import {
   PageContent,
   PageHeader,
 } from "@/components/common/layout";
-import { SearchBar } from "@/components/common/SearchBar";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import {
   TaskAttributeForm,
   TaskAttributeSheetHeaderActions,
   TaskAttributeSheetProvider,
 } from "@/components/metadata/TaskAttributeForm";
 import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
+import { EditableDataGrid } from "@/components/pams/editable-data-grid";
 import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -30,10 +36,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useDebounce } from "@/hooks/useDebounce";
-import { Link } from "@/lib/i18n/navigation";
-import { useTaskAttributeList } from "@/lib/query/hooks/useMetadata";
+import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
+import {
+  useBatchSaveTaskAttributes,
+  useTaskAttributeList,
+} from "@/lib/query/hooks/useMetadata";
+import { useSystems } from "@/lib/query/hooks/useSystems";
+import type {
+  EditableColumn,
+  EditableGridSavePayload,
+  TaskGridRow,
+} from "@/types/editable-data-grid";
 import type { TaskAttributeListItem } from "@/types/metadata";
+import type { ProcessStatus } from "@/types/process";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import type { ProcessNodeTree } from "@/types/process";
 
@@ -41,43 +56,109 @@ type TaskAttributeSelection =
   | { kind: "process"; node: ProcessNodeTree }
   | { kind: "e2e"; process: E2eProcessDto };
 
-/** BPMN에서 등록한 Task 속성 목록 — 프로세스 트리 선택 기준 */
+const PROCESS_STATUSES: ProcessStatus[] = [
+  "DRAFT",
+  "IN_REVIEW",
+  "APPROVED",
+  "PUBLISHED",
+  "OBSOLETE",
+];
+
+const toTaskGridRow = (item: TaskAttributeListItem): TaskGridRow => ({
+  id: String(item.nodeId),
+  nodeId: item.nodeId,
+  attrId: item.attrId,
+  processCode: item.processCode,
+  processName: item.processName,
+  definition: item.definition,
+  purpose: item.purpose,
+  processStatus: item.processStatus,
+  ownerOrgId: null,
+  linkedSystemId: null,
+  version: item.version,
+  updatedAt: item.updatedAt
+    ? typeof item.updatedAt === "string"
+      ? item.updatedAt
+      : item.updatedAt.toISOString()
+    : null,
+});
+
+/** BPMN Task 속성 — 프로세스 트리 + 인라인 편집 그리드 */
 export const TaskAttributeList = () => {
   const t = useTranslations("metadata");
-  const tc = useTranslations("common");
-  const ts = useTranslations("systemMapping");
+  const ts = useTranslations("status");
+  const te = useTranslations("editableGrid");
+  const tsMap = useTranslations("systemMapping");
   const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
     useProcessScopeParams();
-  const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<TaskAttributeSelection | null>(null);
+  const [pendingSelection, setPendingSelection] =
+    useState<TaskAttributeSelection | null>(null);
+  const [pendingScope, setPendingScope] = useState<Pick<
+    import("@/types/process").ProcessFilters,
+    "companyCode" | "businessUnitCode"
+  > | null>(null);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [detailNodeId, setDetailNodeId] = useState<number | null>(null);
+  const [gridDirty, setGridDirty] = useState(false);
   const sheetBodyRef = useRef<HTMLDivElement>(null);
-  const debouncedSearch = useDebounce(search, 300);
+
+  const { data: systems } = useSystems({ isActive: true });
+  const batchSave = useBatchSaveTaskAttributes();
+  const setBlocking = useNavigationGuardStore((s) => s.setBlocking);
 
   const handleScopeChange = useCallback(
     (scope: Parameters<typeof setScope>[0]) => {
+      if (gridDirty) {
+        setPendingScope(scope);
+        setLeaveDialogOpen(true);
+        return;
+      }
       setSelection(null);
       setScope(scope);
     },
-    [setScope],
+    [gridDirty, setScope],
   );
 
-  const handleSelectProcess = useCallback((node: ProcessNodeTree) => {
-    setSelection({ kind: "process", node });
+  const applySelection = useCallback((next: TaskAttributeSelection | null) => {
+    setSelection(next);
+    setPendingSelection(null);
+    setLeaveDialogOpen(false);
   }, []);
 
-  const handleSelectE2e = useCallback((process: E2eProcessDto) => {
-    setSelection({ kind: "e2e", process });
-  }, []);
+  const requestSelectionChange = useCallback(
+    (next: TaskAttributeSelection | null) => {
+      if (gridDirty) {
+        setPendingSelection(next);
+        setLeaveDialogOpen(true);
+        return;
+      }
+      applySelection(next);
+    },
+    [applySelection, gridDirty],
+  );
+
+  const handleSelectProcess = useCallback(
+    (node: ProcessNodeTree) => {
+      requestSelectionChange({ kind: "process", node });
+    },
+    [requestSelectionChange],
+  );
+
+  const handleSelectE2e = useCallback(
+    (process: E2eProcessDto) => {
+      requestSelectionChange({ kind: "e2e", process });
+    },
+    [requestSelectionChange],
+  );
 
   const filters = useMemo(
     () => ({
-      search: debouncedSearch || undefined,
       nodeId: selection?.kind === "process" ? selection.node.nodeId : undefined,
       e2eProcessId:
         selection?.kind === "e2e" ? selection.process.e2eProcessId : undefined,
     }),
-    [debouncedSearch, selection],
+    [selection],
   );
 
   const {
@@ -89,213 +170,233 @@ export const TaskAttributeList = () => {
     enabled: Boolean(selection),
   });
 
-  const selectedItem = useMemo(
-    () => items?.find((item) => item.nodeId === detailNodeId) ?? null,
-    [detailNodeId, items],
+  const gridData = useMemo(
+    () => (items ?? []).map(toTaskGridRow),
+    [items],
   );
 
-  const listColumns = useMemo<DataGridColumn<TaskAttributeListItem>[]>(
+  const systemOptions = useMemo(
+    () =>
+      (systems ?? []).map((sys) => ({
+        label: sys.systemName,
+        value: String(sys.systemId),
+      })),
+    [systems],
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      PROCESS_STATUSES.map((status) => ({
+        label: ts(status),
+        value: status,
+      })),
+    [ts],
+  );
+
+  const columns = useMemo<EditableColumn<TaskGridRow>[]>(
     () => [
       {
-        key: "no",
-        header: "No.",
-        width: 48,
-        minWidth: 44,
-        align: "center",
-        cell: (_item, rowIndex) => rowIndex + 1,
+        key: "_select",
+        header: "",
+        width: 40,
       },
       {
         key: "processCode",
         header: t("processCode"),
         width: 120,
-        minWidth: 96,
+        freeze: "left",
+        mono: true,
+        align: "right",
         sortable: true,
         filter: "text",
-        value: (item) => item.processCode,
-        cell: (item) => (
-          <span className="font-mono text-[11px]">{item.processCode}</span>
-        ),
+        accessor: (row) => row.processCode,
       },
       {
         key: "processName",
         header: t("processName"),
-        width: 180,
-        minWidth: 140,
+        editor: "text",
+        required: true,
+        width: 160,
+        freeze: "left",
         sortable: true,
         filter: "text",
-        value: (item) => item.processName,
-        cell: (item) => (
-          <span className="truncate font-medium">{item.processName}</span>
-        ),
-      },
-      {
-        key: "processLevel",
-        header: t("level"),
-        width: 52,
-        minWidth: 44,
-        align: "center",
-        sortable: true,
-        filter: "select",
-        value: (item) => item.processLevel,
-        cell: (item) => item.processLevel,
-      },
-      {
-        key: "parentCode",
-        header: t("parentCode"),
-        width: 120,
-        minWidth: 96,
-        sortable: true,
-        filter: "text",
-        value: (item) => item.parentCode ?? "",
-        cell: (item) =>
-          item.parentCode ? (
-            <span className="truncate font-mono text-[11px]">
-              {item.parentCode}
-            </span>
-          ) : (
-            "-"
-          ),
-      },
-      {
-        key: "parentName",
-        header: t("parentName"),
-        width: 140,
-        minWidth: 120,
-        sortable: true,
-        filter: "text",
-        value: (item) => item.parentName ?? "",
-        cell: (item) => (
-          <span className="truncate">{item.parentName ?? "-"}</span>
-        ),
+        accessor: (row) => row.processName,
       },
       {
         key: "definition",
         header: t("definition"),
+        editor: "textarea",
         width: 200,
-        minWidth: 160,
         sortable: true,
         filter: "text",
-        value: (item) => item.definition ?? "",
-        cell: (item) => (
-          <span className="line-clamp-2">{item.definition || "-"}</span>
-        ),
+        accessor: (row) => row.definition ?? "",
+        required: true,
+        validate: (value) =>
+          value == null || String(value).trim() === ""
+            ? t("definitionRequired")
+            : null,
       },
       {
-        key: "purpose",
-        header: t("purpose"),
-        width: 160,
-        minWidth: 120,
-        sortable: true,
-        filter: "text",
-        value: (item) => item.purpose ?? "",
-        cell: (item) => (
-          <span className="line-clamp-2">{item.purpose ?? "-"}</span>
-        ),
-      },
-      {
-        key: "bpmnModel",
-        header: t("bpmnModel"),
-        width: 160,
-        minWidth: 120,
-        sortable: true,
-        filter: "text",
-        value: (item) => item.bpmnModelName ?? "",
-        cell: (item) =>
-          item.bpmnModelId ? (
-            <Link
-              href={`/bpmn/${item.bpmnModelId}`}
-              className="inline-flex max-w-full items-center gap-1 truncate text-primary hover:underline"
-            >
-              <span className="truncate">{item.bpmnModelName}</span>
-              <ExternalLink className="size-3 shrink-0" />
-            </Link>
-          ) : (
-            <span className="text-slate-500">-</span>
-          ),
-      },
-      {
-        key: "bpmnElement",
-        header: t("bpmnElement"),
-        width: 140,
-        minWidth: 100,
-        sortable: true,
-        filter: "text",
-        value: (item) => item.bpmnElementName ?? "",
-        cell: (item) => (
-          <span className="truncate">{item.bpmnElementName ?? "-"}</span>
-        ),
-      },
-      {
-        key: "frequency",
-        header: t("frequency"),
-        width: 96,
-        minWidth: 80,
-        sortable: true,
-        filter: "select",
-        value: (item) => item.frequency ?? "",
-        cell: (item) =>
-          item.frequency ? t(`frequencyOptions.${item.frequency}`) : "-",
-      },
-      {
-        key: "status",
+        key: "processStatus",
         header: t("listStatus"),
-        width: 100,
-        minWidth: 88,
+        editor: "select",
+        options: statusOptions,
+        width: 110,
         sortable: true,
         filter: "select",
-        value: (item) => item.processStatus,
-        cell: (item) => <StatusBadge status={item.processStatus} />,
+        accessor: (row) => row.processStatus,
+        parsePaste: (raw) => {
+          const value = raw.trim();
+          const match = statusOptions.find(
+            (opt) =>
+              opt.value === value ||
+              opt.label.toLowerCase() === value.toLowerCase(),
+          );
+          if (!match) {
+            throw new Error("invalid status");
+          }
+          return match.value;
+        },
+      },
+      {
+        key: "ownerOrgId",
+        header: te("ownerOrg"),
+        editor: "combobox",
+        options: [],
+        width: 140,
+        accessor: (row) => row.ownerOrgId ?? "",
+      },
+      {
+        key: "linkedSystemId",
+        header: te("linkedSystem"),
+        editor: "combobox",
+        options: systemOptions,
+        width: 140,
+        accessor: (row) => row.linkedSystemId ?? "",
+        parsePaste: (raw) => {
+          const value = raw.trim();
+          if (!value) {
+            return null;
+          }
+          const match = systemOptions.find(
+            (opt) =>
+              opt.value === value ||
+              opt.label.toLowerCase() === value.toLowerCase(),
+          );
+          if (!match) {
+            throw new Error("invalid system");
+          }
+          return match.value;
+        },
+      },
+      {
+        key: "version",
+        header: te("version"),
+        width: 80,
+        align: "right",
+        mono: true,
+        accessor: (row) => row.version ?? "",
       },
       {
         key: "updatedAt",
         header: t("listUpdatedAt"),
         width: 108,
-        minWidth: 96,
+        align: "right",
         sortable: true,
-        filter: "text",
-        value: (item) => item.updatedAt?.toISOString() ?? "",
-        cell: (item) =>
-          item.updatedAt
-            ? new Intl.DateTimeFormat(undefined, {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-              }).format(new Date(item.updatedAt))
-            : "-",
+        accessor: (row) => row.updatedAt ?? "",
       },
       {
-        key: "actions",
-        header: t("listActions"),
-        width: 108,
-        minWidth: 96,
-        align: "center",
-        cell: (item) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            onClick={(event) => {
-              event.stopPropagation();
-              setDetailNodeId(item.nodeId);
-            }}
-          >
-            <ClipboardList className="mr-1 size-3.5" />
-            {t("viewDetail")}
-          </Button>
-        ),
+        key: "_expand",
+        header: "",
+        width: 48,
+        action: "expand",
       },
     ],
-    [t],
+    [t, te, statusOptions, systemOptions],
   );
+
+  const bulkActions = useMemo(
+    () => [
+      {
+        label: te("bulkSetReview"),
+        field: "processStatus" as const,
+        value: "IN_REVIEW" satisfies ProcessStatus,
+      },
+      {
+        label: te("bulkSetApproved"),
+        field: "processStatus" as const,
+        value: "APPROVED" satisfies ProcessStatus,
+      },
+    ],
+    [te],
+  );
+
+  const selectedItem = useMemo(
+    () => items?.find((item) => item.nodeId === detailNodeId) ?? null,
+    [detailNodeId, items],
+  );
+
+  const selectionLabel = useMemo(() => {
+    if (!selection) {
+      return null;
+    }
+    if (selection.kind === "e2e") {
+      return `${selection.process.name} (${selection.process.code})`;
+    }
+    return `${selection.node.name} (${selection.node.code})`;
+  }, [selection]);
+
+  useEffect(() => {
+    setBlocking(gridDirty);
+    return () => setBlocking(false);
+  }, [gridDirty, setBlocking]);
 
   useEffect(() => {
     sheetBodyRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [detailNodeId]);
 
-  const renderListBody = () => {
+  const handleSave = async (payload: EditableGridSavePayload<TaskGridRow>) => {
+    const result = await batchSave.mutateAsync({
+      updates: payload.updates.map((item) => ({
+        id: item.id,
+        changedFields: item.changedFields,
+      })),
+      creates: payload.creates.map((item) => ({
+        tempId: item.tempId,
+        nodeId: item.nodeId,
+        definition: item.definition,
+        purpose: item.purpose,
+        processName: item.processName,
+      })),
+    });
+    await refetch();
+    return result;
+  };
+
+  const handleDiscardAndLeave = () => {
+    setGridDirty(false);
+    if (pendingScope) {
+      setSelection(null);
+      setScope(pendingScope);
+      setPendingScope(null);
+      setLeaveDialogOpen(false);
+      return;
+    }
+    if (pendingSelection !== null) {
+      applySelection(pendingSelection);
+      return;
+    }
+    setLeaveDialogOpen(false);
+  };
+
+  const renderRightPanel = () => {
     if (!selection) {
-      return <EmptyState title={t("selectProcessHint")} className="min-h-[320px]" />;
+      return (
+        <EmptyState
+          title={t("selectProcessHint")}
+          className="min-h-[320px] flex-1"
+        />
+      );
     }
 
     if (isLoading) {
@@ -317,27 +418,28 @@ export const TaskAttributeList = () => {
     }
 
     return (
-      <DataGrid
-        title={t("listTitle")}
-        count={items?.length ?? 0}
-        countSuffix={tc("countUnit")}
-        icon
-        toolbar={
-          <SearchBar
-            variant="filter"
-            className="w-[220px]"
-            value={search}
-            onChange={setSearch}
-            placeholder={t("listSearchPlaceholder")}
-          />
-        }
-        columns={listColumns}
-        data={items ?? []}
-        rowKey={(item) => item.attrId}
-        storageKey="pams-task-attributes-grid"
+      <EditableDataGrid
+        columns={columns}
+        data={gridData}
+        onSave={handleSave}
+        onRowExpand={(row) => setDetailNodeId(row.nodeId)}
+        bulkActions={bulkActions}
+        enableAddRow={false}
+        toolbar={{
+          globalSearch: true,
+          columnFilter: true,
+        }}
         emptyMessage={t("listEmpty")}
-        onRowClick={(item) => setDetailNodeId(item.nodeId)}
         fillHeight
+        countLabel={selectionLabel ?? t("listTitle")}
+        onDirtyChange={setGridDirty}
+        featureFlags={{
+          clipboard: true,
+          fillDown: true,
+          rangeSelect: true,
+          undoRedo: true,
+        }}
+        storageKey="pams-task-attributes-editable-grid"
       />
     );
   };
@@ -349,16 +451,13 @@ export const TaskAttributeList = () => {
         description={t("listDesc")}
         icon={ClipboardList}
         actions={
-          <PageActions
-            onSearch={() => void refetch()}
-            showRegister={false}
-          />
+          <PageActions onSearch={() => void refetch()} showRegister={false} />
         }
       />
       <TaskMappingSideLayout
         storageKey="pams-task-mapping-side-panel-width"
         defaultWidth={300}
-        splitterLabel={ts("panelResizeHorizontal")}
+        splitterLabel={tsMap("panelResizeHorizontal")}
         companyCode={companyCode}
         businessUnitCode={businessUnitCode}
         onScopeChange={handleScopeChange}
@@ -375,35 +474,56 @@ export const TaskAttributeList = () => {
         onSelectE2e={handleSelectE2e}
       >
         <PageContent bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5">
-            {selection ? (
-              <div className="shrink-0 rounded-lg border border-slate-200/85 bg-white px-3 py-2 text-xs shadow-sm dark:border-slate-600/65 dark:bg-slate-900/40">
-                {selection.kind === "e2e" ? (
-                  <>
-                    <GitBranch className="mr-1 inline size-3.5 text-sky-600" />
-                    <span className="font-medium">{selection.process.name}</span>
-                    <span className="ml-2 font-mono text-slate-500">
-                      {selection.process.code}
-                    </span>
-                    <span className="ml-2 text-muted-foreground">E2E</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-medium">{selection.node.name}</span>
-                    <span className="ml-2 font-mono text-slate-500">
-                      {selection.node.code}
-                    </span>
-                    <span className="ml-2 text-muted-foreground">
-                      {selection.node.level}
-                    </span>
-                  </>
-                )}
-              </div>
-            ) : null}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              {renderListBody()}
+          {selection ? (
+            <div className="shrink-0 rounded-lg border bg-card px-3 py-2 text-sm shadow-sm">
+              {selection.kind === "e2e" ? (
+                <>
+                  <GitBranch className="mr-1 inline size-3.5 text-primary" />
+                  <span className="font-medium">{selection.process.name}</span>
+                  <span className="ml-2 font-mono text-muted-foreground">
+                    {selection.process.code}
+                  </span>
+                  <span className="ml-2 text-muted-foreground">E2E</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{selection.node.name}</span>
+                  <span className="ml-2 font-mono text-muted-foreground">
+                    {selection.node.code}
+                  </span>
+                  <span className="ml-2 text-muted-foreground">
+                    {selection.node.level}
+                  </span>
+                </>
+              )}
             </div>
-          </PageContent>
+          ) : null}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {renderRightPanel()}
+          </div>
+        </PageContent>
       </TaskMappingSideLayout>
+
+      <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{te("leaveTitle")}</DialogTitle>
+            <DialogDescription>{te("leaveDesc")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLeaveDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button type="button" variant="outline" onClick={handleDiscardAndLeave}>
+              {te("leaveWithoutSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         open={detailNodeId !== null}

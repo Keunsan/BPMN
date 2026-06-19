@@ -77,7 +77,7 @@ export const TaskLinkedResourcesSummary = ({
         align: "center",
         cell: (link) =>
           link.isPrimary ? (
-            <Badge className="h-5 px-1.5 text-[10px]">{ts("primaryYes")}</Badge>
+            <Badge className="h-5 px-1.5 text-xs">{ts("primaryYes")}</Badge>
           ) : (
             <span className="text-muted-foreground">-</span>
           ),
@@ -124,7 +124,7 @@ export const TaskLinkedResourcesSummary = ({
         width: 72,
         minWidth: 60,
         cell: (screen) => (
-          <span className="font-mono text-[11px]">{screen.moduleCode}</span>
+          <span className="font-mono text-sm">{screen.moduleCode}</span>
         ),
       },
       {
@@ -133,7 +133,7 @@ export const TaskLinkedResourcesSummary = ({
         width: 96,
         minWidth: 80,
         cell: (screen) => (
-          <span className="font-mono text-[11px]">{screen.menuId}</span>
+          <span className="font-mono text-sm">{screen.menuId}</span>
         ),
       },
       {
@@ -164,7 +164,7 @@ export const TaskLinkedResourcesSummary = ({
         width: 160,
         minWidth: 120,
         cell: (link) => (
-          <span className="truncate font-mono text-[11px]">
+          <span className="truncate font-mono text-sm">
             {link.schemaName ? `${link.schemaName}.` : ""}
             {link.tableName}
           </span>
@@ -185,7 +185,7 @@ export const TaskLinkedResourcesSummary = ({
         width: 88,
         minWidth: 72,
         cell: (link) => (
-          <Badge className="h-5 px-1.5 text-[10px]">
+          <Badge className="h-5 px-1.5 text-xs">
             {td(`linkTypes.${link.linkType}`)}
           </Badge>
         ),

@@ -186,28 +186,28 @@ const TreeNodeItem = ({
             </span>
           )}
           {node.isOverlayVariant && (
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
+            <Badge variant="secondary" className="shrink-0 text-xs">
               {t("variant.badge")}
             </Badge>
           )}
           {!node.isOverlayVariant &&
             !isEnterpriseScope(node.companyCode, node.businessUnitCode) &&
             !node.variantOf && (
-              <Badge variant="outline" className="shrink-0 text-[10px]">
+              <Badge variant="outline" className="shrink-0 text-xs">
                 {t("scope.scopedBadge")}
               </Badge>
             )}
           {!node.isOverlayVariant &&
             (node.variantCount ?? 0) > 0 &&
             (node.level === "L3" || node.level === "L4") && (
-              <Badge variant="outline" className="shrink-0 text-[10px]">
+              <Badge variant="outline" className="shrink-0 text-xs">
                 {t("variant.count", { count: node.variantCount ?? 0 })}
               </Badge>
             )}
         </button>
 
         {node.isOverlayVariant && formatProcessScope(node) && (
-          <span className="hidden max-w-28 truncate text-[10px] text-muted-foreground xl:inline">
+          <span className="hidden max-w-28 truncate text-xs text-muted-foreground xl:inline">
             {formatProcessScope(node)}
           </span>
         )}
@@ -215,7 +215,7 @@ const TreeNodeItem = ({
         <StatusBadge
           status={node.status}
           className={cn(
-            "shrink-0 text-[10px]",
+            "shrink-0 text-xs",
             pickerMode ? "inline-flex" : "hidden sm:inline-flex",
           )}
         />

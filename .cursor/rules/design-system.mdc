@@ -1,0 +1,54 @@
+---
+description: PAMS 디자인 시스템 강제 규약 (색·타이포·반경·컴포넌트)
+globs: ["**/*.tsx", "**/*.ts", "**/*.css"]
+alwaysApply: true
+---
+
+# PAMS 디자인 시스템
+
+UI 일관성을 위해 색·타이포·반경·공용 컴포넌트 규약을 준수한다. 위반 시 토큰/공용 컴포넌트로 교체한 뒤 제출한다.
+
+## 색상 (Color)
+
+- hex(#…)·rgb()·임의 색상 값을 className/스타일에 직접 입력하는 것을 금지한다.
+- slate-*, gray-*, zinc-* 등 Tailwind 원시 색 팔레트를 UI 색으로 직접 쓰지 않는다.
+- 반드시 shadcn 시맨틱 토큰만 사용한다:
+  background/foreground, muted/muted-foreground, border, input, ring,
+  primary/primary-foreground, sidebar-*/ 등.
+- 다크모드는 dark:slate-… 식 수기 패치를 금지하고, 토큰이 .dark에서
+  자동 전환되도록 토큰만 사용한다.
+
+## 타이포그래피 (Typography)
+
+- 글자 크기는 다음 5단 스케일만 허용한다:
+  text-xs(12) / text-sm(13) / text-base(14) / text-lg(16) / text-xl(20).
+- text-[10px], text-[11px] 등 11px 이하 폰트를 금지한다(가독성·WCAG AA).
+- text-[…px], text-[…rem] 형태의 arbitrary font-size를 금지한다.
+- 위계 표현은 크기 남발 대신 font-weight와 text-muted-foreground로 한다.
+
+## 반경 (Radius)
+
+- rounded-md / rounded-lg / rounded-full 만 사용한다.
+- rounded-4xl 은 뱃지 pill 전용으로만 허용한다.
+- rounded-xl, rounded-[Npx] 등 그 외 arbitrary 반경을 금지한다.
+
+## 컴포넌트 재사용 (Component Registry)
+
+- 새 UI를 만들기 전에 반드시 기존 공용 컴포넌트를 먼저 찾아 재사용한다:
+  - 표/그리드 → pams DataGrid (pams-data-grid-*) 사용. 새 table 직접 구현 금지.
+  - 뱃지 → 공용 Badge variant 사용. kind-badge/chip/task-chip 식 신규 분기 금지.
+  - 빈 화면/스텁 → components/pams/empty-state 의 <EmptyState/> 사용.
+  - 필터 패널 → 공용 FilterPanel(pams-filter-*) 사용.
+  - 페이지 헤더 → 공용 PageHeader 사용.
+  - 우측 상세/등록 → 공용 EntitySheet(+ sticky footer) 패턴 사용.
+- 아이콘은 Lucide만 사용하고, 객체 종류별로 형태가 구분되는 의미 있는 아이콘을 쓴다
+  (동일 아이콘을 색만 바꿔 재사용 금지).
+
+## 검증 (Self-check) — 코드 생성·수정 시 매번 확인
+
+- [ ] hex/원시 팔레트 색을 새로 넣지 않았는가
+- [ ] arbitrary font-size, 11px 이하 폰트를 넣지 않았는가
+- [ ] rounded-xl/arbitrary 반경을 넣지 않았는가
+- [ ] 표·뱃지·빈화면·필터·헤더를 공용 컴포넌트로 처리했는가
+
+이 중 하나라도 위반하면 코드를 제출하지 말고 토큰/공용 컴포넌트로 교체한 뒤 제출한다.

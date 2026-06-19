@@ -270,7 +270,7 @@ export const DataTableLink = () => {
         filter: "text",
         value: (link) => link.schemaName ?? "",
         cell: (link) => (
-          <span className="font-mono text-[11px]">{link.schemaName ?? "-"}</span>
+          <span className="font-mono text-sm">{link.schemaName ?? "-"}</span>
         ),
       },
       {
@@ -282,7 +282,7 @@ export const DataTableLink = () => {
         filter: "text",
         value: (link) => link.tableName,
         cell: (link) => (
-          <span className="truncate font-mono text-[11px]">{link.tableName}</span>
+          <span className="truncate font-mono text-sm">{link.tableName}</span>
         ),
       },
       {
@@ -307,7 +307,7 @@ export const DataTableLink = () => {
         filter: "select",
         value: (link) => link.linkType,
         cell: (link) => (
-          <Badge className="h-5 px-1.5 text-[10px]">
+          <Badge className="h-5 px-1.5 text-xs">
             {t(`linkTypes.${link.linkType}`)}
           </Badge>
         ),
@@ -346,7 +346,7 @@ export const DataTableLink = () => {
             type="button"
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-sm"
             onClick={() => deleteLink.mutate(link.linkId)}
           >
             <Trash2 className="size-3.5" />
@@ -409,7 +409,7 @@ export const DataTableLink = () => {
         filter: "text",
         value: (item) => item.schemaName ?? "",
         cell: (item) => (
-          <span className="font-mono text-[11px]">{item.schemaName ?? "-"}</span>
+          <span className="font-mono text-sm">{item.schemaName ?? "-"}</span>
         ),
       },
       {
@@ -421,7 +421,7 @@ export const DataTableLink = () => {
         filter: "text",
         value: (item) => item.tableName,
         cell: (item) => (
-          <span className="truncate font-mono text-[11px]">{item.tableName}</span>
+          <span className="truncate font-mono text-sm">{item.tableName}</span>
         ),
       },
       {

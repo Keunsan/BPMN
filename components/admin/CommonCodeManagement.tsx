@@ -193,7 +193,7 @@ export const CommonCodeManagement = () => {
         filter: "text",
         value: (group) => group.groupCode,
         cell: (group) => (
-          <span className="font-mono text-[11px] text-slate-500">
+          <span className="font-mono text-sm text-slate-500">
             {group.groupCode}
           </span>
         ),
@@ -268,7 +268,7 @@ export const CommonCodeManagement = () => {
         sortable: true,
         filter: "text",
         value: (item) => item.code,
-        cell: (item) => <span className="font-mono text-[11px]">{item.code}</span>,
+        cell: (item) => <span className="font-mono text-sm">{item.code}</span>,
       },
       {
         key: "codeName",
@@ -429,7 +429,7 @@ export const CommonCodeManagement = () => {
                 toolbar={
                   <Button
                     size="sm"
-                    className="h-7 px-2 text-[11px]"
+                    className="h-7 px-2 text-sm"
                     onClick={() => setDialogMode({ type: "group-create" })}
                   >
                     <Plus className="size-3.5" />
@@ -461,7 +461,7 @@ export const CommonCodeManagement = () => {
                     />
                     <Button
                       size="sm"
-                      className="h-7 px-2 text-[11px]"
+                      className="h-7 px-2 text-sm"
                       disabled={!selectedGroupCode}
                       onClick={() =>
                         selectedGroupCode &&

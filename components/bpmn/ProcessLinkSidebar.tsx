@@ -341,9 +341,9 @@ export const ProcessLinkSidebar = ({
                             <p className="truncate font-medium">{node.name}</p>
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1">
-                            <StatusBadge status={node.status} className="text-[10px]" />
+                            <StatusBadge status={node.status} className="text-xs" />
                             {linkedCount > 0 && (
-                              <span className="text-[10px] text-violet-600">
+                              <span className="text-xs text-violet-600">
                                 {t("linkPanelLinkedCount", { count: linkedCount })}
                               </span>
                             )}

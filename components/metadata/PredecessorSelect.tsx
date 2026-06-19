@@ -115,7 +115,7 @@ export const PredecessorSelect = ({
         filter: "text",
         value: (item) => String(item.predecessorCode ?? item.predecessorNodeId),
         cell: (item) => (
-          <span className="font-mono text-[11px]">
+          <span className="font-mono text-sm">
             {item.predecessorCode ?? item.predecessorNodeId}
           </span>
         ),

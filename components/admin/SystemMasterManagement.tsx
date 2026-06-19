@@ -173,7 +173,7 @@ export const SystemMasterManagement = () => {
         filter: "text",
         value: (system) => system.systemCode,
         cell: (system) => (
-          <span className="font-mono text-[11px]">{system.systemCode}</span>
+          <span className="font-mono text-sm">{system.systemCode}</span>
         ),
       },
       {

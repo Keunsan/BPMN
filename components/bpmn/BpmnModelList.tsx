@@ -227,7 +227,7 @@ export const BpmnModelList = () => {
               </Select>
             </FilterField>
             {!companyCode || !businessUnitCode ? (
-              <p className="px-1 text-[11px] text-muted-foreground">
+              <p className="px-1 text-sm text-muted-foreground">
                 {t("scopeFilterHint")}
               </p>
             ) : null}
