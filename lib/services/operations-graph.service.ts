@@ -15,6 +15,7 @@ import type {
 import {
   buildGraphNodeId,
   GRAPH_NODE_KINDS,
+  parseApplicationSystemIdFromNodeId,
 } from "@/types/operations-graph";
 
 const MAX_NODES = 200;
@@ -160,6 +161,271 @@ const buildSummary = (
   };
 };
 
+const toTaskNodeId = (id: number | string): number => Number(id);
+
+const TASK_NODE_PREFIX = "TASK:";
+const L3_NODE_PREFIX = "L3:";
+const TABLE_EDGE_KINDS = new Set<GraphEdgeKind>(["READS_TABLE", "WRITES_TABLE"]);
+
+const isTaskGraphNodeId = (nodeId: string): boolean =>
+  nodeId.startsWith(TASK_NODE_PREFIX);
+
+const isProcessGraphNodeId = (nodeId: string): boolean =>
+  nodeId.startsWith(TASK_NODE_PREFIX) || nodeId.startsWith(L3_NODE_PREFIX);
+
+type ProcessAdjacency = {
+  successors: Map<string, string[]>;
+  predecessors: Map<string, string[]>;
+};
+
+const buildProcessAdjacency = (
+  edges: OperationsGraphEdge[],
+): ProcessAdjacency => {
+  const successors = new Map<string, string[]>();
+  const predecessors = new Map<string, string[]>();
+
+  const link = (source: string, target: string) => {
+    const succList = successors.get(source) ?? [];
+    if (!succList.includes(target)) {
+      succList.push(target);
+      successors.set(source, succList);
+    }
+    const predList = predecessors.get(target) ?? [];
+    if (!predList.includes(source)) {
+      predList.push(source);
+      predecessors.set(target, predList);
+    }
+  };
+
+  for (const edge of edges) {
+    if (edge.kind !== "PRECEDES") {
+      continue;
+    }
+    if (
+      !isProcessGraphNodeId(edge.source) ||
+      !isProcessGraphNodeId(edge.target)
+    ) {
+      continue;
+    }
+    link(edge.source, edge.target);
+  }
+
+  return { successors, predecessors };
+};
+
+const getDirectTaskApps = (
+  edges: OperationsGraphEdge[],
+  taskId: string,
+): string[] =>
+  edges
+    .filter((edge) => edge.source === taskId && edge.kind === "USES_SCREEN")
+    .map((edge) => edge.target);
+
+/** 프로세스 흐름(TASK·L3)을 따라 인접 Task의 APPLICATION을 탐색한다 */
+const findNearestTaskApps = (
+  nodeId: string,
+  direction: "backward" | "forward",
+  edges: OperationsGraphEdge[],
+  adjacency: ProcessAdjacency,
+  visited = new Set<string>(),
+): string[] => {
+  if (visited.has(nodeId)) {
+    return [];
+  }
+  visited.add(nodeId);
+
+  if (isTaskGraphNodeId(nodeId)) {
+    const directApps = getDirectTaskApps(edges, nodeId);
+    if (directApps.length > 0) {
+      return directApps;
+    }
+  }
+
+  const neighbors =
+    direction === "backward"
+      ? (adjacency.predecessors.get(nodeId) ?? [])
+      : (adjacency.successors.get(nodeId) ?? []);
+
+  for (const neighbor of neighbors) {
+    const found = findNearestTaskApps(
+      neighbor,
+      direction,
+      edges,
+      adjacency,
+      visited,
+    );
+    if (found.length > 0) {
+      return found;
+    }
+  }
+
+  return [];
+};
+
+const linkApplicationPrecedesAcrossProcessFlow = (
+  predApps: string[],
+  succApps: string[],
+  addPrecedes: (source: string, target: string) => void,
+): void => {
+  if (predApps.length === 0 || succApps.length === 0) {
+    return;
+  }
+
+  for (const succApp of succApps) {
+    const succSystemId = parseApplicationSystemIdFromNodeId(succApp);
+    const predApp =
+      succSystemId === null
+        ? undefined
+        : predApps.find(
+            (appId) =>
+              parseApplicationSystemIdFromNodeId(appId) === succSystemId,
+          );
+    const sourceApp = predApp ?? predApps[predApps.length - 1];
+    if (sourceApp) {
+      addPrecedes(sourceApp, succApp);
+    }
+  }
+};
+
+const getTablesViaApps = (
+  appIds: string[],
+  edges: OperationsGraphEdge[],
+): string[] => {
+  const tables: string[] = [];
+  for (const appId of appIds) {
+    for (const edge of edges) {
+      if (edge.source === appId && TABLE_EDGE_KINDS.has(edge.kind)) {
+        tables.push(edge.target);
+      }
+    }
+  }
+  return tables;
+};
+
+/** 프로세스 PRECEDES(TASK·L3) 흐름에 맞춰 APPLICATION·TABLE 간 PRECEDES 엣지를 추가한다 */
+const linkResourcePrecedesFromTaskFlow = (
+  edges: OperationsGraphEdge[],
+): OperationsGraphEdge[] => {
+  const result = [...edges];
+  const edgeIds = new Set(result.map((edge) => edge.id));
+
+  const addPrecedes = (source: string, target: string) => {
+    const id = `PRECEDES:${source}->${target}`;
+    if (edgeIds.has(id)) {
+      return;
+    }
+    edgeIds.add(id);
+    result.push({ id, source, target, kind: "PRECEDES" });
+  };
+
+  const processAdjacency = buildProcessAdjacency(edges);
+
+  const processPrecedes = edges.filter(
+    (edge) =>
+      edge.kind === "PRECEDES" &&
+      isProcessGraphNodeId(edge.source) &&
+      isProcessGraphNodeId(edge.target),
+  );
+
+  for (const procEdge of processPrecedes) {
+    const predApps = findNearestTaskApps(
+      procEdge.source,
+      "backward",
+      edges,
+      processAdjacency,
+    );
+    const succApps = findNearestTaskApps(
+      procEdge.target,
+      "forward",
+      edges,
+      processAdjacency,
+    );
+
+    linkApplicationPrecedesAcrossProcessFlow(predApps, succApps, addPrecedes);
+
+    const predTables = getTablesViaApps(predApps, edges);
+    const succTables = getTablesViaApps(succApps, edges);
+
+    if (predTables.length > 0 && succTables.length > 0) {
+      addPrecedes(predTables[predTables.length - 1]!, succTables[0]!);
+    }
+  }
+
+  return result;
+};
+
+const filterToScopedTasks = (
+  nodes: OperationsGraphNode[],
+  edges: OperationsGraphEdge[],
+  scopedTaskIds: ReadonlySet<number>,
+): { nodes: OperationsGraphNode[]; edges: OperationsGraphEdge[] } => {
+  const allowedNodeIds = new Set(
+    nodes
+      .filter(
+        (node) =>
+          node.kind !== "TASK" ||
+          scopedTaskIds.has(toTaskNodeId(node.sourceId)),
+      )
+      .map((node) => node.id),
+  );
+
+  return {
+    nodes: nodes.filter((node) => allowedNodeIds.has(node.id)),
+    edges: edges.filter(
+      (edge) =>
+        allowedNodeIds.has(edge.source) && allowedNodeIds.has(edge.target),
+    ),
+  };
+};
+
+const RESOURCE_NODE_KINDS = new Set<GraphNodeKind>([
+  "APPLICATION",
+  "TABLE",
+  "INTERFACE",
+]);
+
+/** E2E 탐색 범위 — BPMN L3 Call Activity 및 그 하위 L4·리소스만 유지 */
+const filterToE2eScope = (
+  nodes: OperationsGraphNode[],
+  edges: OperationsGraphEdge[],
+  scopedL3Ids: ReadonlySet<number>,
+  scopedTaskIds: ReadonlySet<number>,
+): { nodes: OperationsGraphNode[]; edges: OperationsGraphEdge[] } => {
+  const allowedNodeIds = new Set<string>();
+
+  for (const node of nodes) {
+    if (node.kind === "L3" && scopedL3Ids.has(Number(node.sourceId))) {
+      allowedNodeIds.add(node.id);
+    }
+    if (node.kind === "TASK" && scopedTaskIds.has(toTaskNodeId(node.sourceId))) {
+      allowedNodeIds.add(node.id);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of edges) {
+      if (!allowedNodeIds.has(edge.source) || allowedNodeIds.has(edge.target)) {
+        continue;
+      }
+      const targetNode = nodes.find((item) => item.id === edge.target);
+      if (targetNode && RESOURCE_NODE_KINDS.has(targetNode.kind)) {
+        allowedNodeIds.add(edge.target);
+        changed = true;
+      }
+    }
+  }
+
+  return {
+    nodes: nodes.filter((node) => allowedNodeIds.has(node.id)),
+    edges: edges.filter(
+      (edge) =>
+        allowedNodeIds.has(edge.source) && allowedNodeIds.has(edge.target),
+    ),
+  };
+};
+
 /** 중심 노드 기준 BFS 서브그래프를 조합한다 */
 export const buildOperationsGraph = async (
   query: OperationsGraphQuery,
@@ -184,6 +450,48 @@ export const buildOperationsGraph = async (
       : centerKind === "TASK"
         ? "TASK"
         : undefined;
+
+  const isL3ProcessCenter =
+    centerKind === "L3" &&
+    (centerProcessLevel === "L3" || centerProcessLevel === undefined);
+
+  const isE2eCenter = centerKind === "E2E";
+
+  let scopedL3TaskIds: ReadonlySet<number> | undefined;
+  if (isL3ProcessCenter) {
+    const l3NodeId = Number(centerId);
+    if (Number.isFinite(l3NodeId)) {
+      const childTasks = await graphQueries.listChildTasks(l3NodeId);
+      scopedL3TaskIds = new Set(
+        childTasks.map((task) => toTaskNodeId(task.nodeId)),
+      );
+    }
+  }
+
+  let scopedE2eL3Ids: ReadonlySet<number> | undefined;
+  let scopedE2eTaskIds: ReadonlySet<number> | undefined;
+  if (isE2eCenter) {
+    const e2eProcessId = Number(centerId);
+    if (Number.isFinite(e2eProcessId)) {
+      const linkedL3Ids = await e2eQueries.listE2eParticipantL3Ids(e2eProcessId);
+      scopedE2eL3Ids = new Set(linkedL3Ids.map((nodeId) => Number(nodeId)));
+      scopedE2eTaskIds = await graphQueries.listChildTaskIdsForL3s(scopedE2eL3Ids);
+    }
+  }
+
+  const neighborOptions = {
+    showInterfaces,
+    showTables,
+    allowedTaskIds:
+      scopedL3TaskIds ??
+      (isE2eCenter && scopedE2eL3Ids && scopedE2eL3Ids.size > 0
+        ? scopedE2eTaskIds
+        : undefined),
+    allowedL3Ids:
+      isE2eCenter && scopedE2eL3Ids && scopedE2eL3Ids.size > 0
+        ? scopedE2eL3Ids
+        : undefined,
+  };
 
   const nodeMap = new Map<string, OperationsGraphNode>();
   const edgeMap = new Map<string, OperationsGraphEdge>();
@@ -242,6 +550,8 @@ export const buildOperationsGraph = async (
         showInterfaces,
         showTables,
         includeL3Children: current.depth >= 1,
+        allowedTaskIds: neighborOptions.allowedTaskIds,
+        allowedL3Ids: neighborOptions.allowedL3Ids,
       });
     } else if (current.kind === "L3" || current.kind === "TASK") {
       const nodeId = Number(current.sourceId);
@@ -278,7 +588,7 @@ export const buildOperationsGraph = async (
         bundle = await graphQueries.collectProcessNeighbors(
           nodeId,
           current.kind === "L3" ? "L3" : "L4",
-          { showInterfaces, showTables },
+          neighborOptions,
         );
       }
     } else if (current.kind === "APPLICATION") {
@@ -288,6 +598,8 @@ export const buildOperationsGraph = async (
       }
       bundle = await graphQueries.collectApplicationNeighbors(systemId, {
         showInterfaces,
+        // BFS 이웃 확장 시 시스템 전체 테이블을 끌어오지 않음 (Task별 연결만 유지)
+        includeTables: showTables && current.depth === 0,
       });
     } else if (current.kind === "TABLE") {
       const parts = String(current.sourceId).split(":");
@@ -315,6 +627,41 @@ export const buildOperationsGraph = async (
         if (node.id === buildGraphNodeId(centerKind, centerId)) {
           continue;
         }
+
+        // L3 중심: 하위 Task만 1-hop 확장(리소스). APP·타 L3·타 Task BFS 제외
+        if (isL3ProcessCenter && scopedL3TaskIds) {
+          if (node.kind !== "TASK") {
+            continue;
+          }
+          if (!scopedL3TaskIds.has(toTaskNodeId(node.sourceId))) {
+            continue;
+          }
+        }
+
+        // E2E 중심: BPMN L3·하위 L4만 확장. APP BFS 시 동일 시스템 전체 Task 유입 방지
+        if (
+          isE2eCenter &&
+          scopedE2eL3Ids &&
+          scopedE2eL3Ids.size > 0 &&
+          scopedE2eTaskIds
+        ) {
+          if (RESOURCE_NODE_KINDS.has(node.kind)) {
+            continue;
+          }
+          if (
+            node.kind === "L3" &&
+            !scopedE2eL3Ids.has(Number(node.sourceId))
+          ) {
+            continue;
+          }
+          if (
+            node.kind === "TASK" &&
+            !scopedE2eTaskIds.has(toTaskNodeId(node.sourceId))
+          ) {
+            continue;
+          }
+        }
+
         queue.push({
           kind: node.kind,
           sourceId: node.sourceId,
@@ -325,7 +672,20 @@ export const buildOperationsGraph = async (
   }
 
   let nodes = Array.from(nodeMap.values());
-  const edges = Array.from(edgeMap.values());
+  let edges = linkResourcePrecedesFromTaskFlow(Array.from(edgeMap.values()));
+
+  if (scopedL3TaskIds) {
+    ({ nodes, edges } = filterToScopedTasks(nodes, edges, scopedL3TaskIds));
+  }
+
+  if (scopedE2eL3Ids && scopedE2eTaskIds && scopedE2eL3Ids.size > 0) {
+    ({ nodes, edges } = filterToE2eScope(
+      nodes,
+      edges,
+      scopedE2eL3Ids,
+      scopedE2eTaskIds,
+    ));
+  }
 
   if (highlightCritical) {
     nodes = nodes.map((node) =>

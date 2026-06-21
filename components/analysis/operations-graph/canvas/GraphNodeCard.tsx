@@ -17,6 +17,8 @@ export type GraphNodeData = {
   highlighted?: boolean;
   dimmed?: boolean;
   tableListMeta?: { index: number; total: number };
+  /** BPMN Call Activity로 연결된 외부 L3 */
+  viaCallActivity?: boolean;
 };
 
 const PROCESS_STATUSES: ProcessStatus[] = [
@@ -83,6 +85,31 @@ const GraphResourceNodeCard = ({
       )}
       aria-label={data.label}
     >
+      {(data.kind === "APPLICATION" ||
+        data.kind === "TABLE" ||
+        data.kind === "INTERFACE") ? (
+        <>
+          <Handle
+            id="flow-in"
+            type="target"
+            position={Position.Left}
+            className="pams-operations-graph-handle pams-operations-graph-handle--resource"
+          />
+          <Handle
+            id="flow-in-v"
+            type="target"
+            position={Position.Top}
+            className="pams-operations-graph-handle pams-operations-graph-handle--resource"
+          />
+          <Handle
+            id="flow-out"
+            type="source"
+            position={Position.Right}
+            className="pams-operations-graph-handle pams-operations-graph-handle--resource"
+          />
+        </>
+      ) : null}
+
       <Handle
         id="chain-in"
         type="target"
@@ -119,12 +146,20 @@ const GraphResourceNodeCard = ({
       ) : null}
 
       {hasOutgoing ? (
-        <Handle
-          id="chain-out"
-          type="source"
-          position={Position.Bottom}
-          className="pams-operations-graph-handle pams-operations-graph-handle--resource"
-        />
+        <>
+          <Handle
+            id="chain-out"
+            type="source"
+            position={Position.Bottom}
+            className="pams-operations-graph-handle pams-operations-graph-handle--resource"
+          />
+          <Handle
+            id="flow-out-v"
+            type="source"
+            position={Position.Bottom}
+            className="pams-operations-graph-handle pams-operations-graph-handle--resource"
+          />
+        </>
       ) : null}
     </article>
   );
@@ -157,9 +192,16 @@ const GraphProcessFlowNodeCard = ({
       aria-label={data.label}
     >
       <Handle
+        id="flow-in"
         type="target"
         position={Position.Left}
         className="pams-operations-graph-handle"
+      />
+      <Handle
+        id="flow-in-v"
+        type="target"
+        position={Position.Top}
+        className="pams-operations-graph-handle pams-operations-graph-handle--vertical"
       />
 
       <h3 className="pams-operations-graph-node-card__title">{data.label}</h3>
@@ -191,17 +233,32 @@ const GraphProcessFlowNodeCard = ({
       ) : null}
 
       <Handle
+        id="flow-out"
         type="source"
         position={Position.Right}
         className="pams-operations-graph-handle"
       />
+      <Handle
+        id="flow-out-v"
+        type="source"
+        position={Position.Bottom}
+        className="pams-operations-graph-handle pams-operations-graph-handle--vertical"
+      />
       {kind === "TASK" ? (
-        <Handle
-          id="chain-out"
-          type="source"
-          position={Position.Bottom}
-          className="pams-operations-graph-handle pams-operations-graph-handle--chain"
-        />
+        <>
+          <Handle
+            id="chain-out"
+            type="source"
+            position={Position.Bottom}
+            className="pams-operations-graph-handle pams-operations-graph-handle--chain"
+          />
+          <Handle
+            id="chain-out-h"
+            type="source"
+            position={Position.Right}
+            className="pams-operations-graph-handle pams-operations-graph-handle--chain-h"
+          />
+        </>
       ) : null}
     </article>
   );

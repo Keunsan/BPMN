@@ -15,6 +15,7 @@ import {
   GripVertical,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -85,6 +86,8 @@ type ProcessTreeProps = {
   search?: string;
   /** SearchBar 표시 여부 (기본: search 미지정 시 true) */
   showSearch?: boolean;
+  /** false면 새로고침 버튼 숨김 (상위에서 통합 새로고침 시) */
+  showRefresh?: boolean;
 };
 
 type TreeNodeItemProps = {
@@ -298,6 +301,7 @@ export const ProcessTree = ({
   selectableLevels,
   search: externalSearch,
   showSearch,
+  showRefresh = true,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
   const selectableLevelSet = useMemo(
@@ -305,6 +309,7 @@ export const ProcessTree = ({
     [selectableLevels],
   );
   const t = useTranslations("process");
+  const tc = useTranslations("common");
   const router = useRouter();
   const [internalSearch, setInternalSearch] = useState("");
   const useExternalSearch = externalSearch !== undefined;
@@ -321,7 +326,13 @@ export const ProcessTree = ({
     businessUnitCode: scopeFilters?.businessUnitCode,
   };
 
-  const { data: tree, isLoading, isError, refetch } = useProcessTree(treeFilters);
+  const { data: tree, isLoading, isError, isFetching, refetch } =
+    useProcessTree(treeFilters);
+  const isRefreshing = isFetching && !isLoading;
+
+  const handleRefresh = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const {
     expandedIds,
@@ -540,7 +551,20 @@ export const ProcessTree = ({
     );
   }
 
-  const searchRow = (
+  const refreshButton = showRefresh ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      aria-label={tc("refresh")}
+      disabled={isFetching}
+      onClick={handleRefresh}
+    >
+      <RefreshCw className={cn("size-4", isRefreshing && "animate-spin")} />
+    </Button>
+  ) : null;
+
+  const searchRow = showSearchBar ? (
     <div className="flex shrink-0 items-center gap-2">
       <SearchBar
         value={querySearch}
@@ -548,6 +572,7 @@ export const ProcessTree = ({
         placeholder={t("searchPlaceholder")}
         className="flex-1"
       />
+      {refreshButton}
       {!pickerMode && (
         <Button
           size="sm"
@@ -558,7 +583,9 @@ export const ProcessTree = ({
         </Button>
       )}
     </div>
-  );
+  ) : refreshButton ? (
+    <div className="flex shrink-0 justify-end">{refreshButton}</div>
+  ) : null;
 
   const treeBody = !tree?.length ? (
     <EmptyState
@@ -588,7 +615,7 @@ export const ProcessTree = ({
         className,
       )}
     >
-      {showSearchBar ? searchRow : null}
+      {searchRow}
       {showLevelControls && Boolean(tree?.length) && (
         <TreeLevelExpandControls
           levels={PROCESS_LEVELS}

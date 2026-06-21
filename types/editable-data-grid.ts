@@ -22,7 +22,7 @@ export type EditableColumn<T> = {
   minWidth?: number;
   maxWidth?: number;
   freeze?: "left";
-  align?: "left" | "right";
+  align?: "left" | "right" | "center";
   mono?: boolean;
   required?: boolean;
   sortable?: boolean;
@@ -105,7 +105,8 @@ export type TaskGridRow = {
   processName: string;
   definition: string | null;
   purpose: string | null;
-  processStatus: string;
+  inputDeliverable: string | null;
+  outputDeliverable: string | null;
   ownerOrgId: string | null;
   linkedSystemId: string | null;
   version: string | null;

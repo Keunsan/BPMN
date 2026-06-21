@@ -18,8 +18,16 @@ export const useFilterPanelSlot = () => useContext(FilterPanelSlotContext);
 export const useFilterPanelSlotContextValue = (
   showCollapseToggle: boolean,
   collapseToggle: ReactNode,
+  /** FilterField 트리 마운트 여부 — 접힘 후 펼칠 때 useId가 바뀌므로 호스트 id 재할당 */
+  fieldsMounted = true,
 ): FilterPanelSlotContextValue => {
   const hostFieldIdRef = useRef<string | null>(null);
+  const prevFieldsMountedRef = useRef(fieldsMounted);
+
+  if (!prevFieldsMountedRef.current && fieldsMounted) {
+    hostFieldIdRef.current = null;
+  }
+  prevFieldsMountedRef.current = fieldsMounted;
 
   return {
     showCollapseToggle,

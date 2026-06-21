@@ -2,22 +2,20 @@
 
 import {
   Copy,
+  GitBranch,
   MoreHorizontal,
   Pencil,
   Trash2,
   Workflow,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import {
   ContentPanel,
-  FilterField,
-  FilterPanel,
-  ListPageBody,
   ListPageLayout,
   PageActions,
   PageContent,
@@ -25,6 +23,8 @@ import {
 } from "@/components/common/layout";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
+import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import {
@@ -51,7 +51,6 @@ import {
 } from "@/components/ui/select";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Link, useRouter } from "@/lib/i18n/navigation";
-import { ProcessScopeFilter } from "@/components/process/ProcessScopeFilter";
 import {
   useBpmnList,
   useCreateBpmn,
@@ -60,14 +59,23 @@ import {
 } from "@/lib/query/hooks/useBpmn";
 import { useProcessTree } from "@/lib/query/hooks/useProcess";
 import type { BpmnModelKind, BpmnModelStatus } from "@/types/bpmn";
+import type { E2eProcessDto } from "@/types/e2e-process";
 import type { ProcessNodeTree } from "@/types/process";
+
+type BpmnListSelection =
+  | { kind: "process"; node: ProcessNodeTree }
+  | { kind: "e2e"; process: E2eProcessDto };
 
 /** BPMN 모델 카드/그리드 목록 */
 export const BpmnModelList = () => {
   const t = useTranslations("bpmn");
+  const tsMap = useTranslations("systemMapping");
   const tc = useTranslations("common");
   const ts = useTranslations("status");
   const router = useRouter();
+  const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
+    useProcessScopeParams();
+  const [selection, setSelection] = useState<BpmnListSelection | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BpmnModelStatus | "ALL">(
     "ALL",
@@ -76,8 +84,6 @@ export const BpmnModelList = () => {
     "ALL",
   );
   const [sort, setSort] = useState<"updated" | "name">("updated");
-  const [companyCode, setCompanyCode] = useState("");
-  const [businessUnitCode, setBusinessUnitCode] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const statusFilterLabel =
     statusFilter === "ALL" ? t("allStatus") : ts(statusFilter);
@@ -90,15 +96,31 @@ export const BpmnModelList = () => {
         ? t("modelKindE2e")
         : t("modelKindL3");
 
-  const { data: models, isLoading, error, refetch } = useBpmnList({
-    isCurrent: true,
-    search: debouncedSearch || undefined,
-    status: statusFilter === "ALL" ? undefined : statusFilter,
-    modelKind: modelKindFilter === "ALL" ? undefined : modelKindFilter,
-    sort,
-    companyCode: companyCode || undefined,
-    businessUnitCode: businessUnitCode || undefined,
-  });
+  const listFilters = useMemo(
+    () => ({
+      isCurrent: true,
+      search: debouncedSearch || undefined,
+      status: statusFilter === "ALL" ? undefined : statusFilter,
+      modelKind: modelKindFilter === "ALL" ? undefined : modelKindFilter,
+      sort,
+      companyCode: companyCode || undefined,
+      businessUnitCode: businessUnitCode || undefined,
+      nodeId: selection?.kind === "process" ? selection.node.nodeId : undefined,
+      e2eProcessId:
+        selection?.kind === "e2e" ? selection.process.e2eProcessId : undefined,
+    }),
+    [
+      businessUnitCode,
+      companyCode,
+      debouncedSearch,
+      modelKindFilter,
+      selection,
+      sort,
+      statusFilter,
+    ],
+  );
+
+  const { data: models, isLoading, error, refetch } = useBpmnList(listFilters);
 
   const deleteMutation = useDeleteBpmn();
   const duplicateMutation = useDuplicateBpmn();
@@ -112,22 +134,211 @@ export const BpmnModelList = () => {
   } | null>(null);
   const [duplicateName, setDuplicateName] = useState("");
 
-  if (isLoading) {
-    return <LoadingSpinner label={t("loading")} />;
-  }
+  const handleScopeChange = useCallback(
+    (scope: Parameters<typeof setScope>[0]) => {
+      setSelection(null);
+      setScope(scope);
+    },
+    [setScope],
+  );
 
-  if (error) {
-    return (
-      <EmptyState
-        title={t("loadError")}
-        action={
-          <Button variant="outline" onClick={() => refetch()}>
-            {t("retry")}
-          </Button>
-        }
+  const handleSelectProcess = useCallback((node: ProcessNodeTree) => {
+    setSelection({ kind: "process", node });
+  }, []);
+
+  const handleSelectE2e = useCallback((process: E2eProcessDto) => {
+    setSelection({ kind: "e2e", process });
+  }, []);
+
+  const listToolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder={t("searchPlaceholder")}
+        className="w-48"
       />
+      <Select
+        value={statusFilter}
+        onValueChange={(v) => v && setStatusFilter(v as BpmnModelStatus | "ALL")}
+      >
+        <SelectTrigger variant="filter" className="w-[120px]">
+          <SelectValue placeholder={t("filterStatus")}>
+            {statusFilterLabel}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent variant="filter">
+          <SelectItem variant="filter" value="ALL">
+            {t("allStatus")}
+          </SelectItem>
+          {(
+            ["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "OBSOLETE"] as const
+          ).map((s) => (
+            <SelectItem variant="filter" key={s} value={s}>
+              {ts(s)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={modelKindFilter}
+        onValueChange={(v) =>
+          v && setModelKindFilter(v as BpmnModelKind | "ALL")
+        }
+      >
+        <SelectTrigger variant="filter" className="w-[120px]">
+          <SelectValue placeholder={t("filterModelKind")}>
+            {modelKindFilterLabel}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent variant="filter">
+          <SelectItem variant="filter" value="ALL">
+            {t("allModelKinds")}
+          </SelectItem>
+          <SelectItem variant="filter" value="L3_PROCESS">
+            {t("modelKindL3")}
+          </SelectItem>
+          <SelectItem variant="filter" value="E2E">
+            {t("modelKindE2e")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Select
+        value={sort}
+        onValueChange={(v) => v && setSort(v as "updated" | "name")}
+      >
+        <SelectTrigger variant="filter" className="w-[120px]">
+          <SelectValue>{sortLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent variant="filter">
+          <SelectItem variant="filter" value="updated">
+            {t("sortUpdated")}
+          </SelectItem>
+          <SelectItem variant="filter" value="name">
+            {t("sortName")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const renderModelList = () => {
+    if (isLoading) {
+      return <LoadingSpinner label={t("loading")} className="min-h-[320px]" />;
+    }
+
+    if (error) {
+      return (
+        <EmptyState
+          title={t("loadError")}
+          action={
+            <Button variant="outline" onClick={() => refetch()}>
+              {t("retry")}
+            </Button>
+          }
+          className="min-h-[320px]"
+        />
+      );
+    }
+
+    if (!models?.length) {
+      return (
+        <EmptyState
+          title={t("empty")}
+          description={t("emptyDesc")}
+          action={
+            <PageActions
+              showSearch={false}
+              onRegister={() => setCreateOpen(true)}
+              registerLabel={t("newModel")}
+            />
+          }
+          className="min-h-[320px]"
+        />
+      );
+    }
+
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {models.map((model) => (
+          <Card key={model.modelId} className="overflow-hidden">
+            <Link href={`/bpmn/${model.modelId}`}>
+              <div className="pams-bpmn-thumbnail flex h-36 items-center justify-center bg-muted/30 p-2">
+                {model.svgContent ? (
+                  <div
+                    className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
+                    dangerouslySetInnerHTML={{ __html: model.svgContent }}
+                  />
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    {t("noThumbnail")}
+                  </span>
+                )}
+              </div>
+            </Link>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <CardContent className="p-0">
+                    <p className="truncate font-medium">{model.modelName}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {model.modelKind === "E2E"
+                        ? `${model.e2eProcessCode ?? "E2E"} · v${model.version}`
+                        : `${model.processCode} · v${model.version}`}
+                    </p>
+                  </CardContent>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button variant="ghost" size="icon-sm">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/bpmn/${model.modelId}`)}
+                    >
+                      <Pencil className="mr-2 size-4" />
+                      {t("edit")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setDuplicateTarget({
+                          modelId: model.modelId,
+                          defaultName: `${model.modelName} (copy)`,
+                        });
+                        setDuplicateName(`${model.modelName} (copy)`);
+                      }}
+                    >
+                      <Copy className="mr-2 size-4" />
+                      {t("duplicate")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDeleteTarget(model.modelId)}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      {t("delete")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </CardHeader>
+            <CardFooter className="justify-between pt-0">
+              <StatusBadge status={model.status} />
+              <span className="text-xs text-muted-foreground">
+                {model.updatedAt
+                  ? new Date(model.updatedAt).toLocaleDateString()
+                  : new Date(model.createdAt).toLocaleDateString()}
+              </span>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
     );
-  }
+  };
 
   return (
     <ListPageLayout>
@@ -143,201 +354,64 @@ export const BpmnModelList = () => {
           />
         }
       />
-      <ListPageBody
-        filterStorageKey="pams-bpmn-list-filter-panel-width"
-        filter={
-          <FilterPanel>
-            <ProcessScopeFilter
-              embedded
-              companyCode={companyCode}
-              businessUnitCode={businessUnitCode}
-              onScopeChange={({ companyCode: nextCompany, businessUnitCode: nextBu }) => {
-                setCompanyCode(nextCompany ?? "");
-                setBusinessUnitCode(nextBu ?? "");
-              }}
-            />
-            <FilterField label={t("searchPlaceholder")}>
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder={t("searchPlaceholder")}
-              />
-            </FilterField>
-            <FilterField label={t("filterStatus")}>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) =>
-                  v && setStatusFilter(v as BpmnModelStatus | "ALL")
-                }
-              >
-                <SelectTrigger variant="filter">
-                  <SelectValue placeholder={t("filterStatus")}>
-                    {statusFilterLabel}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent variant="filter">
-                  <SelectItem variant="filter" value="ALL">{t("allStatus")}</SelectItem>
-                  {(
-                    ["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "OBSOLETE"] as const
-                  ).map((s) => (
-                    <SelectItem variant="filter" key={s} value={s}>
-                      {ts(s)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterField label={t("filterModelKind")}>
-              <Select
-                value={modelKindFilter}
-                onValueChange={(v) =>
-                  v && setModelKindFilter(v as BpmnModelKind | "ALL")
-                }
-              >
-                <SelectTrigger variant="filter">
-                  <SelectValue placeholder={t("filterModelKind")}>
-                    {modelKindFilterLabel}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent variant="filter">
-                  <SelectItem variant="filter" value="ALL">
-                    {t("allModelKinds")}
-                  </SelectItem>
-                  <SelectItem variant="filter" value="L3_PROCESS">
-                    {t("modelKindL3")}
-                  </SelectItem>
-                  <SelectItem variant="filter" value="E2E">
-                    {t("modelKindE2e")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterField label={t("sortLabel")}>
-              <Select
-                value={sort}
-                onValueChange={(v) => v && setSort(v as "updated" | "name")}
-              >
-                <SelectTrigger variant="filter">
-                  <SelectValue>{sortLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent variant="filter">
-                  <SelectItem variant="filter" value="updated">{t("sortUpdated")}</SelectItem>
-                  <SelectItem variant="filter" value="name">{t("sortName")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-            {!companyCode || !businessUnitCode ? (
-              <p className="px-1 text-sm text-muted-foreground">
-                {t("scopeFilterHint")}
-              </p>
-            ) : null}
-          </FilterPanel>
+      <TaskMappingSideLayout
+        storageKey="pams-bpmn-list-filter-panel-width"
+        defaultWidth={300}
+        splitterLabel={tsMap("panelResizeHorizontal")}
+        companyCode={companyCode}
+        businessUnitCode={businessUnitCode}
+        onScopeChange={handleScopeChange}
+        scopeFilters={scopeFilters}
+        selectedProcessId={
+          selection?.kind === "process" ? selection.node.nodeId : undefined
         }
-        content={
-          <PageContent>
+        selectedE2eId={
+          selection?.kind === "e2e"
+            ? selection.process.e2eProcessId
+            : undefined
+        }
+        onSelectProcess={handleSelectProcess}
+        onSelectE2e={handleSelectE2e}
+      >
+        <PageContent bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5">
+          {selection ? (
+            <div className="shrink-0 rounded-lg border bg-card px-3 py-2 text-sm shadow-sm">
+              {selection.kind === "e2e" ? (
+                <>
+                  <GitBranch className="mr-1 inline size-3.5 text-primary" />
+                  <span className="font-medium">{selection.process.name}</span>
+                  <span className="ml-2 font-mono text-muted-foreground">
+                    {selection.process.code}
+                  </span>
+                  <span className="ml-2 text-muted-foreground">E2E</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{selection.node.name}</span>
+                  <span className="ml-2 font-mono text-muted-foreground">
+                    {selection.node.code}
+                  </span>
+                  <span className="ml-2 text-muted-foreground">
+                    {selection.node.level}
+                  </span>
+                </>
+              )}
+            </div>
+          ) : null}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <ContentPanel
               title={t("title")}
               count={models?.length ?? 0}
               countSuffix={tc("countUnit")}
               icon
+              toolbar={listToolbar}
               bodyClassName="p-4"
             >
-            {!models?.length ? (
-              <EmptyState
-                title={t("empty")}
-                description={t("emptyDesc")}
-                action={
-                  <PageActions
-                    showSearch={false}
-                    onRegister={() => setCreateOpen(true)}
-                    registerLabel={t("newModel")}
-                  />
-                }
-              />
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {models.map((model) => (
-            <Card key={model.modelId} className="overflow-hidden">
-              <Link href={`/bpmn/${model.modelId}`}>
-                <div className="pams-bpmn-thumbnail flex h-36 items-center justify-center bg-muted/30 p-2">
-                  {model.svgContent ? (
-                    <div
-                      className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: model.svgContent }}
-                    />
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {t("noThumbnail")}
-                    </span>
-                  )}
-                </div>
-              </Link>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <CardContent className="p-0">
-                      <p className="truncate font-medium">{model.modelName}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {model.modelKind === "E2E"
-                          ? `${model.e2eProcessCode ?? "E2E"} · v${model.version}`
-                          : `${model.processCode} · v${model.version}`}
-                      </p>
-                    </CardContent>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button variant="ghost" size="icon-sm">
-                          <MoreHorizontal className="size-4" />
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/bpmn/${model.modelId}`)}
-                      >
-                        <Pencil className="mr-2 size-4" />
-                        {t("edit")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setDuplicateTarget({
-                            modelId: model.modelId,
-                            defaultName: `${model.modelName} (copy)`,
-                          });
-                          setDuplicateName(`${model.modelName} (copy)`);
-                        }}
-                      >
-                        <Copy className="mr-2 size-4" />
-                        {t("duplicate")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setDeleteTarget(model.modelId)}
-                      >
-                        <Trash2 className="mr-2 size-4" />
-                        {t("delete")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardFooter className="justify-between pt-0">
-                <StatusBadge status={model.status} />
-                <span className="text-xs text-muted-foreground">
-                  {model.updatedAt
-                    ? new Date(model.updatedAt).toLocaleDateString()
-                    : new Date(model.createdAt).toLocaleDateString()}
-                </span>
-              </CardFooter>
-            </Card>
-                ))}
-              </div>
-            )}
+              {renderModelList()}
             </ContentPanel>
-          </PageContent>
-        }
-      />
+          </div>
+        </PageContent>
+      </TaskMappingSideLayout>
 
       <CreateBpmnDialog
         open={createOpen}

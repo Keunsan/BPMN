@@ -7,18 +7,107 @@ import type {
   SaveResult,
 } from "@/types/editable-data-grid";
 import type {
+  TaskAttribute,
   TaskAttributeDto,
+  TaskAttributeI18nField,
   TaskAttributeI18nMap,
+  TaskAttributeI18nValue,
   TaskAttributeListFilters,
   TaskAttributeListItem,
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
-import type { ProcessStatus } from "@/types/process";
 
 import * as metadataQueries from "@/lib/db/queries/metadata";
 import * as processQueries from "@/lib/db/queries/process";
 import { updateProcess } from "@/lib/services/process.service";
+
+const TASK_ATTRIBUTE_TEXT_FIELDS = [
+  "definition",
+  "purpose",
+  "inputDeliverable",
+  "inputDataDesc",
+  "inputCondition",
+  "outputDeliverable",
+  "outputDataDesc",
+  "outputCondition",
+  "issues",
+  "exceptions",
+  "remarks",
+] as const satisfies readonly TaskAttributeI18nField[];
+
+type TaskAttributeTextField = (typeof TASK_ATTRIBUTE_TEXT_FIELDS)[number];
+
+type TaskAttributeScalarField =
+  | "frequency"
+  | "triggerEvent"
+  | "duration"
+  | "version";
+
+const TASK_ATTRIBUTE_SCALAR_FIELDS = [
+  "frequency",
+  "triggerEvent",
+  "duration",
+  "version",
+] as const satisfies readonly TaskAttributeScalarField[];
+
+/** undefined는 유지, null은 명시적 삭제로 취급한다. */
+const pickTaskAttributeField = <T>(
+  incoming: T | undefined,
+  existing: T | null,
+): T | null => (incoming !== undefined ? incoming : existing);
+
+/** 기존 Task 속성과 부분 수정 DTO를 병합한다. */
+const mergeTaskAttributeDto = (
+  dto: UpsertTaskAttributeDto,
+  existing: TaskAttribute | null,
+  existingI18n: TaskAttributeI18nMap,
+): UpsertTaskAttributeDto => {
+  if (!existing) {
+    return dto;
+  }
+
+  const merged: UpsertTaskAttributeDto = { nodeId: dto.nodeId };
+
+  for (const field of TASK_ATTRIBUTE_TEXT_FIELDS) {
+    merged[field] = pickTaskAttributeField(dto[field], existing[field]);
+  }
+
+  for (const field of TASK_ATTRIBUTE_SCALAR_FIELDS) {
+    merged[field] = pickTaskAttributeField(dto[field], existing[field]);
+  }
+
+  const mergedI18n: TaskAttributeI18nMap = {};
+  for (const locale of ["ko", "en", "zh-TW"] as const) {
+    const existingLocale = existingI18n[locale] ?? {};
+    const incomingLocale = dto.i18n?.[locale];
+    const localeMerged: TaskAttributeI18nValue = {};
+
+    for (const field of TASK_ATTRIBUTE_TEXT_FIELDS) {
+      if (incomingLocale?.[field] !== undefined) {
+        localeMerged[field] = incomingLocale[field] ?? null;
+        continue;
+      }
+
+      if (locale === "ko") {
+        localeMerged[field] = merged[field] ?? null;
+        continue;
+      }
+
+      localeMerged[field] = existingLocale[field] ?? null;
+    }
+
+    mergedI18n[locale] = localeMerged;
+  }
+
+  merged.i18n = mergedI18n;
+
+  if (dto.predecessors !== undefined) {
+    merged.predecessors = dto.predecessors;
+  }
+
+  return merged;
+};
 
 /** 요청 DTO에서 한국어 기본 컬럼을 구성한다. */
 const withKoFallback = (dto: UpsertTaskAttributeDto): UpsertTaskAttributeDto => {
@@ -41,8 +130,8 @@ const withKoFallback = (dto: UpsertTaskAttributeDto): UpsertTaskAttributeDto => 
 };
 
 /** 기본 컬럼을 포함하는 i18n 맵을 구성한다. */
-const buildI18nMap = (dto: UpsertTaskAttributeDto): TaskAttributeI18nMap => ({
-  ko: {
+const buildI18nMap = (dto: UpsertTaskAttributeDto): TaskAttributeI18nMap => {
+  const koBase: TaskAttributeI18nValue = {
     definition: dto.definition ?? null,
     purpose: dto.purpose ?? null,
     inputDeliverable: dto.inputDeliverable ?? null,
@@ -54,9 +143,14 @@ const buildI18nMap = (dto: UpsertTaskAttributeDto): TaskAttributeI18nMap => ({
     issues: dto.issues ?? null,
     exceptions: dto.exceptions ?? null,
     remarks: dto.remarks ?? null,
-  },
-  ...dto.i18n,
-});
+  };
+
+  return {
+    ko: { ...koBase, ...dto.i18n?.ko },
+    ...(dto.i18n?.en ? { en: dto.i18n.en } : {}),
+    ...(dto.i18n?.["zh-TW"] ? { "zh-TW": dto.i18n["zh-TW"] } : {}),
+  };
+};
 
 /** Task 속성 대상 노드를 검증한다. */
 const assertTaskNode = async (nodeId: number) => {
@@ -172,7 +266,12 @@ export const upsertTaskAttribute = async (
 ): Promise<TaskAttributeDto> => {
   await assertTaskNode(dto.nodeId);
 
-  const normalized = withKoFallback(dto);
+  const existing = await metadataQueries.findTaskAttributeByNodeId(dto.nodeId);
+  const existingI18n = existing
+    ? await metadataQueries.findTaskAttributeI18n(existing.attrId)
+    : {};
+  const merged = mergeTaskAttributeDto(dto, existing, existingI18n);
+  const normalized = withKoFallback(merged);
   const attribute = await metadataQueries.upsertTaskAttribute({
     ...normalized,
     createdBy: userId ?? null,
@@ -223,15 +322,11 @@ export const batchUpsertTaskAttributes = async (
       const fields = item.changedFields;
       const processPatch: {
         name?: string;
-        status?: ProcessStatus;
         ownerOrgId?: number | null;
       } = {};
 
       if (fields.processName !== undefined) {
         processPatch.name = String(fields.processName);
-      }
-      if (fields.processStatus !== undefined) {
-        processPatch.status = fields.processStatus as ProcessStatus;
       }
       if (fields.ownerOrgId !== undefined) {
         processPatch.ownerOrgId =
@@ -268,9 +363,32 @@ export const batchUpsertTaskAttributes = async (
           ko: { ...attributePatch.i18n?.ko, purpose: fields.purpose },
         };
       }
+      if (fields.inputDeliverable !== undefined) {
+        attributePatch.inputDeliverable = fields.inputDeliverable;
+        attributePatch.i18n = {
+          ...attributePatch.i18n,
+          ko: {
+            ...attributePatch.i18n?.ko,
+            inputDeliverable: fields.inputDeliverable,
+          },
+        };
+      }
+      if (fields.outputDeliverable !== undefined) {
+        attributePatch.outputDeliverable = fields.outputDeliverable;
+        attributePatch.i18n = {
+          ...attributePatch.i18n,
+          ko: {
+            ...attributePatch.i18n?.ko,
+            outputDeliverable: fields.outputDeliverable,
+          },
+        };
+      }
 
       const hasAttributeChanges =
-        fields.definition !== undefined || fields.purpose !== undefined;
+        fields.definition !== undefined ||
+        fields.purpose !== undefined ||
+        fields.inputDeliverable !== undefined ||
+        fields.outputDeliverable !== undefined;
 
       if (hasAttributeChanges) {
         await upsertTaskAttribute(attributePatch, locale, userId);
@@ -287,6 +405,12 @@ export const batchUpsertTaskAttributes = async (
       }
       if (item.changedFields.definition !== undefined) {
         fieldErrors.definition = message;
+      }
+      if (item.changedFields.inputDeliverable !== undefined) {
+        fieldErrors.inputDeliverable = message;
+      }
+      if (item.changedFields.outputDeliverable !== undefined) {
+        fieldErrors.outputDeliverable = message;
       }
       if (Object.keys(fieldErrors).length === 0) {
         fieldErrors._row = message;

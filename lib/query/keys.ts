@@ -124,3 +124,18 @@ export const sessionKeys = {
   all: ["session"] as const,
   status: () => [...sessionKeys.all, "status"] as const,
 };
+
+export const organizationKeys = {
+  all: ["organization"] as const,
+  lists: () => [...organizationKeys.all, "list"] as const,
+  list: (filters: Record<string, string | boolean | undefined>) =>
+    [...organizationKeys.lists(), filters] as const,
+  hrDepartments: () => [...organizationKeys.all, "hr-departments"] as const,
+};
+
+export const roleKeys = {
+  all: ["role"] as const,
+  lists: () => [...roleKeys.all, "list"] as const,
+  list: (filters: Record<string, string | boolean | undefined>) =>
+    [...roleKeys.lists(), filters] as const,
+};

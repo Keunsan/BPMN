@@ -122,9 +122,24 @@ export const listBpmnModels = async (
 > => {
   const conditions: string[] = ["1=1"];
   const params: Record<string, string | number | boolean> = {};
+  let scopeCte = "";
+  let scopeJoin = "";
 
   if (filters.nodeId !== undefined) {
-    conditions.push("m.node_id = @nodeId");
+    // L3: 해당 L3 · L2/L1: 하위 L3 전체의 BPMN 모델
+    scopeCte = `WITH descendants AS (
+         SELECT node_id, level
+         FROM process_node
+         WHERE node_id = @nodeId
+         UNION ALL
+         SELECT child.node_id, child.level
+         FROM process_node child
+         INNER JOIN descendants parent ON child.parent_node_id = parent.node_id
+       ),
+       l3_scope AS (
+         SELECT node_id FROM descendants WHERE level = 'L3'
+       )`;
+    scopeJoin = "INNER JOIN l3_scope ls ON m.node_id = ls.node_id";
     params.nodeId = filters.nodeId;
   }
 
@@ -183,12 +198,14 @@ export const listBpmnModels = async (
       : "COALESCE(m.updated_at, m.created_at) DESC";
 
   const rows = await query<Record<string, unknown>>(
-    `SELECT m.*,
+    `${scopeCte}
+     SELECT m.*,
             p.code AS process_code,
             p.name AS process_name,
             e.code AS e2e_process_code,
             e.name AS e2e_process_name
      FROM bpmn_model m
+     ${scopeJoin}
      LEFT JOIN process_node p ON p.node_id = m.node_id
      LEFT JOIN e2e_process e ON e.e2e_process_id = m.e2e_process_id
      WHERE ${conditions.join(" AND ")}

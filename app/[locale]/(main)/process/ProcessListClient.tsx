@@ -169,6 +169,7 @@ export const ProcessListClient = () => {
             <E2eProcessDetail
               e2eProcessId={e2eSheet.process.e2eProcessId}
               onEdit={(process) => setE2eSheet({ type: "edit", process })}
+              onDeleted={() => setE2eSheet(null)}
             />
           )}
           {e2eSheet?.type === "create" && (

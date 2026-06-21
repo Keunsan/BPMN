@@ -9,11 +9,16 @@ import type {
 import {
   buildGraphNodeId,
   buildTableNodeId,
+  buildTaskScopedApplicationNodeId,
+  buildTaskScopedTableNodeId,
 } from "@/types/operations-graph";
 
 import { query, queryOne } from "../pool";
 
 const MAX_NEIGHBOR_ROWS = 200;
+
+/** MSSQL recordset 숫자 id가 string으로 올 수 있어 Set/비교 시 정규화 */
+const asNodeId = (value: number | string): number => Number(value);
 
 type ProcessNeighborRow = {
   nodeId: number;
@@ -87,6 +92,20 @@ export const listChildTasks = async (
     { parentNodeId, limit: MAX_NEIGHBOR_ROWS },
   );
   return rows as unknown as ProcessNeighborRow[];
+};
+
+/** 여러 L3 하위 L4 Task id 집합 */
+export const listChildTaskIdsForL3s = async (
+  l3Ids: ReadonlySet<number>,
+): Promise<Set<number>> => {
+  const taskIds = new Set<number>();
+  for (const l3Id of l3Ids) {
+    const children = await listChildTasks(l3Id);
+    for (const child of children) {
+      taskIds.add(asNodeId(child.nodeId));
+    }
+  }
+  return taskIds;
 };
 
 /** Task 선후행 관계 */
@@ -208,21 +227,39 @@ const toProcessNode = (row: ProcessNeighborRow): OperationsGraphNode => ({
   label: row.name,
   code: row.code,
   status: row.status,
-  sourceId: row.nodeId,
+  sourceId: asNodeId(row.nodeId),
 });
 
-const toApplicationNode = (row: SystemMappingRow): OperationsGraphNode => ({
-  id: buildGraphNodeId("APPLICATION", row.systemId),
+const toApplicationNode = (
+  row: SystemMappingRow,
+  taskNodeId?: number,
+): OperationsGraphNode => ({
+  id:
+    taskNodeId !== undefined
+      ? buildTaskScopedApplicationNodeId(taskNodeId, row.systemId)
+      : buildGraphNodeId("APPLICATION", row.systemId),
   kind: "APPLICATION",
   label: row.systemName,
   code: row.systemCode,
   sourceId: row.systemId,
+  meta: taskNodeId !== undefined ? { taskNodeId } : undefined,
 });
 
-const toTableNode = (row: TableLinkRow): OperationsGraphNode => ({
-  id: buildTableNodeId(row.systemId, row.schemaName, row.tableName),
+const toTableNode = (
+  row: TableLinkRow,
+  taskNodeId?: number,
+): OperationsGraphNode => ({
+  id:
+    taskNodeId !== undefined
+      ? buildTaskScopedTableNodeId(
+          taskNodeId,
+          row.systemId,
+          row.schemaName,
+          row.tableName,
+        )
+      : buildTableNodeId(row.systemId, row.schemaName, row.tableName),
   kind: "TABLE",
-  label: row.tableNameKor ?? row.tableName,
+  label: row.tableName,
   code: row.tableName,
   sourceId: `${row.systemId}:${row.schemaName ?? ""}:${row.tableName}`,
   isCritical: row.isCritical,
@@ -230,6 +267,7 @@ const toTableNode = (row: TableLinkRow): OperationsGraphNode => ({
     systemCode: row.systemCode,
     schemaName: row.schemaName,
     crudType: row.crudType,
+    ...(taskNodeId !== undefined ? { taskNodeId } : {}),
   },
 });
 
@@ -325,6 +363,130 @@ export const collectProcessScopeNeighbors = async (
   return { nodes, edges };
 };
 
+type BpmnFlowElementRow = {
+  elementBpmnId: string;
+  elementType: string;
+  linkedNodeId: number;
+  linkedCode: string | null;
+  linkedName: string | null;
+  linkedLevel: string | null;
+  linkedStatus: string | null;
+};
+
+/** L3 BPMN Call Activity 외부 L3 연결 및 sequenceFlow 기반 PRECEDES */
+const collectL3CallActivityFlow = async (
+  l3NodeId: number,
+  childTaskIds: ReadonlySet<number>,
+  addNode: (node: OperationsGraphNode) => void,
+  addEdge: (
+    source: string,
+    target: string,
+    kind: GraphEdgeKind,
+    label?: string,
+  ) => void,
+  allowedL3Ids?: ReadonlySet<number>,
+): Promise<void> => {
+  const { findCurrentBpmnModelByNodeId } = await import("@/lib/db/queries/bpmn");
+  const { derivePredecessorsFromBpmn } = await import(
+    "@/lib/utils/bpmn-predecessor-sync"
+  );
+
+  const model = await findCurrentBpmnModelByNodeId(l3NodeId);
+  if (!model?.modelId) {
+    return;
+  }
+
+  const elementRows = await query<Record<string, unknown>>(
+    `SELECT e.element_bpmn_id AS elementBpmnId,
+            e.element_type AS elementType,
+            e.linked_node_id AS linkedNodeId,
+            p.code AS linkedCode,
+            p.name AS linkedName,
+            p.level AS linkedLevel,
+            p.status AS linkedStatus
+     FROM bpmn_element e
+     LEFT JOIN process_node p ON p.node_id = e.linked_node_id
+     WHERE e.model_id = @modelId AND e.linked_node_id IS NOT NULL`,
+    { modelId: model.modelId },
+  );
+
+  if (elementRows.length === 0) {
+    return;
+  }
+
+  const typedRows = elementRows as unknown as BpmnFlowElementRow[];
+  const externalCallL3Ids = new Set<number>();
+
+  for (const row of typedRows) {
+    if (row.elementType !== "CALL_ACTIVITY" || row.linkedLevel !== "L3") {
+      continue;
+    }
+    const linkedL3Id = asNodeId(row.linkedNodeId);
+    if (linkedL3Id === asNodeId(l3NodeId)) {
+      continue;
+    }
+    if (allowedL3Ids && !allowedL3Ids.has(linkedL3Id)) {
+      continue;
+    }
+    externalCallL3Ids.add(linkedL3Id);
+    addNode({
+      id: buildGraphNodeId("L3", linkedL3Id),
+      kind: "L3",
+      label: row.linkedName ?? "",
+      code: row.linkedCode ?? undefined,
+      status: row.linkedStatus ?? undefined,
+      sourceId: linkedL3Id,
+      meta: { inTaskFlow: true, viaCallActivity: true },
+    });
+  }
+
+  if (externalCallL3Ids.size === 0) {
+    return;
+  }
+
+  const resolveFlowNodeId = (processNodeId: number | string): string | null => {
+    const id = asNodeId(processNodeId);
+    if (externalCallL3Ids.has(id)) {
+      return buildGraphNodeId("L3", id);
+    }
+    if (childTaskIds.has(id)) {
+      return buildGraphNodeId("TASK", id);
+    }
+    return null;
+  };
+
+  const elements = typedRows.map((row) => ({
+    elementBpmnId: row.elementBpmnId,
+    elementType: row.elementType as import("@/types/bpmn").BpmnElementType,
+    linkedNodeId: asNodeId(row.linkedNodeId),
+  }));
+
+  const predecessors = derivePredecessorsFromBpmn(model.bpmnXml, elements);
+
+  for (const pair of predecessors) {
+    const involvesCallL3 =
+      externalCallL3Ids.has(pair.nodeId) ||
+      externalCallL3Ids.has(pair.predecessorNodeId);
+    if (!involvesCallL3) {
+      continue;
+    }
+
+    const sourceId = resolveFlowNodeId(pair.predecessorNodeId);
+    const targetId = resolveFlowNodeId(pair.nodeId);
+    if (!sourceId || !targetId) {
+      continue;
+    }
+    addEdge(sourceId, targetId, "PRECEDES");
+
+    const hostL3GraphId = buildGraphNodeId("L3", l3NodeId);
+    if (sourceId.startsWith("TASK:") && targetId.startsWith("L3:")) {
+      addEdge(hostL3GraphId, targetId, "PRECEDES");
+    } else if (sourceId.startsWith("L3:") && targetId.startsWith("TASK:")) {
+      addEdge(sourceId, hostL3GraphId, "PRECEDES");
+    }
+  }
+};
+
 /** 단일 프로세스 노드의 이웃 노드·엣지를 수집한다 */
 export const collectProcessNeighbors = async (
   nodeId: number,
@@ -332,6 +494,10 @@ export const collectProcessNeighbors = async (
   options: {
     showInterfaces: boolean;
     showTables: boolean;
+    /** L3·E2E 중심 탐색 시 허용 L4 Task id — 범위 밖 선행 Task 제외 */
+    allowedTaskIds?: ReadonlySet<number>;
+    /** E2E 중심 탐색 시 허용 L3 id — BPMN Call Activity L3만 */
+    allowedL3Ids?: ReadonlySet<number>;
   },
 ): Promise<GraphNeighborBundle> => {
   const nodes: OperationsGraphNode[] = [];
@@ -342,6 +508,11 @@ export const collectProcessNeighbors = async (
     if (!nodeIds.has(node.id)) {
       nodeIds.add(node.id);
       nodes.push(node);
+      return;
+    }
+    const existing = nodes.find((item) => item.id === node.id);
+    if (existing && node.meta) {
+      existing.meta = { ...existing.meta, ...node.meta };
     }
   };
 
@@ -364,15 +535,22 @@ export const collectProcessNeighbors = async (
 
   if (level === "L3") {
     const children = await listChildTasks(nodeId);
-    const childNodeIds = new Set(children.map((child) => child.nodeId));
+    const scopedChildren = options.allowedTaskIds
+      ? children.filter((child) =>
+          options.allowedTaskIds!.has(asNodeId(child.nodeId)),
+        )
+      : children;
+    const childNodeIds = new Set(
+      scopedChildren.map((child) => asNodeId(child.nodeId)),
+    );
 
-    for (const child of children) {
+    for (const child of scopedChildren) {
       const childNode = toProcessNode(child);
       addNode(childNode);
       addEdge(centerId, childNode.id, "CONTAINS");
     }
 
-    for (const child of children) {
+    for (const child of scopedChildren) {
       const predecessors = await listTaskPredecessors(child.nodeId);
       const l3Preds: PredecessorRow[] = [];
       const taskPreds: PredecessorRow[] = [];
@@ -380,18 +558,24 @@ export const collectProcessNeighbors = async (
       for (const pred of predecessors) {
         if (pred.predecessorLevel === "L3") {
           l3Preds.push(pred);
-        } else if (childNodeIds.has(pred.predecessorNodeId)) {
+        } else if (childNodeIds.has(asNodeId(pred.predecessorNodeId))) {
           taskPreds.push(pred);
         }
       }
 
       for (const l3Pred of l3Preds) {
+        if (
+          options.allowedL3Ids &&
+          !options.allowedL3Ids.has(asNodeId(l3Pred.predecessorNodeId))
+        ) {
+          continue;
+        }
         const predNode: OperationsGraphNode = {
           id: buildGraphNodeId("L3", l3Pred.predecessorNodeId),
           kind: "L3",
           label: l3Pred.predecessorName,
           code: l3Pred.predecessorCode,
-          sourceId: l3Pred.predecessorNodeId,
+          sourceId: asNodeId(l3Pred.predecessorNodeId),
           meta: { inTaskFlow: true },
         };
         addNode(predNode);
@@ -410,12 +594,12 @@ export const collectProcessNeighbors = async (
             );
           }
         } else {
-          const childIndex = children.findIndex(
+          const childIndex = scopedChildren.findIndex(
             (item) => item.nodeId === child.nodeId,
           );
           if (childIndex > 0) {
             addEdge(
-              buildGraphNodeId("TASK", children[childIndex - 1]!.nodeId),
+              buildGraphNodeId("TASK", scopedChildren[childIndex - 1]!.nodeId),
               predNode.id,
               "PRECEDES",
             );
@@ -425,6 +609,12 @@ export const collectProcessNeighbors = async (
 
       if (l3Preds.length === 0) {
         for (const taskPred of taskPreds) {
+          if (
+            options.allowedTaskIds &&
+            !options.allowedTaskIds.has(asNodeId(taskPred.predecessorNodeId))
+          ) {
+            continue;
+          }
           addEdge(
             buildGraphNodeId("TASK", taskPred.predecessorNodeId),
             buildGraphNodeId("TASK", child.nodeId),
@@ -433,17 +623,39 @@ export const collectProcessNeighbors = async (
         }
       }
     }
+
+    await collectL3CallActivityFlow(
+      nodeId,
+      childNodeIds,
+      addNode,
+      addEdge,
+      options.allowedL3Ids,
+    );
   }
 
   const predecessors = await listTaskPredecessors(nodeId);
   for (const pred of predecessors) {
     const isL3Pred = pred.predecessorLevel === "L3";
+    if (
+      isL3Pred &&
+      options.allowedL3Ids &&
+      !options.allowedL3Ids.has(asNodeId(pred.predecessorNodeId))
+    ) {
+      continue;
+    }
+    if (
+      !isL3Pred &&
+      options.allowedTaskIds &&
+      !options.allowedTaskIds.has(asNodeId(pred.predecessorNodeId))
+    ) {
+      continue;
+    }
     const predNode: OperationsGraphNode = {
       id: buildGraphNodeId(isL3Pred ? "L3" : "TASK", pred.predecessorNodeId),
       kind: isL3Pred ? "L3" : "TASK",
       label: pred.predecessorName,
       code: pred.predecessorCode,
-      sourceId: pred.predecessorNodeId,
+      sourceId: asNodeId(pred.predecessorNodeId),
       meta: isL3Pred ? { inTaskFlow: true } : undefined,
     };
     addNode(predNode);
@@ -454,10 +666,12 @@ export const collectProcessNeighbors = async (
     ? await listTaskTableLinks(nodeId)
     : [];
 
+  const taskScopeId = level === "L3" ? undefined : nodeId;
+
   const systems = await listTaskSystemMappings(nodeId);
   for (const sys of systems) {
-    const appId = buildGraphNodeId("APPLICATION", sys.systemId);
-    const appNode = toApplicationNode(sys);
+    const appNode = toApplicationNode(sys, taskScopeId);
+    const appId = appNode.id;
     addNode(appNode);
     addEdge(centerId, appId, "USES_SCREEN");
 
@@ -465,7 +679,7 @@ export const collectProcessNeighbors = async (
 
     if (options.showTables) {
       for (const table of sysTables) {
-        const tableNode = toTableNode(table);
+        const tableNode = toTableNode(table, taskScopeId);
         addNode(tableNode);
         const edgeKind: GraphEdgeKind =
           table.crudType === "R" || table.crudType === "RU"
@@ -483,11 +697,19 @@ export const collectProcessNeighbors = async (
 
         if (sysTables.length > 0) {
           for (const table of sysTables) {
-            const tableId = buildTableNodeId(
-              table.systemId,
-              table.schemaName,
-              table.tableName,
-            );
+            const tableId =
+              taskScopeId !== undefined
+                ? buildTaskScopedTableNodeId(
+                    taskScopeId,
+                    table.systemId,
+                    table.schemaName,
+                    table.tableName,
+                  )
+                : buildTableNodeId(
+                    table.systemId,
+                    table.schemaName,
+                    table.tableName,
+                  );
             addEdge(tableId, ifaceNode.id, "INTERFACE");
           }
         } else {
@@ -503,8 +725,9 @@ export const collectProcessNeighbors = async (
 /** APPLICATION 중심 이웃 수집 */
 export const collectApplicationNeighbors = async (
   systemId: number,
-  options: { showInterfaces: boolean },
+  options: { showInterfaces: boolean; includeTables?: boolean },
 ): Promise<GraphNeighborBundle> => {
+  const includeTables = options.includeTables ?? true;
   const nodes: OperationsGraphNode[] = [];
   const edges: OperationsGraphEdge[] = [];
   const centerId = buildGraphNodeId("APPLICATION", systemId);
@@ -548,42 +771,45 @@ export const collectApplicationNeighbors = async (
     });
   }
 
-  const tableRows = await query<Record<string, unknown>>(
-    `SELECT TOP (@limit)
-       link.system_id AS systemId,
-       s.system_code AS systemCode,
-       s.system_name AS systemName,
-       link.schema_name AS schemaName,
-       link.table_name AS tableName,
-       link.table_name_kor AS tableNameKor,
-       link.crud_type AS crudType,
-       link.is_critical AS isCritical,
-       link.node_id AS nodeId
-     FROM task_data_table_link link
-     INNER JOIN application_system s ON s.system_id = link.system_id
-     WHERE link.system_id = @systemId
-     ORDER BY link.table_name`,
-    { systemId, limit: MAX_NEIGHBOR_ROWS },
-  );
-
-  const tableLinks = tableRows as unknown as TableLinkRow[];
   const tableIds: string[] = [];
 
-  for (const table of tableLinks) {
-    const tableNode = toTableNode(table);
-    nodes.push(tableNode);
-    tableIds.push(tableNode.id);
-    const edgeKind: GraphEdgeKind =
-      table.crudType === "R" || table.crudType === "RU"
-        ? "READS_TABLE"
-        : "WRITES_TABLE";
-    edges.push({
-      id: `${edgeKind}:${centerId}->${tableNode.id}`,
-      source: centerId,
-      target: tableNode.id,
-      kind: edgeKind,
-      label: table.crudType ?? undefined,
-    });
+  if (includeTables) {
+    const tableRows = await query<Record<string, unknown>>(
+      `SELECT TOP (@limit)
+         link.system_id AS systemId,
+         s.system_code AS systemCode,
+         s.system_name AS systemName,
+         link.schema_name AS schemaName,
+         link.table_name AS tableName,
+         link.table_name_kor AS tableNameKor,
+         link.crud_type AS crudType,
+         link.is_critical AS isCritical,
+         link.node_id AS nodeId
+       FROM task_data_table_link link
+       INNER JOIN application_system s ON s.system_id = link.system_id
+       WHERE link.system_id = @systemId
+       ORDER BY link.table_name`,
+      { systemId, limit: MAX_NEIGHBOR_ROWS },
+    );
+
+    const tableLinks = tableRows as unknown as TableLinkRow[];
+
+    for (const table of tableLinks) {
+      const tableNode = toTableNode(table);
+      nodes.push(tableNode);
+      tableIds.push(tableNode.id);
+      const edgeKind: GraphEdgeKind =
+        table.crudType === "R" || table.crudType === "RU"
+          ? "READS_TABLE"
+          : "WRITES_TABLE";
+      edges.push({
+        id: `${edgeKind}:${centerId}->${tableNode.id}`,
+        source: centerId,
+        target: tableNode.id,
+        kind: edgeKind,
+        label: table.crudType ?? undefined,
+      });
+    }
   }
 
   if (options.showInterfaces) {
@@ -710,6 +936,8 @@ export const collectE2eGraphNeighbors = async (
     showInterfaces: boolean;
     showTables: boolean;
     includeL3Children?: boolean;
+    allowedTaskIds?: ReadonlySet<number>;
+    allowedL3Ids?: ReadonlySet<number>;
   },
 ): Promise<GraphNeighborBundle> => {
   const { derivePredecessorsFromBpmn } = await import(
@@ -725,6 +953,11 @@ export const collectE2eGraphNeighbors = async (
     if (!nodeIds.has(node.id)) {
       nodeIds.add(node.id);
       nodes.push(node);
+      return;
+    }
+    const existing = nodes.find((item) => item.id === node.id);
+    if (existing && node.meta) {
+      existing.meta = { ...existing.meta, ...node.meta };
     }
   };
 
@@ -743,8 +976,8 @@ export const collectE2eGraphNeighbors = async (
   const modelRow = await queryOne<Record<string, unknown>>(
     `SELECT TOP 1 model_id AS modelId, bpmn_xml AS bpmnXml
      FROM bpmn_model
-     WHERE e2e_process_id = @e2eProcessId AND is_current = 1
-     ORDER BY updated_at DESC, model_id DESC`,
+     WHERE e2e_process_id = @e2eProcessId
+     ORDER BY is_current DESC, updated_at DESC, model_id DESC`,
     { e2eProcessId },
   );
 
@@ -772,7 +1005,7 @@ export const collectE2eGraphNeighbors = async (
   const elements = elementRows.map((row) => ({
     elementBpmnId: row.elementBpmnId as string,
     elementType: row.elementType as string,
-    linkedNodeId: row.linkedNodeId as number,
+    linkedNodeId: asNodeId(row.linkedNodeId as number | string),
   }));
 
   const linkedL3Ids = new Set<number>();
@@ -780,7 +1013,7 @@ export const collectE2eGraphNeighbors = async (
     if (row.linkedLevel !== "L3") {
       continue;
     }
-    const l3Id = row.linkedNodeId as number;
+    const l3Id = asNodeId(row.linkedNodeId as number | string);
     linkedL3Ids.add(l3Id);
     const l3Node: OperationsGraphNode = {
       id: buildGraphNodeId("L3", l3Id),
@@ -805,21 +1038,30 @@ export const collectE2eGraphNeighbors = async (
   );
 
   for (const pair of predecessors) {
-    if (!linkedL3Ids.has(pair.nodeId) || !linkedL3Ids.has(pair.predecessorNodeId)) {
+    const nodeId = asNodeId(pair.nodeId);
+    const predecessorNodeId = asNodeId(pair.predecessorNodeId);
+    if (!linkedL3Ids.has(nodeId) || !linkedL3Ids.has(predecessorNodeId)) {
       continue;
     }
     addEdge(
-      buildGraphNodeId("L3", pair.predecessorNodeId),
-      buildGraphNodeId("L3", pair.nodeId),
+      buildGraphNodeId("L3", predecessorNodeId),
+      buildGraphNodeId("L3", nodeId),
       "PRECEDES",
     );
   }
 
   if (options.includeL3Children) {
+    const resolvedAllowedL3Ids =
+      options.allowedL3Ids && options.allowedL3Ids.size > 0
+        ? options.allowedL3Ids
+        : linkedL3Ids;
+
     for (const l3Id of linkedL3Ids) {
       const bundle = await collectProcessNeighbors(l3Id, "L3", {
         showInterfaces: options.showInterfaces,
         showTables: options.showTables,
+        allowedTaskIds: options.allowedTaskIds,
+        allowedL3Ids: resolvedAllowedL3Ids,
       });
       for (const node of bundle.nodes) {
         addNode(node);

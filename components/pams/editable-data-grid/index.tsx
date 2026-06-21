@@ -1172,6 +1172,7 @@ export const EditableDataGrid = <T extends { id: string }>({
                           className={cn(
                             "pams-data-grid-cell relative overflow-hidden",
                             rowPadding,
+                            column.align === "center" && "text-center",
                             column.align === "right" && "text-right tabular-nums",
                             column.mono && "font-mono",
                             column.freeze === "left" &&

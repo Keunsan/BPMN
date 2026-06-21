@@ -70,10 +70,15 @@ export const E2eProcessSelectDialog = ({
                   )}
                   onClick={() => setPicked(item.e2eProcessId)}
                 >
-                  <GitBranch className="mt-0.5 size-4 shrink-0 text-sky-600" />
+                  <GitBranch className="mt-0.5 size-4 shrink-0 text-primary" />
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium">{item.name}</span>
-                    <span className="text-xs text-muted-foreground">{item.code}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {item.code}
+                      {(item.participantL3Count ?? 0) > 0
+                        ? ` · ${t("participantL3Count", { count: item.participantL3Count ?? 0 })}`
+                        : ""}
+                    </span>
                   </span>
                   <StatusBadge status={item.status} />
                 </button>

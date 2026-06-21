@@ -34,8 +34,10 @@ import {
   type GraphNodeData,
 } from "@/components/analysis/operations-graph/canvas/GraphNodeCard";
 import { layoutGraphElements } from "@/components/analysis/operations-graph/hooks/useGraphLayout";
+import { cn } from "@/lib/utils";
 import type {
   GraphEdgeKind,
+  GraphNodeKind,
   GraphViewMode,
   OperationsGraphResult,
 } from "@/types/operations-graph";
@@ -89,6 +91,7 @@ const toFlowNodes = (
       kind: node.kind,
       status: node.status,
       isCritical: node.isCritical,
+      viaCallActivity: Boolean(node.meta?.viaCallActivity),
       highlighted:
         Boolean(node.meta?.highlighted) ||
         (searchTerm.length > 0 &&
@@ -132,19 +135,79 @@ const CHAIN_EDGE_KINDS = new Set([
 
 const getChainHandles = (
   kind: GraphEdgeKind,
+  viewMode: GraphViewMode,
+  sourceKind: GraphNodeKind | undefined,
+  targetKind: GraphNodeKind | undefined,
 ): { sourceHandle?: string; targetHandle?: string } => {
   if (!CHAIN_EDGE_KINDS.has(kind)) {
     return {};
   }
+
+  if (viewMode === "radial") {
+    if (sourceKind === "TASK" && targetKind === "APPLICATION") {
+      return { sourceHandle: "chain-out-h", targetHandle: "flow-in" };
+    }
+    return { sourceHandle: "flow-out", targetHandle: "flow-in" };
+  }
+
   return { sourceHandle: "chain-out", targetHandle: "chain-in" };
+};
+
+const RESOURCE_FLOW_KINDS = new Set<GraphNodeKind>(["APPLICATION", "TABLE"]);
+
+const PROCESS_FLOW_KINDS = new Set<GraphNodeKind>(["E2E", "L3", "TASK"]);
+
+/** PRECEDES 엣지 — 뷰 모드별 handle 분기 */
+const getPrecedesHandles = (
+  kind: GraphEdgeKind,
+  sourceId: string,
+  targetId: string,
+  nodeKindById: Map<string, GraphNodeKind>,
+  viewMode: GraphViewMode,
+): { sourceHandle?: string; targetHandle?: string } => {
+  if (kind !== "PRECEDES") {
+    return {};
+  }
+  const sourceKind = nodeKindById.get(sourceId);
+  const targetKind = nodeKindById.get(targetId);
+  if (!sourceKind || !targetKind) {
+    return {};
+  }
+
+  const isResourceFlow =
+    RESOURCE_FLOW_KINDS.has(sourceKind) &&
+    RESOURCE_FLOW_KINDS.has(targetKind);
+  const isProcessFlow =
+    PROCESS_FLOW_KINDS.has(sourceKind) &&
+    PROCESS_FLOW_KINDS.has(targetKind);
+
+  if (!isResourceFlow && !isProcessFlow) {
+    return {};
+  }
+
+  if (viewMode === "radial") {
+    if (isProcessFlow) {
+      return { sourceHandle: "flow-out-v", targetHandle: "flow-in-v" };
+    }
+    if (
+      (sourceKind === "APPLICATION" && targetKind === "APPLICATION") ||
+      (sourceKind === "TABLE" && targetKind === "TABLE")
+    ) {
+      return { sourceHandle: "flow-out-v", targetHandle: "flow-in-v" };
+    }
+  }
+
+  return { sourceHandle: "flow-out", targetHandle: "flow-in" };
 };
 
 const toFlowEdges = (
   graph: OperationsGraphResult,
   selectedNodeId: string | null,
+  viewMode: GraphViewMode,
   options?: { includeContains?: boolean },
 ): Edge<GraphEdgeData>[] => {
   const includeContains = options?.includeContains ?? false;
+  const nodeKindById = new Map(graph.nodes.map((node) => [node.id, node.kind]));
 
   return graph.edges
     .filter((edge) => includeContains || edge.kind !== "CONTAINS")
@@ -156,13 +219,27 @@ const toFlowEdges = (
       Boolean(selectedNodeId) &&
       edge.source !== selectedNodeId &&
       edge.target !== selectedNodeId;
-    const chainHandles = getChainHandles(edge.kind);
+    const chainHandles = getChainHandles(
+      edge.kind,
+      viewMode,
+      nodeKindById.get(edge.source),
+      nodeKindById.get(edge.target),
+    );
+    const precedesHandles = getPrecedesHandles(
+      edge.kind,
+      edge.source,
+      edge.target,
+      nodeKindById,
+      viewMode,
+    );
+    const flowHandles =
+      edge.kind === "PRECEDES" ? precedesHandles : chainHandles;
 
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      ...chainHandles,
+      ...flowHandles,
       type: "graphEdge",
       markerEnd: buildEdgeMarkerEnd(edge.kind, isActive, isDimmed),
       data: {
@@ -260,12 +337,18 @@ const GraphCanvasInner = ({
     [graph, selectedNodeId, searchTerm],
   );
   const layoutEdges = useMemo(
-    () => (graph ? toFlowEdges(graph, selectedNodeId, { includeContains: true }) : []),
-    [graph, selectedNodeId],
+    () =>
+      graph
+        ? toFlowEdges(graph, selectedNodeId, viewMode, { includeContains: true })
+        : [],
+    [graph, selectedNodeId, viewMode],
   );
   const visibleEdges = useMemo(
-    () => (graph ? toFlowEdges(graph, selectedNodeId, { includeContains: false }) : []),
-    [graph, selectedNodeId],
+    () =>
+      graph
+        ? toFlowEdges(graph, selectedNodeId, viewMode, { includeContains: false })
+        : [],
+    [graph, selectedNodeId, viewMode],
   );
 
   const layoutNodes = useMemo(
@@ -285,7 +368,7 @@ const GraphCanvasInner = ({
       return;
     }
     const timer = window.setTimeout(() => {
-      void fitView({ padding: 0.14, duration: 280 });
+      void fitView({ padding: 0.2, duration: 280 });
     }, 0);
     return () => window.clearTimeout(timer);
   }, [fitView, graph, viewMode]);
@@ -350,7 +433,14 @@ const GraphCanvasInner = ({
 
   return (
     <>
-      <div ref={containerRef} className="pams-operations-graph-canvas">
+      <div
+        ref={containerRef}
+        className={cn(
+          "pams-operations-graph-canvas",
+          viewMode === "hierarchical" &&
+            "pams-operations-graph-canvas--hierarchical",
+        )}
+      >
         <ReactFlow
           nodes={layoutNodes}
           edges={visibleEdges}
@@ -360,6 +450,7 @@ const GraphCanvasInner = ({
           maxZoom={1.8}
           defaultEdgeOptions={{ zIndex: 0 }}
           elevateEdgesOnSelect
+          elevateNodesOnSelect
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable

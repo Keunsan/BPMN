@@ -39,6 +39,7 @@ export const useE2eProcessDetail = (e2eProcessId: number) =>
     queryKey: e2eProcessKeys.detail(e2eProcessId),
     queryFn: () => apiGet<E2eProcessDto>(`/api/e2e-process/${e2eProcessId}`),
     enabled: e2eProcessId > 0,
+    refetchOnMount: "always",
   });
 
 export const useCreateE2eProcess = () => {

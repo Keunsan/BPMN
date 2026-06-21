@@ -166,6 +166,7 @@ export const OperationsGraphWorkspace = () => {
       void setCenterKind("E2E");
       void setCenterLevel(null);
       void setSelectedNodeId(null);
+      void setViewMode("hierarchical");
       setNodeKinds((prev) => ({
         ...prev,
         E2E: false,
@@ -173,7 +174,7 @@ export const OperationsGraphWorkspace = () => {
         TASK: true,
       }));
     },
-    [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId],
+    [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId, setViewMode],
   );
 
   const handleSelectCenter = useCallback(

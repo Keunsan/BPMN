@@ -48,21 +48,12 @@ import type {
   TaskGridRow,
 } from "@/types/editable-data-grid";
 import type { TaskAttributeListItem } from "@/types/metadata";
-import type { ProcessStatus } from "@/types/process";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import type { ProcessNodeTree } from "@/types/process";
 
 type TaskAttributeSelection =
   | { kind: "process"; node: ProcessNodeTree }
   | { kind: "e2e"; process: E2eProcessDto };
-
-const PROCESS_STATUSES: ProcessStatus[] = [
-  "DRAFT",
-  "IN_REVIEW",
-  "APPROVED",
-  "PUBLISHED",
-  "OBSOLETE",
-];
 
 const toTaskGridRow = (item: TaskAttributeListItem): TaskGridRow => ({
   id: String(item.nodeId),
@@ -72,7 +63,8 @@ const toTaskGridRow = (item: TaskAttributeListItem): TaskGridRow => ({
   processName: item.processName,
   definition: item.definition,
   purpose: item.purpose,
-  processStatus: item.processStatus,
+  inputDeliverable: item.inputDeliverable,
+  outputDeliverable: item.outputDeliverable,
   ownerOrgId: null,
   linkedSystemId: null,
   version: item.version,
@@ -86,7 +78,6 @@ const toTaskGridRow = (item: TaskAttributeListItem): TaskGridRow => ({
 /** BPMN Task 속성 — 프로세스 트리 + 인라인 편집 그리드 */
 export const TaskAttributeList = () => {
   const t = useTranslations("metadata");
-  const ts = useTranslations("status");
   const te = useTranslations("editableGrid");
   const tsMap = useTranslations("systemMapping");
   const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
@@ -184,15 +175,6 @@ export const TaskAttributeList = () => {
     [systems],
   );
 
-  const statusOptions = useMemo(
-    () =>
-      PROCESS_STATUSES.map((status) => ({
-        label: ts(status),
-        value: status,
-      })),
-    [ts],
-  );
-
   const columns = useMemo<EditableColumn<TaskGridRow>[]>(
     () => [
       {
@@ -206,7 +188,7 @@ export const TaskAttributeList = () => {
         width: 120,
         freeze: "left",
         mono: true,
-        align: "right",
+        align: "center",
         sortable: true,
         filter: "text",
         accessor: (row) => row.processCode,
@@ -226,7 +208,7 @@ export const TaskAttributeList = () => {
         key: "definition",
         header: t("definition"),
         editor: "textarea",
-        width: 200,
+        width: 350,
         sortable: true,
         filter: "text",
         accessor: (row) => row.definition ?? "",
@@ -237,26 +219,22 @@ export const TaskAttributeList = () => {
             : null,
       },
       {
-        key: "processStatus",
-        header: t("listStatus"),
-        editor: "select",
-        options: statusOptions,
-        width: 110,
+        key: "inputDeliverable",
+        header: t("inputInfo"),
+        editor: "textarea",
+        width: 150,
         sortable: true,
-        filter: "select",
-        accessor: (row) => row.processStatus,
-        parsePaste: (raw) => {
-          const value = raw.trim();
-          const match = statusOptions.find(
-            (opt) =>
-              opt.value === value ||
-              opt.label.toLowerCase() === value.toLowerCase(),
-          );
-          if (!match) {
-            throw new Error("invalid status");
-          }
-          return match.value;
-        },
+        filter: "text",
+        accessor: (row) => row.inputDeliverable ?? "",
+      },
+      {
+        key: "outputDeliverable",
+        header: t("outputInfo"),
+        editor: "textarea",
+        width: 150,
+        sortable: true,
+        filter: "text",
+        accessor: (row) => row.outputDeliverable ?? "",
       },
       {
         key: "ownerOrgId",
@@ -272,6 +250,7 @@ export const TaskAttributeList = () => {
         editor: "combobox",
         options: systemOptions,
         width: 140,
+        align: "center",
         accessor: (row) => row.linkedSystemId ?? "",
         parsePaste: (raw) => {
           const value = raw.trim();
@@ -293,7 +272,7 @@ export const TaskAttributeList = () => {
         key: "version",
         header: te("version"),
         width: 80,
-        align: "right",
+        align: "center",
         mono: true,
         accessor: (row) => row.version ?? "",
       },
@@ -301,34 +280,18 @@ export const TaskAttributeList = () => {
         key: "updatedAt",
         header: t("listUpdatedAt"),
         width: 108,
-        align: "right",
+        align: "center",
         sortable: true,
         accessor: (row) => row.updatedAt ?? "",
       },
       {
         key: "_expand",
         header: "",
-        width: 48,
+        width: 20,
         action: "expand",
       },
     ],
-    [t, te, statusOptions, systemOptions],
-  );
-
-  const bulkActions = useMemo(
-    () => [
-      {
-        label: te("bulkSetReview"),
-        field: "processStatus" as const,
-        value: "IN_REVIEW" satisfies ProcessStatus,
-      },
-      {
-        label: te("bulkSetApproved"),
-        field: "processStatus" as const,
-        value: "APPROVED" satisfies ProcessStatus,
-      },
-    ],
-    [te],
+    [t, te, systemOptions],
   );
 
   const selectedItem = useMemo(
@@ -423,7 +386,6 @@ export const TaskAttributeList = () => {
         data={gridData}
         onSave={handleSave}
         onRowExpand={(row) => setDetailNodeId(row.nodeId)}
-        bulkActions={bulkActions}
         enableAddRow={false}
         toolbar={{
           globalSearch: true,

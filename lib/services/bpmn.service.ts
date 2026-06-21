@@ -12,7 +12,6 @@ import {
   isBpmnTaskElementType,
 } from "@/lib/utils/bpmn-link";
 import { diffBpmnXml, EMPTY_BPMN_XML, parseBpmnElementsFromXml } from "@/lib/utils/bpmn-xml";
-import { upsertTaskAttribute } from "@/lib/services/metadata.service";
 import { createProcess } from "@/lib/services/process.service";
 import type {
   BpmnTaskProcessLinkDto,
@@ -550,21 +549,6 @@ export const linkOrCreateBpmnTaskProcess = async (
     elementName: taskName,
     linkedNodeId: process.nodeId,
   });
-
-  await upsertTaskAttribute(
-    {
-      nodeId: process.nodeId,
-      definition: taskName,
-      version: "1.0.0",
-      i18n: {
-        ko: {
-          definition: taskName,
-        },
-      },
-    },
-    "ko",
-    userId,
-  );
 
   return {
     elementBpmnId: dto.elementBpmnId,

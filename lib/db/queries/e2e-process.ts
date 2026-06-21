@@ -91,15 +91,19 @@ export const listE2eProcesses = async (
               FROM bpmn_model bm
               INNER JOIN bpmn_element be ON be.model_id = bm.model_id
               WHERE bm.e2e_process_id = e.e2e_process_id
-                AND bm.is_current = 1
                 AND be.linked_node_id IS NOT NULL
+                AND bm.model_id = (
+                  SELECT TOP 1 bm2.model_id
+                  FROM bpmn_model bm2
+                  WHERE bm2.e2e_process_id = e.e2e_process_id
+                  ORDER BY bm2.is_current DESC, bm2.updated_at DESC, bm2.model_id DESC
+                )
             ) AS participant_l3_count,
             (
               SELECT TOP 1 bm.model_id
               FROM bpmn_model bm
               WHERE bm.e2e_process_id = e.e2e_process_id
-                AND bm.is_current = 1
-              ORDER BY bm.updated_at DESC, bm.model_id DESC
+              ORDER BY bm.is_current DESC, bm.updated_at DESC, bm.model_id DESC
             ) AS current_bpmn_model_id
      FROM e2e_process e
      WHERE ${conditions.join(" AND ")}
@@ -198,7 +202,6 @@ export const deleteE2eProcess = async (e2eProcessId: number): Promise<void> => {
   );
 };
 
-/** E2E BPMN에 연결된 L3 node_id 목록 */
 export const listE2eParticipantL3Ids = async (
   e2eProcessId: number,
 ): Promise<number[]> => {
@@ -206,12 +209,18 @@ export const listE2eParticipantL3Ids = async (
     `SELECT DISTINCT be.linked_node_id
      FROM bpmn_model bm
      INNER JOIN bpmn_element be ON be.model_id = bm.model_id
+     INNER JOIN process_node p ON p.node_id = be.linked_node_id AND p.level = 'L3'
      WHERE bm.e2e_process_id = @e2eProcessId
-       AND bm.is_current = 1
-       AND be.linked_node_id IS NOT NULL`,
+       AND be.linked_node_id IS NOT NULL
+       AND bm.model_id = (
+         SELECT TOP 1 bm2.model_id
+         FROM bpmn_model bm2
+         WHERE bm2.e2e_process_id = @e2eProcessId
+         ORDER BY bm2.is_current DESC, bm2.updated_at DESC, bm2.model_id DESC
+       )`,
     { e2eProcessId },
   );
-  return rows.map((row) => row.linked_node_id);
+  return rows.map((row) => Number(row.linked_node_id));
 };
 
 /** L3를 Call하는 E2E 프로세스 목록 (역참조) */
@@ -237,8 +246,8 @@ export const findCurrentBpmnModelIdByE2eProcessId = async (
   const row = await queryOne<{ model_id: number }>(
     `SELECT TOP 1 model_id
      FROM bpmn_model
-     WHERE e2e_process_id = @e2eProcessId AND is_current = 1
-     ORDER BY updated_at DESC, model_id DESC`,
+     WHERE e2e_process_id = @e2eProcessId
+     ORDER BY is_current DESC, updated_at DESC, model_id DESC`,
     { e2eProcessId },
   );
   return row?.model_id ?? null;

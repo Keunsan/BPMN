@@ -88,9 +88,63 @@ export const buildGraphNodeId = (
   sourceId: number | string,
 ): string => `${kind}:${sourceId}`;
 
+/** Task 컨텍스트 APPLICATION 노드 ID — 동일 시스템도 Task별 분리 */
+export const buildTaskScopedApplicationNodeId = (
+  taskNodeId: number,
+  systemId: number,
+): string => `APPLICATION:T${taskNodeId}:${systemId}`;
+
 export const buildTableNodeId = (
   systemId: number,
   schemaName: string | null,
   tableName: string,
 ): string =>
   `TABLE:${systemId}:${schemaName ?? ""}:${tableName}`;
+
+/** Task 컨텍스트 TABLE 노드 ID */
+export const buildTaskScopedTableNodeId = (
+  taskNodeId: number,
+  systemId: number,
+  schemaName: string | null,
+  tableName: string,
+): string =>
+  `TABLE:T${taskNodeId}:${systemId}:${schemaName ?? ""}:${tableName}`;
+
+/** APPLICATION 노드 ID에서 systemId 추출 (전역·Task 스코프 공통) */
+export const parseApplicationSystemIdFromNodeId = (
+  nodeId: string,
+): number | null => {
+  if (!nodeId.startsWith("APPLICATION:")) {
+    return null;
+  }
+  const rest = nodeId.slice("APPLICATION:".length);
+  if (rest.startsWith("T")) {
+    const colonIdx = rest.indexOf(":", 1);
+    if (colonIdx === -1) {
+      return null;
+    }
+    const systemId = Number(rest.slice(colonIdx + 1));
+    return Number.isFinite(systemId) ? systemId : null;
+  }
+  const systemId = Number(rest);
+  return Number.isFinite(systemId) ? systemId : null;
+};
+
+/** TABLE 노드 ID에서 systemId 추출 (전역·Task 스코프 공통) */
+export const parseTableSystemIdFromNodeId = (nodeId: string): number | null => {
+  if (!nodeId.startsWith("TABLE:")) {
+    return null;
+  }
+  const rest = nodeId.slice("TABLE:".length);
+  if (rest.startsWith("T")) {
+    const parts = rest.split(":");
+    if (parts.length < 3) {
+      return null;
+    }
+    const systemId = Number(parts[1]);
+    return Number.isFinite(systemId) ? systemId : null;
+  }
+  const parts = rest.split(":");
+  const systemId = Number(parts[0]);
+  return Number.isFinite(systemId) ? systemId : null;
+};

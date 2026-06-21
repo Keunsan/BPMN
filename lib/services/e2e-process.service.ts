@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
+import * as bpmnQueries from "@/lib/db/queries/bpmn";
 import * as e2eQueries from "@/lib/db/queries/e2e-process";
 import type {
   CreateE2eProcessDto,
@@ -29,18 +30,26 @@ export const getE2eProcessDetail = async (
 ): Promise<E2eProcessDto> => {
   const rows = await e2eQueries.listE2eProcesses({});
   const found = rows.find((row) => row.e2eProcessId === e2eProcessId);
-  if (!found) {
-    const entity = await e2eQueries.findE2eProcessById(e2eProcessId);
-    if (!entity) {
-      throw new ApiError("E404", "E2E process not found", 404);
-    }
-    return {
-      ...entity,
-      participantL3Count: 0,
-      currentBpmnModelId: null,
-    };
+  if (found) {
+    return toDto(found);
   }
-  return toDto(found);
+
+  const entity = await e2eQueries.findE2eProcessById(e2eProcessId);
+  if (!entity) {
+    throw new ApiError("E404", "E2E process not found", 404);
+  }
+
+  const currentModel =
+    await bpmnQueries.findCurrentBpmnModelByE2eProcessId(e2eProcessId);
+  const participantIds = currentModel
+    ? await e2eQueries.listE2eParticipantL3Ids(e2eProcessId)
+    : [];
+
+  return {
+    ...entity,
+    participantL3Count: participantIds.length,
+    currentBpmnModelId: currentModel?.modelId ?? null,
+  };
 };
 
 export const createE2eProcess = async (

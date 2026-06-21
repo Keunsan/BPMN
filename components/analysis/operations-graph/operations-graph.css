@@ -20,8 +20,8 @@
   /* 그래프 노드 전용 토큰 */
   --graph-node-width: 240px;
   --graph-node-min-height: 88px;
-  --graph-resource-width: 168px;
-  --graph-resource-min-height: 44px;
+  --graph-resource-width: 200px;
+  --graph-resource-min-height: 48px;
   --graph-title-size: 15px;
   --graph-title-weight: 700;
   --graph-code-size: 10.5px;
@@ -490,8 +490,39 @@
   color: oklch(0.42 0.012 280);
 }
 
+.pams-operations-graph-canvas--hierarchical .react-flow__background {
+  background-color: oklch(0.996 0.002 280);
+}
+
+.pams-operations-graph-canvas--hierarchical .react-flow__background pattern circle {
+  opacity: 0.55;
+}
+
+.dark .pams-operations-graph-canvas--hierarchical .react-flow__background {
+  background-color: oklch(0.19 0.008 280);
+}
+
 .pams-operations-graph-canvas .react-flow__node {
+  pointer-events: all;
+  isolation: isolate;
   outline: none !important;
+  z-index: 1 !important;
+}
+
+.pams-operations-graph-canvas--hierarchical .react-flow__node-graphNode {
+  filter: drop-shadow(0 1px 2px oklch(0.15 0.02 280 / 0.06));
+}
+
+.dark .pams-operations-graph-canvas--hierarchical .react-flow__node-graphNode {
+  filter: drop-shadow(0 1px 3px oklch(0 0 0 / 0.22));
+}
+
+.pams-operations-graph-canvas .react-flow__edges {
+  z-index: 0 !important;
+}
+
+.pams-operations-graph-canvas .react-flow__edge {
+  pointer-events: visibleStroke;
 }
 
 .pams-operations-graph-canvas .react-flow__node.selectable:focus,
@@ -601,7 +632,6 @@
   opacity: 0.72;
   transition:
     opacity 0.15s ease,
-    transform 0.15s ease,
     border-color 0.15s ease,
     background-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -621,7 +651,6 @@
 .pams-operations-graph-resource-card:hover .pams-operations-graph-handle--resource,
 .pams-operations-graph-resource-card--selected .pams-operations-graph-handle--resource {
   opacity: 1;
-  transform: scale(1.15);
   border-color: oklch(0.45 0.2 293) !important;
   background: oklch(0.97 0.03 293) !important;
   box-shadow: 0 0 0 2px oklch(0.45 0.2 293 / 0.22);
@@ -978,12 +1007,12 @@
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 8px;
   width: var(--graph-resource-width);
   min-height: var(--graph-resource-min-height);
-  padding: 8px 10px 8px 8px;
-  border-radius: 10px;
+  padding: 9px 10px 9px 8px;
+  border-radius: calc(var(--radius-lg) - 2px);
   border: 1.5px solid var(--resource-border);
   background: var(--resource-bg);
   box-shadow:
@@ -1063,14 +1092,16 @@
 
 .pams-operations-graph-resource-card__title {
   margin: 0;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.32;
+  line-height: 1.35;
   letter-spacing: -0.015em;
   color: var(--ops-text-primary);
+  word-break: break-all;
 }
 
 .dark .pams-operations-graph-resource-card__title {
@@ -1111,11 +1142,11 @@
 
 .pams-operations-graph-resource-card--table-list-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   width: var(--graph-resource-width);
-  min-height: 34px;
-  padding: 6px 10px 6px 12px;
+  min-height: 36px;
+  padding: 7px 10px 7px 12px;
   border-radius: 0;
   box-shadow: none;
   background: oklch(0.992 0.006 75 / 0.82);
@@ -1165,9 +1196,10 @@
 
 .pams-operations-graph-resource-card--table-list-item
   .pams-operations-graph-resource-card__title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
 }
 
 .pams-operations-graph-resource-card--table-list-item:hover:not(
@@ -1205,7 +1237,6 @@
 .pams-operations-graph-node-card:hover .pams-operations-graph-handle--chain,
 .pams-operations-graph-node-card--selected .pams-operations-graph-handle--chain {
   opacity: 1;
-  transform: scale(1.15);
 }
 
 /* ── Explorer 탐색 패널 ── */

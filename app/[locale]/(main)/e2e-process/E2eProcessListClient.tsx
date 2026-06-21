@@ -2,7 +2,8 @@
 
 import { GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { parseAsInteger, useQueryState } from "nuqs";
+import { useEffect, useState } from "react";
 
 import { E2eProcessDetail } from "@/components/e2e-process/E2eProcessDetail";
 import { E2eProcessForm } from "@/components/e2e-process/E2eProcessForm";
@@ -38,10 +39,44 @@ export const E2eProcessListClient = () => {
   const tm = useTranslations("menu");
   const { data: items, isLoading } = useE2eProcessList();
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [selectedFromUrl, setSelectedFromUrl] = useQueryState(
+    "selected",
+    parseAsInteger,
+  );
+
+  useEffect(() => {
+    if (!selectedFromUrl || !items?.length || sheet) {
+      return;
+    }
+    const found = items.find((item) => item.e2eProcessId === selectedFromUrl);
+    if (found) {
+      setSheet({ type: "detail", process: found });
+      void setSelectedFromUrl(null);
+    }
+  }, [items, selectedFromUrl, sheet, setSelectedFromUrl]);
 
   const columns: DataTableColumn<E2eProcessDto>[] = [
-    { key: "code", header: t("code"), cell: (row) => row.code },
-    { key: "name", header: t("name"), cell: (row) => row.name },
+    {
+      key: "code",
+      header: t("code"),
+      cell: (row) => (
+        <span className="font-mono text-sm">{row.code}</span>
+      ),
+    },
+    {
+      key: "name",
+      header: t("name"),
+      cell: (row) => (
+        <div className="min-w-0">
+          <p className="font-medium">{row.name}</p>
+          {row.description ? (
+            <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">
+              {row.description}
+            </p>
+          ) : null}
+        </div>
+      ),
+    },
     {
       key: "status",
       header: t("status"),
@@ -50,7 +85,19 @@ export const E2eProcessListClient = () => {
     {
       key: "participants",
       header: t("participants"),
-      cell: (row) => String(row.participantL3Count ?? 0),
+      cell: (row) => t("participantL3Count", { count: row.participantL3Count ?? 0 }),
+    },
+    {
+      key: "flow",
+      header: t("flowStatusColumn"),
+      cell: (row) =>
+        row.currentBpmnModelId || (row.participantL3Count ?? 0) > 0 ? (
+          <span className="text-sm">{t("flowStatusReady")}</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {t("flowStatusMissing")}
+          </span>
+        ),
     },
   ];
 
@@ -90,7 +137,7 @@ export const E2eProcessListClient = () => {
       <Sheet open={Boolean(sheet)} onOpenChange={(open) => !open && setSheet(null)}>
         <SheetContent
           side="right"
-          className="w-[min(768px,calc(100vw-2rem))] gap-0 p-0"
+          className="w-[min(768px,calc(100vw-2rem))] gap-0 p-0 data-[side=right]:sm:max-w-none"
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{t("detailTitle")}</SheetTitle>
@@ -100,6 +147,7 @@ export const E2eProcessListClient = () => {
             <E2eProcessDetail
               e2eProcessId={sheet.process.e2eProcessId}
               onEdit={(process) => setSheet({ type: "edit", process })}
+              onDeleted={() => setSheet(null)}
             />
           )}
           {sheet?.type === "create" && (

@@ -47,6 +47,7 @@ export const FilterPanel = ({
   const slotContext = useFilterPanelSlotContextValue(
     collapseInFirstField,
     collapseToggle,
+    !filterPanelCollapsed,
   );
 
   const renderChildren = () => {

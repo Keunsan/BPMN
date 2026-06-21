@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showErrorToast } from "@/components/common/ErrorToast";
 import { ApiError } from "@/lib/api/error-handler";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
-import { bpmnKeys } from "@/lib/query/keys";
+import { bpmnKeys, e2eProcessKeys } from "@/lib/query/keys";
 import type {
   BpmnCompareRequest,
   BpmnCompareResult,
@@ -90,6 +90,7 @@ export const useSaveBpmn = (modelId: number) => {
       apiPut<BpmnModelDto>(`/api/bpmn/${modelId}`, dto),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: bpmnKeys.all });
+      queryClient.invalidateQueries({ queryKey: e2eProcessKeys.all });
       queryClient.setQueryData(bpmnKeys.detail(data.modelId), data);
     },
     onError: (error) => {

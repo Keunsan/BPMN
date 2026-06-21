@@ -1,16 +1,19 @@
 "use client";
 
-import { GitBranch } from "lucide-react";
+import { GitBranch, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { SearchBar } from "@/components/common/SearchBar";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ProcessTree } from "@/components/process/ProcessTree";
+import { Button } from "@/components/ui/button";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useE2eProcessTree } from "@/lib/query/hooks/useE2eProcess";
+import { e2eProcessKeys, processKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import type { ProcessFilters, ProcessLevel, ProcessNodeTree } from "@/types/process";
@@ -52,11 +55,22 @@ export const TaskAttributeProcessTree = ({
 }: TaskAttributeProcessTreeProps) => {
   const tp = useTranslations("process");
   const te = useTranslations("e2eProcess");
+  const tc = useTranslations("common");
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
 
   const { data: e2eItems, isLoading: e2eLoading, isError: e2eError } =
     useE2eProcessTree();
+  const e2eFetching = useIsFetching({ queryKey: e2eProcessKeys.tree() }) > 0;
+  const processTreeFetching =
+    useIsFetching({ queryKey: processKeys.trees() }) > 0;
+  const isRefreshing = e2eFetching || processTreeFetching;
+
+  const handleRefresh = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: processKeys.trees() });
+    void qc.invalidateQueries({ queryKey: e2eProcessKeys.tree() });
+  }, [qc]);
 
   const filteredE2eItems = useMemo(() => {
     const keyword = debouncedSearch.trim();
@@ -70,16 +84,30 @@ export const TaskAttributeProcessTree = ({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        placeholder={tp("searchPlaceholder")}
-        className="shrink-0"
-      />
+      <div className="flex shrink-0 items-center gap-2">
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder={tp("searchPlaceholder")}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={tc("refresh")}
+          disabled={isRefreshing}
+          onClick={handleRefresh}
+        >
+          <RefreshCw
+            className={cn("size-4", isRefreshing && "animate-spin")}
+          />
+        </Button>
+      </div>
 
       <div className="shrink-0">
         <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <GitBranch className="size-3.5 text-sky-600" />
+          <GitBranch className="size-3.5 text-primary" />
           {te("sectionTitle")}
         </div>
         {e2eLoading ? (
@@ -112,7 +140,7 @@ export const TaskAttributeProcessTree = ({
                     }
                   }}
                 >
-                  <GitBranch className="size-3.5 shrink-0 text-sky-600" />
+                  <GitBranch className="size-3.5 shrink-0 text-primary" />
                   <span className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-sm text-muted-foreground">
                       {item.code}
@@ -139,6 +167,7 @@ export const TaskAttributeProcessTree = ({
           selectableLevels={selectableLevels}
           search={search}
           showSearch={false}
+          showRefresh={false}
         />
       </div>
     </div>

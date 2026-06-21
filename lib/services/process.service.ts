@@ -18,6 +18,7 @@ import {
   normalizeProcessScope,
   type ProcessScopePair,
 } from "@/lib/utils/process-scope";
+import type { TaskAttributeI18nMap } from "@/types/metadata";
 import type {
   CreateProcessDto,
   CreateVariantDto,
@@ -36,6 +37,7 @@ import type {
 } from "@/types/process";
 
 import * as commonCodeQueries from "@/lib/db/queries/common-code";
+import * as metadataQueries from "@/lib/db/queries/metadata";
 import * as processQueries from "@/lib/db/queries/process";
 import * as bpmnQueries from "@/lib/db/queries/bpmn";
 import {
@@ -173,6 +175,58 @@ const resolveCreateScope = (
     companyCode: ENTERPRISE_COMPANY_CODE,
     businessUnitCode: ENTERPRISE_BUSINESS_UNIT_CODE,
   };
+};
+
+/** 프로세스 기본정보(명칭·설명)에서 Task 업무정의 값을 구성한다. */
+const buildTaskDefinitionFromProcessBasicInfo = (
+  name: string,
+  description: string | null,
+  i18n: ProcessI18nMap,
+): { definition: string; i18n: TaskAttributeI18nMap } => {
+  const resolveDefinition = (processName: string, processDescription?: string | null): string =>
+    processDescription?.trim() || processName.trim();
+
+  const koDefinition = resolveDefinition(name, description);
+  const taskI18n: TaskAttributeI18nMap = {
+    ko: { definition: koDefinition },
+  };
+
+  for (const [locale, value] of Object.entries(i18n)) {
+    if (!value || locale === "ko") {
+      continue;
+    }
+    taskI18n[locale as keyof TaskAttributeI18nMap] = {
+      definition: resolveDefinition(value.name, value.description),
+    };
+  }
+
+  return { definition: koDefinition, i18n: taskI18n };
+};
+
+/** L4 프로세스 등록 시 Task 속성 초기 레코드를 생성한다. */
+const createInitialTaskAttributeForL4 = async (
+  nodeId: number,
+  name: string,
+  description: string | null,
+  i18n: ProcessI18nMap,
+  version: string,
+  userId?: number,
+): Promise<void> => {
+  const { definition, i18n: taskI18n } = buildTaskDefinitionFromProcessBasicInfo(
+    name,
+    description,
+    i18n,
+  );
+
+  const attribute = await metadataQueries.upsertTaskAttribute({
+    nodeId,
+    definition,
+    version,
+    createdBy: userId ?? null,
+    updatedBy: userId ?? null,
+  });
+
+  await metadataQueries.upsertTaskAttributeI18n(attribute.attrId, taskI18n);
 };
 
 /** 프로세스 트리 조회 */
@@ -322,6 +376,17 @@ export const createProcess = async (
     snapshotData: JSON.stringify(node),
     createdBy: userId ?? null,
   });
+
+  if (level === "L4") {
+    await createInitialTaskAttributeForL4(
+      node.nodeId,
+      koName,
+      koDesc,
+      i18n,
+      node.version ?? "1.0.0",
+      userId,
+    );
+  }
 
   return toProcessDto(node, locale);
 };

@@ -6,9 +6,9 @@ export const GRAPH_NODE_DIMENSIONS = {
   processWidth: 240,
   processMaxWidth: 520,
   processHeight: 88,
-  resourceWidth: 168,
-  resourceHeight: 44,
-  tableListItemHeight: 34,
+  resourceWidth: 200,
+  resourceHeight: 48,
+  tableListItemHeight: 36,
   anchorSize: 1,
 } as const;
 
