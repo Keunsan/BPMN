@@ -11,6 +11,8 @@ const BPMN_TYPE_MAP: Record<string, BpmnElementType> = {
   "bpmn:ServiceTask": "SERVICE_TASK",
   "bpmn:ManualTask": "MANUAL_TASK",
   "bpmn:ScriptTask": "SCRIPT_TASK",
+  "bpmn:SendTask": "SEND_TASK",
+  "bpmn:ReceiveTask": "RECEIVE_TASK",
   "bpmn:ExclusiveGateway": "EXCLUSIVE_GATEWAY",
   "bpmn:ParallelGateway": "PARALLEL_GATEWAY",
   "bpmn:InclusiveGateway": "INCLUSIVE_GATEWAY",
@@ -33,6 +35,8 @@ const BPMN_TYPE_BY_LOCAL: Record<string, BpmnElementType> = {
   servicetask: "SERVICE_TASK",
   manualtask: "MANUAL_TASK",
   scripttask: "SCRIPT_TASK",
+  sendtask: "SEND_TASK",
+  receivetask: "RECEIVE_TASK",
   exclusivegateway: "EXCLUSIVE_GATEWAY",
   parallelgateway: "PARALLEL_GATEWAY",
   inclusivegateway: "INCLUSIVE_GATEWAY",
@@ -53,6 +57,40 @@ export const mapBpmnJsType = (type: string): BpmnElementType | null => {
   const local = type.replace(/^bpmn:/i, "").toLowerCase();
   return BPMN_TYPE_BY_LOCAL[local] ?? null;
 };
+
+/** BPMN 2.0 태스크 유형 (팔레트·유형 전환 대상) */
+export const BPMN_MORPHABLE_TASK_TYPES = [
+  "USER_TASK",
+  "SERVICE_TASK",
+  "MANUAL_TASK",
+  "SCRIPT_TASK",
+  "SEND_TASK",
+  "RECEIVE_TASK",
+] as const satisfies readonly BpmnElementType[];
+
+export type BpmnMorphableTaskType = (typeof BPMN_MORPHABLE_TASK_TYPES)[number];
+
+const BPMN_ELEMENT_TYPE_TO_JS: Record<BpmnMorphableTaskType, string> = {
+  USER_TASK: "bpmn:UserTask",
+  SERVICE_TASK: "bpmn:ServiceTask",
+  MANUAL_TASK: "bpmn:ManualTask",
+  SCRIPT_TASK: "bpmn:ScriptTask",
+  SEND_TASK: "bpmn:SendTask",
+  RECEIVE_TASK: "bpmn:ReceiveTask",
+};
+
+/** DB element_type → bpmn-js moddle 타입 */
+export const mapBpmnElementTypeToJs = (
+  elementType: BpmnElementType,
+): string | null =>
+  BPMN_ELEMENT_TYPE_TO_JS[elementType as BpmnMorphableTaskType] ?? null;
+
+/** 태스크 유형 전환·팔레트 생성 대상인지 판별한다 */
+export const isBpmnMorphableTaskType = (
+  type: BpmnElementType | null | undefined,
+): type is BpmnMorphableTaskType =>
+  type != null &&
+  (BPMN_MORPHABLE_TASK_TYPES as readonly BpmnElementType[]).includes(type);
 
 export type ParsedBpmnElement = {
   elementBpmnId: string;

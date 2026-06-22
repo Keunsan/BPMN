@@ -189,13 +189,36 @@ export const BpmnEditorInner = ({
       eventBus.on("selection.changed", (e) => {
         const selected = e.newSelection?.[0];
         if (!selected || !isLinkableType(selected.type)) {
-          onSelectionChange?.(null, null);
+          onSelectionChange?.(null, null, null);
           return;
         }
         onSelectionChange?.(
           selected.id,
           selected.businessObject?.name ?? null,
           mapBpmnJsType(selected.businessObject?.$type ?? selected.type),
+        );
+      });
+
+      eventBus.on("element.changed", (e) => {
+        const element = e.element;
+        if (!element?.id || !isLinkableType(element.type)) {
+          return;
+        }
+
+        const selected = (
+          modeler.get("selection") as {
+            get: () => Array<{ id: string }>;
+          }
+        ).get()[0];
+
+        if (!selected || selected.id !== element.id) {
+          return;
+        }
+
+        onSelectionChange?.(
+          element.id,
+          element.businessObject?.name ?? null,
+          mapBpmnJsType(element.businessObject?.$type ?? element.type),
         );
       });
 

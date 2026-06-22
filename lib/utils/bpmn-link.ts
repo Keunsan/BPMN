@@ -7,13 +7,11 @@ import type {
 import type { ProcessNodeTree } from "@/types/process";
 
 import { isEnterpriseScope } from "@/lib/utils/process-scope";
+import { isBpmnMorphableTaskType } from "@/lib/utils/bpmn-xml";
 
 /** Task 계열 BPMN 요소인지 판별한다 */
 export const isBpmnTaskElementType = (type: BpmnElementType): boolean =>
-  type === "USER_TASK" ||
-  type === "SERVICE_TASK" ||
-  type === "MANUAL_TASK" ||
-  type === "SCRIPT_TASK";
+  isBpmnMorphableTaskType(type);
 
 /** Call Activity BPMN 요소인지 판별한다 */
 export const isBpmnCallActivityType = (

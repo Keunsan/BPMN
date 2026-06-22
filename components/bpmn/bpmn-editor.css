@@ -54,6 +54,10 @@
   box-shadow: 0 0 2px 1px oklch(0.22 0 0);
 }
 
+.dark .pams-bpmn-root .djs-palette .entry {
+  color: oklch(0.88 0 0);
+}
+
 .dark .pams-bpmn-root .djs-popup {
   color: oklch(0.88 0 0);
 }
@@ -163,6 +167,9 @@
   flex-direction: column !important;
   flex-wrap: nowrap !important;
   width: 36px !important;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .pams-bpmn-root .djs-palette .entry {

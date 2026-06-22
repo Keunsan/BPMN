@@ -24,6 +24,10 @@ export type BpmnElementType =
 
   | "SCRIPT_TASK"
 
+  | "SEND_TASK"
+
+  | "RECEIVE_TASK"
+
   | "EXCLUSIVE_GATEWAY"
 
   | "PARALLEL_GATEWAY"
