@@ -14,7 +14,8 @@ import {
 } from "@/lib/utils/process";
 import {
   applyL4PredecessorOrderToTree,
-  collectL4NodeIdsFromTree,
+  collectL3NodeIdsFromTree,
+  collectL4PredecessorLookupNodeIds,
 } from "@/lib/utils/process-l4-order";
 import {
   isEnterpriseScope,
@@ -275,12 +276,18 @@ export const getProcessTree = async (
       : undefined,
   );
 
-  const l4NodeIds = collectL4NodeIdsFromTree(tree);
+  const l3NodeIds = collectL3NodeIdsFromTree(tree);
+  const fullSiblingNodesByParent =
+    await processQueries.listL4SortNodesByParentNodeIds(l3NodeIds);
   const predecessorRows = await metadataQueries.listTaskPredecessorsByNodeIds(
-    l4NodeIds,
+    collectL4PredecessorLookupNodeIds(fullSiblingNodesByParent),
   );
 
-  return applyL4PredecessorOrderToTree(tree, predecessorRows);
+  return applyL4PredecessorOrderToTree(
+    tree,
+    predecessorRows,
+    fullSiblingNodesByParent,
+  );
 };
 
 /** 프로세스 상세 */

@@ -1,6 +1,11 @@
 import "server-only";
 
 import type { Locale } from "@/lib/i18n/config";
+import {
+  BPMN_PREDECESSOR_CONDITION_DESC,
+  normalizeBpmnLinkedNodeId,
+} from "@/lib/utils/bpmn-predecessor-sync";
+import type { TaskPredecessorSortRow } from "@/lib/utils/process-l4-order";
 import type {
   TaskAttribute,
   TaskAttributeI18nMap,
@@ -17,8 +22,8 @@ import { query, queryOne, transaction, type QueryParams } from "../pool";
 
 /** DB snake_case 행을 TaskAttribute로 변환한다. */
 const mapTaskAttribute = (row: Record<string, unknown>): TaskAttribute => ({
-  attrId: row.attr_id as number,
-  nodeId: row.node_id as number,
+  attrId: Number(row.attr_id),
+  nodeId: Number(row.node_id),
   definition: (row.definition as string | null) ?? null,
   purpose: (row.purpose as string | null) ?? null,
   inputDeliverable: (row.input_deliverable as string | null) ?? null,
@@ -44,9 +49,9 @@ const mapTaskAttribute = (row: Record<string, unknown>): TaskAttribute => ({
 const mapTaskPredecessor = (
   row: Record<string, unknown>,
 ): TaskPredecessorDto => ({
-  predecessorId: row.predecessor_id as number,
-  nodeId: row.node_id as number,
-  predecessorNodeId: row.predecessor_node_id as number,
+  predecessorId: Number(row.predecessor_id),
+  nodeId: Number(row.node_id),
+  predecessorNodeId: Number(row.predecessor_node_id),
   conditionDesc: (row.condition_desc as string | null) ?? null,
   isMandatory: Boolean(row.is_mandatory),
   createdAt: new Date(row.created_at as string),
@@ -85,12 +90,14 @@ const mapTaskAttributeI18n = (
 const mapTaskAttributeListItem = (
   row: Record<string, unknown>,
 ): TaskAttributeListItem => ({
-  attrId: row.attr_id as number,
-  nodeId: row.node_id as number,
+  attrId: Number(row.attr_id),
+  nodeId: Number(row.node_id),
   processCode: row.process_code as string,
   processName: row.process_name as string,
   processLevel: row.process_level as TaskAttributeListItem["processLevel"],
   processStatus: row.process_status as ProcessStatus,
+  parentNodeId:
+    row.parent_node_id != null ? Number(row.parent_node_id) : null,
   parentCode: (row.parent_code as string | null) ?? null,
   parentName: (row.parent_name as string | null) ?? null,
   definition: (row.definition as string | null) ?? null,
@@ -235,6 +242,7 @@ export const listTaskAttributes = async (
        pn.level AS process_level,
        pn.status AS process_status,
        COALESCE(pni_locale.name, pni_ko.name, pn.name) AS process_name,
+       pn.parent_node_id,
        parent.code AS parent_code,
        COALESCE(parent_i18n.name, parent_i18n_ko.name, parent.name) AS parent_name,
        bpmn.model_id AS bpmn_model_id,
@@ -299,12 +307,13 @@ export const findTaskAttributeDetailByNodeId = async (
   nodeId: number,
   locale: Locale,
 ): Promise<TaskAttributeDetailBundle | null> => {
-  const [nodeRow, attribute] = await Promise.all([
+  const [nodeRow, attribute, predecessors] = await Promise.all([
     queryOne<{ level: ProcessLevel }>(
       `SELECT level FROM process_node WHERE node_id = @nodeId`,
       { nodeId },
     ),
     findTaskAttributeByNodeId(nodeId),
+    listTaskPredecessors(nodeId, locale),
   ]);
 
   if (!nodeRow) {
@@ -316,14 +325,11 @@ export const findTaskAttributeDetailByNodeId = async (
       nodeLevel: nodeRow.level,
       attribute: null,
       i18n: {},
-      predecessors: [],
+      predecessors,
     };
   }
 
-  const [i18n, predecessors] = await Promise.all([
-    findTaskAttributeI18n(attribute.attrId),
-    listTaskPredecessors(nodeId, locale),
-  ]);
+  const i18n = await findTaskAttributeI18n(attribute.attrId);
 
   return {
     nodeLevel: nodeRow.level,
@@ -502,22 +508,58 @@ export const listTaskPredecessors = async (
   return rows.map(mapTaskPredecessor);
 };
 
-/** BPMN sequence flow에서 도출한 선행 관계를 기존 목록에 병합한다. */
-export const mergeTaskPredecessorsFromBpmn = async (
+/** BPMN sequence flow 기반 선행 관계를 범위 내 L4 노드에 전체 교체 동기화한다 */
+export const syncTaskPredecessorsFromBpmn = async (
   pairs: Array<{ nodeId: number; predecessorNodeId: number }>,
+  scopeNodeIds: number[],
 ): Promise<void> => {
-  if (pairs.length === 0) {
+  const normalizedPairs = pairs
+    .map((pair) => ({
+      nodeId: normalizeBpmnLinkedNodeId(pair.nodeId),
+      predecessorNodeId: normalizeBpmnLinkedNodeId(pair.predecessorNodeId),
+    }))
+    .filter(
+      (
+        pair,
+      ): pair is { nodeId: number; predecessorNodeId: number } =>
+        pair.nodeId != null && pair.predecessorNodeId != null,
+    );
+
+  const scope = [
+    ...new Set(
+      [
+        ...scopeNodeIds.map((nodeId) => normalizeBpmnLinkedNodeId(nodeId)),
+        ...normalizedPairs.map((pair) => pair.nodeId),
+      ].filter((nodeId): nodeId is number => nodeId != null),
+    ),
+  ];
+
+  if (scope.length === 0 && normalizedPairs.length === 0) {
     return;
   }
 
+  const acyclicPairs = filterAcyclicPredecessorPairs(normalizedPairs, []);
+  const scopeSet = new Set(scope);
+
   await transaction(async (tx) => {
-    for (const pair of pairs) {
+    for (const nodeId of scope) {
+      await tx(`DELETE FROM task_predecessor WHERE node_id = @nodeId`, { nodeId });
+    }
+
+    const seenPairs = new Set<string>();
+    for (const pair of acyclicPairs) {
+      if (!scopeSet.has(pair.nodeId)) {
+        continue;
+      }
+
+      const pairKey = `${pair.nodeId}:${pair.predecessorNodeId}`;
+      if (seenPairs.has(pairKey)) {
+        continue;
+      }
+      seenPairs.add(pairKey);
+
       await tx(
-        `IF NOT EXISTS (
-           SELECT 1 FROM task_predecessor
-           WHERE node_id = @nodeId AND predecessor_node_id = @predecessorNodeId
-         )
-         INSERT INTO task_predecessor (
+        `INSERT INTO task_predecessor (
            node_id, predecessor_node_id, condition_desc, is_mandatory
          )
          VALUES (
@@ -526,7 +568,7 @@ export const mergeTaskPredecessorsFromBpmn = async (
         {
           nodeId: pair.nodeId,
           predecessorNodeId: pair.predecessorNodeId,
-          conditionDesc: "BPMN sequence flow",
+          conditionDesc: BPMN_PREDECESSOR_CONDITION_DESC,
           isMandatory: true,
         },
       );
@@ -559,6 +601,150 @@ export const replaceTaskPredecessors = async (
       );
     }
   });
+};
+
+/** 수동 선행 프로세스만 교체한다 — BPMN 자동 동기화 행은 유지한다. */
+export const replaceManualTaskPredecessors = async (
+  nodeId: number,
+  predecessors: UpsertTaskPredecessorDto[],
+): Promise<void> => {
+  const seen = new Set<number>();
+  const normalized = predecessors.filter((predecessor) => {
+    const predecessorNodeId = Number(predecessor.predecessorNodeId);
+    if (!Number.isFinite(predecessorNodeId) || seen.has(predecessorNodeId)) {
+      return false;
+    }
+    seen.add(predecessorNodeId);
+    return true;
+  });
+
+  await transaction(async (tx) => {
+    await tx(
+      `DELETE FROM task_predecessor
+       WHERE node_id = @nodeId
+         AND (condition_desc IS NULL OR condition_desc <> @conditionDesc)`,
+      { nodeId, conditionDesc: BPMN_PREDECESSOR_CONDITION_DESC },
+    );
+
+    for (const predecessor of normalized) {
+      await tx(
+        `MERGE task_predecessor AS target
+         USING (
+           SELECT
+             @nodeId AS node_id,
+             @predecessorNodeId AS predecessor_node_id
+         ) AS source
+           ON target.node_id = source.node_id
+          AND target.predecessor_node_id = source.predecessor_node_id
+         WHEN MATCHED THEN
+           UPDATE SET
+             condition_desc = @conditionDesc,
+             is_mandatory = @isMandatory
+         WHEN NOT MATCHED THEN
+           INSERT (node_id, predecessor_node_id, condition_desc, is_mandatory)
+           VALUES (@nodeId, @predecessorNodeId, @conditionDesc, @isMandatory);`,
+        {
+          nodeId,
+          predecessorNodeId: predecessor.predecessorNodeId,
+          conditionDesc: predecessor.conditionDesc ?? null,
+          isMandatory: predecessor.isMandatory ?? true,
+        },
+      );
+    }
+  });
+};
+
+type PredecessorPair = { nodeId: number; predecessorNodeId: number };
+
+const buildPredecessorAdjacency = (
+  edges: PredecessorPair[],
+): Map<number, Set<number>> => {
+  const adjacency = new Map<number, Set<number>>();
+
+  for (const { nodeId, predecessorNodeId } of edges) {
+    const dependencies = adjacency.get(nodeId) ?? new Set<number>();
+    dependencies.add(predecessorNodeId);
+    adjacency.set(nodeId, dependencies);
+  }
+
+  return adjacency;
+};
+
+const hasPathInAdjacency = (
+  fromNodeId: number,
+  targetNodeId: number,
+  adjacency: Map<number, Set<number>>,
+): boolean => {
+  const visited = new Set<number>();
+  const stack = [fromNodeId];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === targetNodeId) {
+      return true;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    for (const next of adjacency.get(current) ?? []) {
+      if (!visited.has(next)) {
+        stack.push(next);
+      }
+    }
+  }
+
+  return false;
+};
+
+/** BPMN 동기화 후보 중 순환을 만들지 않는 선행 쌍만 남긴다 */
+const filterAcyclicPredecessorPairs = (
+  pairs: PredecessorPair[],
+  existingEdges: PredecessorPair[],
+): PredecessorPair[] => {
+  const adjacency = buildPredecessorAdjacency(existingEdges);
+  const seen = new Set<string>();
+  const accepted: PredecessorPair[] = [];
+
+  for (const pair of pairs) {
+    if (pair.predecessorNodeId === pair.nodeId) {
+      continue;
+    }
+
+    const pairKey = `${pair.nodeId}:${pair.predecessorNodeId}`;
+    if (seen.has(pairKey)) {
+      continue;
+    }
+
+    if (hasPathInAdjacency(pair.predecessorNodeId, pair.nodeId, adjacency)) {
+      continue;
+    }
+
+    seen.add(pairKey);
+    const dependencies = adjacency.get(pair.nodeId) ?? new Set<number>();
+    dependencies.add(pair.predecessorNodeId);
+    adjacency.set(pair.nodeId, dependencies);
+    accepted.push(pair);
+  }
+
+  return accepted;
+};
+
+/** node_id·predecessor_node_id 선행 관계가 이미 존재하는지 확인한다 */
+export const existsTaskPredecessorPair = async (
+  nodeId: number,
+  predecessorNodeId: number,
+): Promise<boolean> => {
+  const row = await queryOne<{ node_id: number }>(
+    `SELECT TOP 1 node_id
+     FROM task_predecessor
+     WHERE node_id = @nodeId
+       AND predecessor_node_id = @predecessorNodeId`,
+    { nodeId, predecessorNodeId },
+  );
+
+  return Boolean(row);
 };
 
 /** 이미 존재하는 선행 경로가 대상 노드까지 이어지는지 검사한다. */
@@ -628,16 +814,16 @@ const buildInClauseParams = (
   return { placeholders, params };
 };
 
-/** 여러 L4 노드의 task_predecessor 관계를 predecessor_id 순으로 조회한다 */
+/** 여러 L4 노드의 task_predecessor 관계를 정렬용으로 조회한다 */
 export const listTaskPredecessorsByNodeIds = async (
   nodeIds: number[],
-): Promise<Array<{ nodeId: number; predecessorNodeId: number }>> => {
+): Promise<TaskPredecessorSortRow[]> => {
   const uniqueIds = [...new Set(nodeIds)];
   if (uniqueIds.length === 0) {
     return [];
   }
 
-  const rows: Array<{ nodeId: number; predecessorNodeId: number }> = [];
+  const rows: TaskPredecessorSortRow[] = [];
 
   for (let offset = 0; offset < uniqueIds.length; offset += IN_CLAUSE_BATCH_SIZE) {
     const batch = uniqueIds.slice(offset, offset + IN_CLAUSE_BATCH_SIZE);

@@ -1,38 +1,68 @@
 import type { ProcessNodeTree } from "@/types/process";
 
+/** L4 선행 정렬용 task_predecessor 행 */
+export type TaskPredecessorSortRow = {
+  nodeId: number;
+  predecessorNodeId: number;
+};
+
+/** L4 선행 정렬용 노드 메타 */
+export type L4SortNode = {
+  nodeId: number;
+};
+
+const toNodeId = (nodeId: number | string): number => Number(nodeId);
+
 /** L4 선행 프로세스 정렬에 필요한 인덱스 */
 export type L4PredecessorIndex = {
-  /** nodeId → 대표 선행 nodeId (predecessor_id 최소) */
+  /** nodeId → 형제 L4 기준으로 해석된 선행 nodeId */
   primaryPredecessorByNode: Map<number, number>;
   /** 선행 관계가 하나라도 등록된 nodeId */
   nodesWithPredecessor: Set<number>;
-  /** 형제 L4가 선행으로 지정한 nodeId 집합 */
-  referencedAsSiblingPredecessor: Set<number>;
 };
 
-/** task_predecessor 행 목록으로 L4 정렬 인덱스를 만든다 */
-export const buildL4PredecessorIndex = (
-  rows: Array<{ nodeId: number; predecessorNodeId: number }>,
-  siblingIds: Set<number>,
+/** task_predecessor 행과 형제 메타로 L4 정렬 인덱스를 만든다 */
+export const buildL4PredecessorIndexForSiblings = (
+  siblings: L4SortNode[],
+  rows: TaskPredecessorSortRow[],
 ): L4PredecessorIndex => {
+  const siblingIds = new Set(siblings.map((node) => toNodeId(node.nodeId)));
   const primaryPredecessorByNode = new Map<number, number>();
   const nodesWithPredecessor = new Set<number>();
-  const referencedAsSiblingPredecessor = new Set<number>();
+  const rowsByNodeId = new Map<number, TaskPredecessorSortRow[]>();
 
   for (const row of rows) {
-    nodesWithPredecessor.add(row.nodeId);
-    if (!primaryPredecessorByNode.has(row.nodeId)) {
-      primaryPredecessorByNode.set(row.nodeId, row.predecessorNodeId);
+    const rowNodeId = toNodeId(row.nodeId);
+    if (!siblingIds.has(rowNodeId)) {
+      continue;
     }
-    if (siblingIds.has(row.predecessorNodeId)) {
-      referencedAsSiblingPredecessor.add(row.predecessorNodeId);
+    const nodeRows = rowsByNodeId.get(rowNodeId) ?? [];
+    nodeRows.push({
+      nodeId: rowNodeId,
+      predecessorNodeId: toNodeId(row.predecessorNodeId),
+    });
+    rowsByNodeId.set(rowNodeId, nodeRows);
+  }
+
+  for (const sibling of siblings) {
+    const siblingNodeId = toNodeId(sibling.nodeId);
+    const sourceRows = rowsByNodeId.get(siblingNodeId) ?? [];
+    if (sourceRows.length === 0) {
+      continue;
     }
+
+    const predecessorNodeId = sourceRows[0]!.predecessorNodeId;
+    if (!siblingIds.has(predecessorNodeId)) {
+      continue;
+    }
+
+    nodesWithPredecessor.add(siblingNodeId);
+    primaryPredecessorByNode.set(siblingNodeId, predecessorNodeId);
   }
 
   return {
     primaryPredecessorByNode,
     nodesWithPredecessor,
-    referencedAsSiblingPredecessor,
   };
 };
 
@@ -40,148 +70,130 @@ export const buildL4PredecessorIndex = (
 export const sortL4SiblingsByPredecessor = <T extends { nodeId: number }>(
   siblings: T[],
   index: L4PredecessorIndex,
+  getSiblingPredecessor: (nodeId: number) => number | null,
 ): T[] => {
   if (siblings.length <= 1) {
     return siblings;
   }
 
-  const siblingIds = new Set(siblings.map((node) => node.nodeId));
-  const { primaryPredecessorByNode, nodesWithPredecessor, referencedAsSiblingPredecessor } =
-    index;
-
-  const getSiblingPredecessor = (nodeId: number): number | null => {
-    const predecessor = primaryPredecessorByNode.get(nodeId);
-    return predecessor != null && siblingIds.has(predecessor) ? predecessor : null;
-  };
-
-  const inDegree = new Map<number, number>();
-  const successors = new Map<number, number[]>();
-
-  for (const node of siblings) {
-    inDegree.set(node.nodeId, 0);
-    successors.set(node.nodeId, []);
-  }
-
-  for (const node of siblings) {
-    const predecessor = getSiblingPredecessor(node.nodeId);
-    if (predecessor != null) {
-      inDegree.set(node.nodeId, (inDegree.get(node.nodeId) ?? 0) + 1);
-      successors.get(predecessor)!.push(node.nodeId);
-    }
-  }
+  const { nodesWithPredecessor } = index;
+  const nodeById = new Map(siblings.map((node) => [toNodeId(node.nodeId), node]));
+  const positionByNodeId = new Map<number, number>();
 
   const result: T[] = [];
-  const placed = new Set<number>();
-
-  const release = (nodeId: number) => {
-    for (const successorId of successors.get(nodeId) ?? []) {
-      inDegree.set(successorId, (inDegree.get(successorId) ?? 1) - 1);
-    }
+  const append = (node: T) => {
+    const nodeId = toNodeId(node.nodeId);
+    positionByNodeId.set(nodeId, result.length);
+    result.push(node);
   };
 
-  const pickReady = (): T | null => {
-    const ready = siblings.filter(
-      (node) => !placed.has(node.nodeId) && (inDegree.get(node.nodeId) ?? 0) === 0,
-    );
+  const withoutPredecessor = siblings
+    .filter((node) => !nodesWithPredecessor.has(toNodeId(node.nodeId)))
+    .sort((left, right) => toNodeId(left.nodeId) - toNodeId(right.nodeId));
+  for (const node of withoutPredecessor) {
+    append(node);
+  }
+
+  const placed = new Set(withoutPredecessor.map((node) => toNodeId(node.nodeId)));
+  const pending = new Set(
+    siblings
+      .filter((node) => nodesWithPredecessor.has(toNodeId(node.nodeId)))
+      .map((node) => toNodeId(node.nodeId)),
+  );
+
+  const predecessorPosition = (nodeId: number): number => {
+    const predecessor = getSiblingPredecessor(nodeId);
+    if (predecessor == null) {
+      return -1;
+    }
+    return positionByNodeId.get(predecessor) ?? Number.MAX_SAFE_INTEGER;
+  };
+
+  while (pending.size > 0) {
+    let ready = [...pending].filter((nodeId) => {
+      const predecessor = getSiblingPredecessor(nodeId);
+      return predecessor == null || placed.has(predecessor);
+    });
+
     if (ready.length === 0) {
-      return null;
+      const forcedNodeId = [...pending].sort((left, right) => left - right)[0]!;
+      append(nodeById.get(forcedNodeId)!);
+      placed.add(forcedNodeId);
+      pending.delete(forcedNodeId);
+      continue;
     }
 
-    ready.sort((left, right) => {
-      const leftPredecessor = getSiblingPredecessor(left.nodeId) ?? -1;
-      const rightPredecessor = getSiblingPredecessor(right.nodeId) ?? -1;
-      if (leftPredecessor !== rightPredecessor) {
-        return leftPredecessor - rightPredecessor;
+    ready = ready.sort((left, right) => {
+      const leftPosition = predecessorPosition(left);
+      const rightPosition = predecessorPosition(right);
+      if (leftPosition !== rightPosition) {
+        return leftPosition - rightPosition;
       }
-      return left.nodeId - right.nodeId;
+      return left - right;
     });
 
-    return ready[0] ?? null;
-  };
-
-  const heads = siblings
-    .filter(
-      (node) =>
-        !nodesWithPredecessor.has(node.nodeId) &&
-        referencedAsSiblingPredecessor.has(node.nodeId),
-    )
-    .sort((left, right) => left.nodeId - right.nodeId);
-
-  for (const head of heads) {
-    result.push(head);
-    placed.add(head.nodeId);
-    release(head.nodeId);
-  }
-
-  while (true) {
-    const next = pickReady();
-    if (!next) {
-      break;
+    for (const nodeId of ready) {
+      append(nodeById.get(nodeId)!);
+      placed.add(nodeId);
+      pending.delete(nodeId);
     }
-    result.push(next);
-    placed.add(next.nodeId);
-    release(next.nodeId);
   }
 
-  const remaining = siblings
-    .filter((node) => !placed.has(node.nodeId))
-    .sort((left, right) => {
-      const leftHasPredecessor = nodesWithPredecessor.has(left.nodeId);
-      const rightHasPredecessor = nodesWithPredecessor.has(right.nodeId);
-      if (leftHasPredecessor !== rightHasPredecessor) {
-        return leftHasPredecessor ? 1 : -1;
-      }
+  return result;
+};
 
-      const leftPredecessor = primaryPredecessorByNode.get(left.nodeId) ?? -1;
-      const rightPredecessor = primaryPredecessorByNode.get(right.nodeId) ?? -1;
-      if (leftPredecessor !== rightPredecessor) {
-        return leftPredecessor - rightPredecessor;
-      }
+/** L3 하위 전체 L4 형제 기준 선행 정렬 순서(nodeId)를 계산한다 */
+export const computeSortedL4NodeIds = (
+  fullSiblingNodes: L4SortNode[],
+  predecessorRows: TaskPredecessorSortRow[],
+): number[] => {
+  if (fullSiblingNodes.length <= 1) {
+    return fullSiblingNodes.map((node) => node.nodeId);
+  }
 
-      return left.nodeId - right.nodeId;
-    });
+  const index = buildL4PredecessorIndexForSiblings(fullSiblingNodes, predecessorRows);
+  const getSiblingPredecessor = (nodeId: number | string): number | null =>
+    index.primaryPredecessorByNode.get(toNodeId(nodeId)) ?? null;
+  const siblings = fullSiblingNodes.map((node) => ({ nodeId: toNodeId(node.nodeId) }));
 
-  return [...result, ...remaining];
+  return sortL4SiblingsByPredecessor(siblings, index, getSiblingPredecessor).map(
+    (item) => item.nodeId,
+  );
 };
 
 type L4PredecessorSortableItem = {
   nodeId: number;
   processLevel: string;
-  parentCode: string | null;
+  parentNodeId: number | null;
 };
 
 /** Task 속성 목록 등 L3/L4 혼합 리스트에 L4 선행 정렬을 적용한다 */
 export const applyL4PredecessorOrderToList = <T extends L4PredecessorSortableItem>(
   items: T[],
-  predecessorRows: Array<{ nodeId: number; predecessorNodeId: number }>,
+  predecessorRows: TaskPredecessorSortRow[],
+  fullSiblingIdsByParent: Map<number, L4SortNode[]>,
 ): T[] => {
   const l4Items = items.filter((item) => item.processLevel === "L4");
   if (l4Items.length <= 1) {
     return items;
   }
 
-  const groups = new Map<string, T[]>();
-  for (const item of l4Items) {
-    const key = item.parentCode ?? `__node_${item.nodeId}`;
-    const group = groups.get(key) ?? [];
-    group.push(item);
-    groups.set(key, group);
-  }
+  const itemByNodeId = new Map(
+    l4Items.map((item) => [toNodeId(item.nodeId), item]),
+  );
+  const sortedIdsByParent = new Map<number, number[]>();
 
-  const sortedGroups = new Map<string, T[]>();
-  for (const [key, group] of groups) {
-    if (group.length <= 1) {
-      sortedGroups.set(key, group);
+  for (const [parentNodeId, fullSiblingNodes] of fullSiblingIdsByParent) {
+    if (fullSiblingNodes.length <= 1) {
       continue;
     }
-
-    const siblingIds = new Set(group.map((item) => item.nodeId));
-    const siblingRows = predecessorRows.filter((row) => siblingIds.has(row.nodeId));
-    const index = buildL4PredecessorIndex(siblingRows, siblingIds);
-    sortedGroups.set(key, sortL4SiblingsByPredecessor(group, index));
+    sortedIdsByParent.set(
+      toNodeId(parentNodeId),
+      computeSortedL4NodeIds(fullSiblingNodes, predecessorRows),
+    );
   }
 
-  const processedParents = new Set<string>();
+  const processedParents = new Set<number>();
   const result: T[] = [];
 
   for (const item of items) {
@@ -190,13 +202,30 @@ export const applyL4PredecessorOrderToList = <T extends L4PredecessorSortableIte
       continue;
     }
 
-    const key = item.parentCode ?? `__node_${item.nodeId}`;
-    if (processedParents.has(key)) {
+    const parentNodeId = item.parentNodeId;
+    if (parentNodeId == null) {
+      result.push(item);
       continue;
     }
 
-    processedParents.add(key);
-    result.push(...(sortedGroups.get(key) ?? [item]));
+    const parentKey = toNodeId(parentNodeId);
+    if (processedParents.has(parentKey)) {
+      continue;
+    }
+
+    processedParents.add(parentKey);
+    const sortedIds = sortedIdsByParent.get(parentKey);
+    if (!sortedIds) {
+      result.push(item);
+      continue;
+    }
+
+    for (const nodeId of sortedIds) {
+      const row = itemByNodeId.get(toNodeId(nodeId));
+      if (row) {
+        result.push(row);
+      }
+    }
   }
 
   return result;
@@ -205,7 +234,8 @@ export const applyL4PredecessorOrderToList = <T extends L4PredecessorSortableIte
 /** 트리 전체에 L3 하위 L4 선행 정렬을 적용한다 */
 export const applyL4PredecessorOrderToTree = (
   tree: ProcessNodeTree[],
-  rows: Array<{ nodeId: number; predecessorNodeId: number }>,
+  rows: TaskPredecessorSortRow[],
+  fullSiblingNodesByParent: Map<number, L4SortNode[]>,
 ): ProcessNodeTree[] => {
   const sortChildren = (nodes: ProcessNodeTree[]): ProcessNodeTree[] =>
     nodes.map((node) => {
@@ -220,10 +250,14 @@ export const applyL4PredecessorOrderToTree = (
         return { ...node, children };
       }
 
-      const siblingIds = new Set(l4Children.map((child) => child.nodeId));
-      const siblingRows = rows.filter((row) => siblingIds.has(row.nodeId));
-      const index = buildL4PredecessorIndex(siblingRows, siblingIds);
-      const sortedL4 = sortL4SiblingsByPredecessor(l4Children, index);
+      const fullSiblingNodes =
+        fullSiblingNodesByParent.get(node.nodeId) ??
+        l4Children.map((child) => ({ nodeId: child.nodeId }));
+      const sortedIds = computeSortedL4NodeIds(fullSiblingNodes, rows);
+      const childById = new Map(l4Children.map((child) => [child.nodeId, child]));
+      const sortedL4 = sortedIds
+        .map((nodeId) => childById.get(nodeId))
+        .filter((child): child is ProcessNodeTree => child != null);
       const nonL4Children = children.filter((child) => child.level !== "L4");
 
       return {
@@ -235,13 +269,13 @@ export const applyL4PredecessorOrderToTree = (
   return sortChildren(tree);
 };
 
-/** 트리에서 L4 nodeId를 수집한다 */
-export const collectL4NodeIdsFromTree = (tree: ProcessNodeTree[]): number[] => {
+/** 트리에서 L3 nodeId를 수집한다 */
+export const collectL3NodeIdsFromTree = (tree: ProcessNodeTree[]): number[] => {
   const ids: number[] = [];
 
   const walk = (nodes: ProcessNodeTree[]) => {
     for (const node of nodes) {
-      if (node.level === "L4") {
+      if (node.level === "L3") {
         ids.push(node.nodeId);
       }
       if (node.children?.length) {
@@ -252,4 +286,19 @@ export const collectL4NodeIdsFromTree = (tree: ProcessNodeTree[]): number[] => {
 
   walk(tree);
   return ids;
+};
+
+/** 선행 조회에 필요한 L4 nodeId를 수집한다 */
+export const collectL4PredecessorLookupNodeIds = (
+  fullSiblingNodesByParent: Map<number, L4SortNode[]>,
+): number[] => {
+  const ids = new Set<number>();
+
+  for (const nodes of fullSiblingNodesByParent.values()) {
+    for (const node of nodes) {
+      ids.add(node.nodeId);
+    }
+  }
+
+  return [...ids];
 };

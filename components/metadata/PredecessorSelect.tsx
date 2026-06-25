@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { normalizePredecessorConditionDescForDisplay } from "@/lib/utils/bpmn-predecessor-sync";
 import type { UpsertTaskPredecessorDto } from "@/types/metadata";
 import type { ProcessNodeTree } from "@/types/process";
 
@@ -24,6 +25,8 @@ export type PredecessorSelection = UpsertTaskPredecessorDto & {
   predecessorCode?: string;
   predecessorName?: string;
   predecessorLevel?: ProcessNodeTree["level"];
+  /** BPMN sequence flow에서 자동 반영된 선행 관계(클라이언트 전용) */
+  isBpmnDerived?: boolean;
 };
 
 type PredecessorSelectProps = {
@@ -137,10 +140,14 @@ export const PredecessorSelect = ({
         minWidth: 180,
         cell: (item) => (
           <Input
-            value={item.conditionDesc ?? ""}
+            value={
+              normalizePredecessorConditionDescForDisplay(item.conditionDesc) ??
+              ""
+            }
             onChange={(event) =>
               updateItem(item.predecessorNodeId, {
-                conditionDesc: event.target.value,
+                conditionDesc: event.target.value || null,
+                isBpmnDerived: false,
               })
             }
             placeholder={t("conditionPlaceholder")}

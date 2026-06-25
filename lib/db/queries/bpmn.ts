@@ -10,6 +10,8 @@ import type {
   BpmnModelStatus,
 } from "@/types/bpmn";
 
+import { normalizeBpmnLinkedNodeId } from "@/lib/utils/bpmn-predecessor-sync";
+
 import { query, queryOne, transaction } from "../pool";
 
 /** DB snake_case → BpmnModel */
@@ -38,7 +40,9 @@ const mapBpmnElement = (row: Record<string, unknown>): BpmnElement => ({
   elementType: row.element_type as BpmnElementType,
   elementBpmnId: row.element_bpmn_id as string,
   elementName: (row.element_name as string | null) ?? null,
-  linkedNodeId: (row.linked_node_id as number | null) ?? null,
+  linkedNodeId:
+    normalizeBpmnLinkedNodeId(row.linked_node_id as number | string | null) ??
+    null,
   properties: row.properties
     ? (JSON.parse(row.properties as string) as Record<string, unknown>)
     : null,

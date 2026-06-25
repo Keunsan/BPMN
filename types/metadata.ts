@@ -140,6 +140,7 @@ export interface TaskAttributeListItem {
   processName: string;
   processLevel: "L3" | "L4";
   processStatus: ProcessStatus;
+  parentNodeId: number | null;
   parentCode: string | null;
   parentName: string | null;
   definition: string | null;

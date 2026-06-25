@@ -30,7 +30,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { ProcessNodeDto, ProcessNodeTree, ProcessFilters } from "@/types/process";
+import type { ProcessNodeDto, ProcessNodeTree } from "@/types/process";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import { apiGet } from "@/lib/api/client";
 import { processKeys } from "@/lib/query/keys";
@@ -46,13 +46,7 @@ type E2eSheetState =
   | { type: "edit"; process: E2eProcessDto };
 
 /** 프로세스 트리에서 선택한 노드를 오른쪽 상세 패널로 표시한다. */
-export const ProcessListClient = ({
-  initialTree,
-  initialTreeFilters,
-}: {
-  initialTree?: ProcessNodeTree[];
-  initialTreeFilters?: ProcessFilters;
-}) => {
+export const ProcessListClient = () => {
   const t = useTranslations("process");
   const tm = useTranslations("menu");
   const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
@@ -106,8 +100,6 @@ export const ProcessListClient = ({
               <ProcessTree
                 selectedId={selectedNode?.nodeId}
                 scopeFilters={scopeFilters}
-                initialTree={initialTree}
-                initialTreeFilters={initialTreeFilters}
                 onSelect={(node) => {
                   prefetchProcessDetail(node.nodeId);
                   setSelectedE2eId(undefined);

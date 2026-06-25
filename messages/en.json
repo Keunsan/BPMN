@@ -273,6 +273,8 @@
     "saveNewVersion": "Save as new version",
     "saving": "Saving...",
     "saved": "Saved.",
+    "saveFailed": "Failed to save.",
+    "predecessorSyncFailed": "Failed to sync predecessor processes.",
     "drilldownTitle": "L4 detail",
     "drilldownDesc": "Read-only L4 task flow from the linked L3 BPMN.",
     "drilldownEmpty": "No L4 tasks to display.",

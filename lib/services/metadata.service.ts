@@ -14,14 +14,16 @@ import type {
   TaskAttributeI18nValue,
   TaskAttributeListFilters,
   TaskAttributeListItem,
+  TaskPredecessorDto,
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
 
 import * as metadataQueries from "@/lib/db/queries/metadata";
 import * as processQueries from "@/lib/db/queries/process";
+import { syncBpmnTaskPredecessorsForL3 } from "@/lib/services/bpmn-predecessor-sync.service";
 import { updateProcess } from "@/lib/services/process.service";
-import { applyL4PredecessorOrderToList } from "@/lib/utils/process-l4-order";
+import { applyL4PredecessorOrderToList, collectL4PredecessorLookupNodeIds } from "@/lib/utils/process-l4-order";
 
 const TASK_ATTRIBUTE_TEXT_FIELDS = [
   "definition",
@@ -208,12 +210,18 @@ const validatePredecessors = async (
       );
     }
 
-    const circular = await metadataQueries.hasPredecessorPath(
-      predecessorNodeId,
+    const alreadyLinked = await metadataQueries.existsTaskPredecessorPair(
       nodeId,
+      predecessorNodeId,
     );
-    if (circular) {
-      throw new ApiError("E404", "Circular reference detected", 400);
+    if (!alreadyLinked) {
+      const circular = await metadataQueries.hasPredecessorPath(
+        predecessorNodeId,
+        nodeId,
+      );
+      if (circular) {
+        throw new ApiError("E404", "Circular reference detected", 400);
+      }
     }
 
     seen.add(predecessorNodeId);
@@ -227,24 +235,115 @@ const validatePredecessors = async (
   return normalized;
 };
 
+/** task_attribute 행이 없을 때 선행 프로세스만 담은 조회용 껍데기 DTO를 만든다 */
+const buildTaskAttributeShell = (
+  nodeId: number,
+  predecessors: TaskPredecessorDto[],
+): TaskAttributeDto => ({
+  attrId: 0,
+  nodeId,
+  definition: null,
+  purpose: null,
+  inputDeliverable: null,
+  inputDataDesc: null,
+  inputCondition: null,
+  outputDeliverable: null,
+  outputDataDesc: null,
+  outputCondition: null,
+  frequency: null,
+  triggerEvent: null,
+  duration: null,
+  issues: null,
+  exceptions: null,
+  remarks: null,
+  version: "1.0.0",
+  createdBy: null,
+  createdAt: new Date(0),
+  updatedBy: null,
+  updatedAt: null,
+  i18n: {},
+  predecessors,
+});
+
+/** L4 노드의 BPMN 선행 관계를 현재 모델 기준으로 DB에 동기화한다 */
+const syncBpmnPredecessorsForNode = async (
+  nodeId: number,
+  locale: Locale,
+): Promise<TaskPredecessorDto[]> => {
+  const node = await processQueries.findProcessById(nodeId);
+  if (node?.level !== "L4" || !node.parentNodeId) {
+    return metadataQueries.listTaskPredecessors(nodeId, locale);
+  }
+
+  await syncBpmnTaskPredecessorsForL3(node.parentNodeId);
+  return metadataQueries.listTaskPredecessors(nodeId, locale);
+};
+
+/** Task 속성의 BPMN 선행 프로세스를 DB에 동기화한다 */
+export const syncTaskAttributeBpmnPredecessors = async (
+  nodeId: number,
+  locale: Locale,
+): Promise<TaskPredecessorDto[]> => {
+  const detail = await metadataQueries.findTaskAttributeDetailByNodeId(
+    nodeId,
+    locale,
+  );
+
+  if (!detail) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  if (detail.nodeLevel !== "L3" && detail.nodeLevel !== "L4") {
+    throw new ApiError(
+      "E405",
+      "Task attributes can only be managed for L3/L4 nodes",
+      400,
+      undefined,
+      "nodeId",
+    );
+  }
+
+  return syncBpmnPredecessorsForNode(nodeId, locale);
+};
+
 /** Task 속성 목록을 조회한다. */
 export const listTaskAttributes = async (
   locale: Locale,
   filters: TaskAttributeListFilters = {},
 ): Promise<TaskAttributeListItem[]> => {
   const items = await metadataQueries.listTaskAttributes(locale, filters);
-  const l4NodeIds = items
-    .filter((item) => item.processLevel === "L4")
-    .map((item) => item.nodeId);
+  const l4Items = items.filter((item) => item.processLevel === "L4");
 
-  if (l4NodeIds.length <= 1) {
+  if (l4Items.length <= 1) {
     return items;
   }
 
-  const predecessorRows =
-    await metadataQueries.listTaskPredecessorsByNodeIds(l4NodeIds);
+  const parentNodeIds = [
+    ...new Set(
+      l4Items
+        .map((item) => item.parentNodeId)
+        .filter((parentNodeId): parentNodeId is number => parentNodeId != null),
+    ),
+  ];
 
-  return applyL4PredecessorOrderToList(items, predecessorRows);
+  if (filters.nodeId) {
+    const scopeNode = await processQueries.findProcessById(filters.nodeId);
+    if (scopeNode?.level === "L3" && !parentNodeIds.includes(filters.nodeId)) {
+      parentNodeIds.push(filters.nodeId);
+    }
+  }
+
+  const fullSiblingNodesByParent =
+    await processQueries.listL4SortNodesByParentNodeIds(parentNodeIds);
+  const predecessorRows = await metadataQueries.listTaskPredecessorsByNodeIds(
+    collectL4PredecessorLookupNodeIds(fullSiblingNodesByParent),
+  );
+
+  return applyL4PredecessorOrderToList(
+    items,
+    predecessorRows,
+    fullSiblingNodesByParent,
+  );
 };
 
 /** Task 속성 상세를 조회한다. */
@@ -271,8 +370,14 @@ export const getTaskAttribute = async (
     );
   }
 
+  const predecessors = await syncBpmnPredecessorsForNode(nodeId, locale);
+
   if (!detail.attribute) {
-    return null;
+    if (predecessors.length === 0) {
+      return null;
+    }
+
+    return buildTaskAttributeShell(nodeId, predecessors);
   }
 
   const resolved = metadataQueries.resolveTaskAttributeText(
@@ -285,7 +390,7 @@ export const getTaskAttribute = async (
     ...detail.attribute,
     ...resolved,
     i18n: detail.i18n,
-    predecessors: detail.predecessors,
+    predecessors,
   };
 };
 
@@ -314,12 +419,15 @@ export const upsertTaskAttribute = async (
     buildI18nMap(normalized),
   );
 
-  if (normalized.predecessors) {
+  if (normalized.predecessors !== undefined) {
     const predecessors = await validatePredecessors(
       normalized.nodeId,
       normalized.predecessors,
     );
-    await metadataQueries.replaceTaskPredecessors(normalized.nodeId, predecessors);
+    await metadataQueries.replaceManualTaskPredecessors(
+      normalized.nodeId,
+      predecessors,
+    );
   }
 
   const result = await getTaskAttribute(normalized.nodeId, locale);

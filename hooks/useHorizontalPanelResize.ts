@@ -46,9 +46,7 @@ export const useHorizontalPanelResize = ({
   enabled = true,
   side = "left",
 }: UseHorizontalPanelResizeOptions) => {
-  const [width, setWidth] = useState(() =>
-    readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth),
-  );
+  const [width, setWidth] = useState(defaultWidth);
   const [isResizing, setIsResizing] = useState(false);
   const widthRef = useRef(width);
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -60,7 +58,8 @@ export const useHorizontalPanelResize = ({
 
   useEffect(() => {
     hydratedRef.current = true;
-  }, []);
+    setWidth(readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth));
+  }, [defaultWidth, maxWidth, minWidth, storageKey]);
 
   useEffect(() => {
     if (!isResizing) {

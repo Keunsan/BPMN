@@ -273,6 +273,8 @@
     "saveNewVersion": "儲存為新版本",
     "saving": "儲存中...",
     "saved": "已儲存。",
+    "saveFailed": "儲存失敗。",
+    "predecessorSyncFailed": "無法同步先行流程。",
     "drilldownTitle": "L4 詳情",
     "drilldownDesc": "連結 L3 BPMN 的 L4 Task 流程（唯讀）。",
     "drilldownEmpty": "沒有可顯示的 L4 Task。",

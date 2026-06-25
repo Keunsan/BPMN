@@ -273,6 +273,8 @@
     "saveNewVersion": "새 버전 저장",
     "saving": "저장 중...",
     "saved": "저장되었습니다.",
+    "saveFailed": "저장에 실패했습니다.",
+    "predecessorSyncFailed": "선행 프로세스 동기화에 실패했습니다.",
     "drilldownTitle": "L4 상세",
     "drilldownDesc": "연결된 L3 BPMN의 L4 Task 흐름입니다 (읽기 전용).",
     "drilldownEmpty": "표시할 L4 Task가 없습니다.",

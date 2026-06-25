@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { L4SortNode } from "@/lib/utils/process-l4-order";
 import type { Locale } from "@/lib/i18n/config";
 import type {
   CreateProcessInput,
@@ -124,6 +125,64 @@ export const findProcessI18nByNodeIds = async (
     for (const [nodeId, i18n] of mapProcessI18nRows(rows)) {
       result.set(nodeId, i18n);
     }
+  }
+
+  return result;
+};
+
+/** L3 부모별 직계 L4 자식 정렬 메타를 조회한다 */
+export const listL4SortNodesByParentNodeIds = async (
+  parentNodeIds: number[],
+): Promise<Map<number, L4SortNode[]>> => {
+  const uniqueParents = [...new Set(parentNodeIds)];
+  const result = new Map<number, L4SortNode[]>();
+
+  for (const parentId of uniqueParents) {
+    result.set(parentId, []);
+  }
+
+  if (uniqueParents.length === 0) {
+    return result;
+  }
+
+  for (let offset = 0; offset < uniqueParents.length; offset += IN_CLAUSE_BATCH_SIZE) {
+    const batch = uniqueParents.slice(offset, offset + IN_CLAUSE_BATCH_SIZE);
+    const { placeholders, params } = buildInClauseParams(batch, "parentId");
+    const rows = await query<{
+      parent_node_id: number;
+      node_id: number;
+    }>(
+      `SELECT parent_node_id, node_id
+       FROM process_node
+       WHERE parent_node_id IN (${placeholders})
+         AND level = 'L4'
+       ORDER BY parent_node_id, node_id`,
+      params,
+    );
+
+    for (const row of rows) {
+      const parentKey = Number(row.parent_node_id);
+      const siblings = result.get(parentKey) ?? [];
+      siblings.push({ nodeId: Number(row.node_id) });
+      result.set(parentKey, siblings);
+    }
+  }
+
+  return result;
+};
+
+/** L3 부모별 직계 L4 자식 nodeId 목록을 조회한다 */
+export const listL4NodeIdsByParentNodeIds = async (
+  parentNodeIds: number[],
+): Promise<Map<number, number[]>> => {
+  const sortNodes = await listL4SortNodesByParentNodeIds(parentNodeIds);
+  const result = new Map<number, number[]>();
+
+  for (const [parentId, nodes] of sortNodes) {
+    result.set(
+      parentId,
+      nodes.map((node) => node.nodeId),
+    );
   }
 
   return result;

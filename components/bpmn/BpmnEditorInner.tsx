@@ -41,8 +41,14 @@ export type BpmnEditorSaveResult = {
   elements: BpmnElementLinkDto[];
 };
 
+export type BpmnEditorDiagramSnapshot = {
+  xml: string;
+  elements: BpmnElementLinkDto[];
+};
+
 export type BpmnEditorHandle = {
   save: () => Promise<BpmnEditorSaveResult>;
+  getDiagramSnapshot: () => Promise<BpmnEditorDiagramSnapshot | null>;
   undo: () => void;
   redo: () => void;
   zoomIn: () => void;
@@ -690,14 +696,18 @@ const createEditorApi = (
   modelId: number,
 ): BpmnEditorHandle => ({
   save: async () => {
-    const { xml: savedXml } = await modeler.saveXML({ format: true });
+    const snapshot = await readDiagramSnapshot(modeler, linksRef.current);
+    if (!snapshot) {
+      return { xml: "", svg: "", elements: [] };
+    }
+
     const { svg } = await modeler.saveSVG();
     persistCanvasView(modelId, modeler);
 
     if (
       process.env.NODE_ENV === "development" &&
-      savedXml &&
-      !hasSavedDiagramLayout(savedXml)
+      snapshot.xml &&
+      !hasSavedDiagramLayout(snapshot.xml)
     ) {
       console.warn(
         "[BpmnEditor] 저장 XML에 좌표 정보(bpmndi)가 없습니다. Task 위치가 초기화될 수 있습니다.",
@@ -705,11 +715,12 @@ const createEditorApi = (
     }
 
     return {
-      xml: savedXml ?? "",
+      xml: snapshot.xml,
       svg: svg ?? "",
-      elements: extractElements(modeler, linksRef.current),
+      elements: snapshot.elements,
     };
   },
+  getDiagramSnapshot: async () => readDiagramSnapshot(modeler, linksRef.current),
   undo: () => {
     (modeler.get("commandStack") as { undo: () => void }).undo();
   },
@@ -1267,4 +1278,20 @@ const extractElements = (
   });
 
   return results;
+};
+
+/** 저장 없이 현재 다이어그램 XML·연결 목록을 읽는다 */
+const readDiagramSnapshot = async (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  links: Record<string, ProcessLinkInfo>,
+): Promise<BpmnEditorDiagramSnapshot | null> => {
+  const { xml: savedXml } = await modeler.saveXML({ format: true });
+  if (!savedXml) {
+    return null;
+  }
+
+  return {
+    xml: savedXml,
+    elements: extractElements(modeler, links),
+  };
 };

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import {
   ChevronLeft,
   Link2,
-  Map,
+  Map as MapIcon,
   Maximize2,
   ClipboardList,
   Minus,
@@ -19,6 +19,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { showErrorToast } from "@/components/common/ErrorToast";
+import { ApiError } from "@/lib/api/error-handler";
 import { useGuardedRouter } from "@/hooks/useGuardedRouter";
 import type { PredecessorSelection } from "@/components/metadata/PredecessorSelect";
 import {
@@ -42,7 +44,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useLinkOrCreateBpmnTask } from "@/lib/query/hooks/useBpmn";
+import { useLinkOrCreateBpmnTask, useSyncBpmnPredecessors } from "@/lib/query/hooks/useBpmn";
 import { prefetchTaskAttribute } from "@/lib/query/hooks/useMetadata";
 import { useProcessDetail } from "@/lib/query/hooks/useProcess";
 import { metadataKeys } from "@/lib/query/keys";
@@ -51,6 +53,7 @@ import {
   isProcessLinkCompatible,
   parseProcessLinkInfo,
 } from "@/lib/utils/bpmn-link";
+import { resolveBpmnPredecessorNodeIds } from "@/lib/utils/bpmn-auto-predecessor";
 import { cn } from "@/lib/utils";
 import type {
   BpmnElementLinkDto,
@@ -118,6 +121,9 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const [taskHover, setTaskHover] = useState<TaskHoverState | null>(null);
   const [diagramDirty, setDiagramDirty] = useState(false);
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
+  const { mutateAsync: syncPredecessorsAsync } = useSyncBpmnPredecessors(
+    model.modelId,
+  );
   const queryClient = useQueryClient();
   const isE2eMode = model.modelKind === "E2E";
   const { data: ownerProcess } = useProcessDetail(model.nodeId ?? 0);
@@ -195,7 +201,54 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
     };
   }, [isResizingLinkSidebar]);
 
+  const [diagramXml, setDiagramXml] = useState(model.bpmnXml);
+  const lastSyncedPredecessorKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setDiagramXml(model.bpmnXml);
+  }, [model.bpmnXml]);
+
+  useEffect(() => {
+    if (!metadataOpen || !selectedElementId) {
+      return;
+    }
+
+    const refreshDiagramXml = async () => {
+      const snapshot = await apiRef.current?.getDiagramSnapshot();
+      if (snapshot?.xml) {
+        setDiagramXml(snapshot.xml);
+      }
+    };
+
+    void refreshDiagramXml();
+  }, [diagramDirty, links, metadataOpen, selectedElementId]);
+
   const selectedLink = selectedElementId ? links[selectedElementId] : null;
+
+  const syncDiagramPredecessors = useCallback(async () => {
+    const snapshot = await apiRef.current?.getDiagramSnapshot();
+    if (!snapshot) {
+      throw new Error("diagram snapshot unavailable");
+    }
+
+    await syncPredecessorsAsync({
+      bpmnXml: snapshot.xml,
+      elements: snapshot.elements,
+    });
+
+    void queryClient.invalidateQueries({ queryKey: metadataKeys.all });
+  }, [queryClient, syncPredecessorsAsync]);
+
+  const handleSyncFailure = useCallback(
+    (error: unknown) => {
+      if (error instanceof ApiError) {
+        showErrorToast(error);
+        return;
+      }
+      toast.error(t("predecessorSyncFailed"));
+    },
+    [t],
+  );
   const prefetchTaskAttributeForNode = useCallback(
     (id: number) => {
       prefetchTaskAttribute(queryClient, id);
@@ -211,18 +264,71 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
       metadataKeys.taskAttribute(selectedLink.nodeId),
     );
   }, [queryClient, selectedLink, metadataOpen]);
-  const autoPredecessor = useMemo(
-    () =>
-      selectedElementId && selectedLink
-        ? getSingleLinkedPredecessor(
-            model.bpmnXml,
-            selectedElementId,
-            selectedLink.nodeId,
-            links,
-          )
-        : null,
-    [links, model.bpmnXml, selectedElementId, selectedLink],
-  );
+  const autoPredecessors = useMemo((): PredecessorSelection[] => {
+    if (!selectedLink || selectedLink.linkKind !== "L4_TASK") {
+      return [];
+    }
+
+    return buildAutoPredecessorsFromDiagram(
+      diagramXml,
+      selectedLink.nodeId,
+      links,
+    );
+  }, [diagramXml, links, selectedLink]);
+
+  useEffect(() => {
+    lastSyncedPredecessorKeyRef.current = null;
+  }, [diagramXml, links]);
+
+  useEffect(() => {
+    if (!metadataOpen || selectedLink?.linkKind !== "L4_TASK") {
+      return;
+    }
+
+    const syncKey = [
+      selectedLink.nodeId,
+      autoPredecessors
+        .map((item) => item.predecessorNodeId)
+        .sort((a, b) => a - b)
+        .join(","),
+    ].join(":");
+
+    if (lastSyncedPredecessorKeyRef.current === syncKey) {
+      return;
+    }
+    lastSyncedPredecessorKeyRef.current = syncKey;
+
+    const persistPredecessors = async () => {
+      try {
+        const snapshot = await apiRef.current?.getDiagramSnapshot();
+        if (!snapshot) {
+          lastSyncedPredecessorKeyRef.current = null;
+          return;
+        }
+
+        await syncPredecessorsAsync({
+          bpmnXml: snapshot.xml,
+          elements: snapshot.elements,
+        });
+
+        await queryClient.invalidateQueries({
+          queryKey: metadataKeys.taskAttribute(selectedLink.nodeId),
+        });
+      } catch (error) {
+        lastSyncedPredecessorKeyRef.current = null;
+        handleSyncFailure(error);
+      }
+    };
+
+    void persistPredecessors();
+  }, [
+    autoPredecessors,
+    handleSyncFailure,
+    metadataOpen,
+    queryClient,
+    selectedLink,
+    syncPredecessorsAsync,
+  ]);
 
   useEffect(() => {
     if (selectedLink?.linkKind === "L4_TASK") {
@@ -298,15 +404,36 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           elements: result.elements,
           createNewVersion,
         });
+
+        if (!isE2eMode) {
+          await syncPredecessorsAsync({
+            bpmnXml: result.xml,
+            elements: result.elements,
+          });
+        }
+
         setSavedLinksJson(JSON.stringify(links));
         setDiagramDirty(false);
+        for (const link of Object.values(links)) {
+          if (link.linkKind === "L4_TASK") {
+            void queryClient.invalidateQueries({
+              queryKey: metadataKeys.taskAttribute(link.nodeId),
+            });
+          }
+        }
+        void queryClient.invalidateQueries({ queryKey: metadataKeys.all });
         toast.success(t("saved"));
         return true;
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiError) {
+          showErrorToast(error);
+        } else {
+          toast.error(t("saveFailed"));
+        }
         return false;
       }
     },
-    [links, onSave, t],
+    [isE2eMode, links, onSave, queryClient, syncPredecessorsAsync, t],
   );
 
   useEffect(() => {
@@ -335,6 +462,8 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         return;
       }
 
+      const previousNodeId = links[elementId]?.nodeId;
+
       setLinks((prev) => {
         const next = { ...prev };
         if (link) {
@@ -345,6 +474,12 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         return next;
       });
 
+      if (previousNodeId) {
+        void queryClient.invalidateQueries({
+          queryKey: metadataKeys.taskAttribute(previousNodeId),
+        });
+      }
+
       if (link) {
         apiRef.current?.updateElementName(elementId, link.name);
         if (elementId === selectedElementId) {
@@ -352,6 +487,9 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         }
         if (link.linkKind === "L4_TASK") {
           prefetchTaskAttributeForNode(link.nodeId);
+          void queryClient.invalidateQueries({
+            queryKey: metadataKeys.taskAttribute(link.nodeId),
+          });
         }
         toast.success(t("linkSuccess"));
       } else {
@@ -361,7 +499,14 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         }
       }
     },
-    [prefetchTaskAttributeForNode, selectedElementId, selectedElementType, t],
+    [
+      links,
+      prefetchTaskAttributeForNode,
+      queryClient,
+      selectedElementId,
+      selectedElementType,
+      t,
+    ],
   );
 
   const handleLinkConfirm = (link: ProcessLinkInfo | null) => {
@@ -500,7 +645,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           onClick={() => apiRef.current?.toggleMinimap()}
           title={t("toggleMinimap")}
         >
-          <Map className="size-4" />
+          <MapIcon className="size-4" />
         </Button>
         <Button
           variant="outline"
@@ -705,7 +850,10 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
                 <TaskAttributeForm
                   key={selectedLink.nodeId}
                   nodeId={selectedLink.nodeId}
-                  autoPredecessor={autoPredecessor}
+                  autoPredecessors={autoPredecessors}
+                  syncBpmnPredecessors={
+                    isE2eMode ? undefined : syncDiagramPredecessors
+                  }
                   variant="sheet"
                   attributePlaceholder={cachedTaskAttribute ?? undefined}
                 />
@@ -773,56 +921,37 @@ const buildLinksFromModel = (
   return map;
 };
 
-/** BPMN XML에서 선택 Task로 직접 들어오는 연결된 선행 Task가 하나인지 계산한다. */
-const getSingleLinkedPredecessor = (
+/** 다이어그램·연결 정보에서 BPMN 선행 프로세스 선택 목록을 만든다 */
+const buildAutoPredecessorsFromDiagram = (
   bpmnXml: string | null,
-  selectedElementId: string,
-  selectedNodeId: number,
+  nodeId: number,
   links: Record<string, ProcessLinkInfo>,
-): PredecessorSelection | null => {
-  if (!bpmnXml?.trim()) {
-    return null;
-  }
+): PredecessorSelection[] => {
+  const predecessorNodeIds = resolveBpmnPredecessorNodeIds(
+    bpmnXml,
+    nodeId,
+    links,
+  );
+  const linkByNodeId = new Map(
+    Object.values(links).map((link) => [link.nodeId, link]),
+  );
 
-  const sourceIds = new Set<string>();
-  const sequenceFlowPattern = /<bpmn:sequenceFlow\b[^>]*\/?>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = sequenceFlowPattern.exec(bpmnXml)) !== null) {
-    const tag = match[0];
-    const targetRef = getXmlAttribute(tag, "targetRef");
-    if (targetRef !== selectedElementId) {
-      continue;
+  return predecessorNodeIds.flatMap((predecessorNodeId) => {
+    const link = linkByNodeId.get(predecessorNodeId);
+    if (!link) {
+      return [];
     }
 
-    const sourceRef = getXmlAttribute(tag, "sourceRef");
-    if (sourceRef) {
-      sourceIds.add(sourceRef);
-    }
-  }
-
-  if (sourceIds.size !== 1) {
-    return null;
-  }
-
-  const [sourceId] = Array.from(sourceIds);
-  const predecessor = links[sourceId];
-  if (!predecessor || predecessor.nodeId === selectedNodeId) {
-    return null;
-  }
-
-  return {
-    predecessorNodeId: predecessor.nodeId,
-    predecessorCode: predecessor.code,
-    predecessorName: predecessor.name,
-    predecessorLevel: predecessor.level,
-    conditionDesc: null,
-    isMandatory: true,
-  };
-};
-
-/** XML 태그 문자열에서 속성 값을 읽는다. */
-const getXmlAttribute = (tag: string, name: string): string | null => {
-  const match = tag.match(new RegExp(`\\b${name}=(["'])(.*?)\\1`));
-  return match?.[2] ?? null;
+    return [
+      {
+        predecessorNodeId,
+        predecessorCode: link.code,
+        predecessorName: link.name,
+        predecessorLevel: link.level,
+        conditionDesc: null,
+        isMandatory: true,
+        isBpmnDerived: true,
+      },
+    ];
+  });
 };

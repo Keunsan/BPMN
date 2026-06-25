@@ -43,9 +43,7 @@ export const useVerticalPanelResize = ({
   maxHeight,
   enabled = true,
 }: UseVerticalPanelResizeOptions) => {
-  const [height, setHeight] = useState(() =>
-    readStoredHeight(storageKey, defaultHeight, minHeight, maxHeight),
-  );
+  const [height, setHeight] = useState(defaultHeight);
   const [isResizing, setIsResizing] = useState(false);
   const heightRef = useRef(height);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -57,7 +55,8 @@ export const useVerticalPanelResize = ({
 
   useEffect(() => {
     hydratedRef.current = true;
-  }, []);
+    setHeight(readStoredHeight(storageKey, defaultHeight, minHeight, maxHeight));
+  }, [defaultHeight, maxHeight, minHeight, storageKey]);
 
   useEffect(() => {
     if (!isResizing) {

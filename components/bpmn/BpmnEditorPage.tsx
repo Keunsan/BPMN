@@ -17,10 +17,10 @@ type BpmnEditorPageProps = {
 export const BpmnEditorPage = ({ modelId }: BpmnEditorPageProps) => {
   const t = useTranslations("bpmn");
   const router = useRouter();
-  const { data: model, isLoading, fetchStatus } = useBpmnDetail(modelId);
+  const { data: model, isLoading } = useBpmnDetail(modelId);
   const saveMutation = useSaveBpmn(modelId);
 
-  if (isLoading || fetchStatus === "fetching") {
+  if (isLoading) {
     return <LoadingSpinner label={t("loading")} className="min-h-[50vh]" />;
   }
 

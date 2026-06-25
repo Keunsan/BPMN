@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showErrorToast } from "@/components/common/ErrorToast";
 import { ApiError } from "@/lib/api/error-handler";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
-import { bpmnKeys, e2eProcessKeys } from "@/lib/query/keys";
+import { bpmnKeys, e2eProcessKeys, metadataKeys } from "@/lib/query/keys";
 import type {
   BpmnCompareRequest,
   BpmnCompareResult,
+  BpmnElementLinkDto,
   BpmnFilters,
   BpmnModelDto,
   BpmnTaskProcessLinkDto,
@@ -92,6 +93,27 @@ export const useSaveBpmn = (modelId: number) => {
       queryClient.invalidateQueries({ queryKey: bpmnKeys.all });
       queryClient.invalidateQueries({ queryKey: e2eProcessKeys.all });
       queryClient.setQueryData(bpmnKeys.detail(data.modelId), data);
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) showErrorToast(error);
+    },
+  });
+};
+
+type SyncBpmnPredecessorsPayload = {
+  bpmnXml: string;
+  elements: BpmnElementLinkDto[];
+};
+
+/** BPMN 다이어그램 기준 선행 프로세스를 task_predecessor에 저장 */
+export const useSyncBpmnPredecessors = (modelId: number) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SyncBpmnPredecessorsPayload) =>
+      apiPost<{ synced: boolean }>(`/api/bpmn/${modelId}/sync-predecessors`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: metadataKeys.all });
     },
     onError: (error) => {
       if (error instanceof ApiError) showErrorToast(error);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useSearchParams } from "next/navigation";
+import { parseAsString, useQueryStates } from "nuqs";
 import { useCallback, useMemo } from "react";
 
 import { FilterField, FilterPanel } from "@/components/common/layout";
@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePathname, useRouter } from "@/lib/i18n/navigation";
 import {
   ENTERPRISE_BUSINESS_UNIT_CODE,
   ENTERPRISE_COMPANY_CODE,
@@ -136,42 +135,37 @@ export const ProcessScopeFilter = ({
 
 /** URL과 동기화된 프로세스 scope 상태 */
 export const useProcessScopeParams = () => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const [scope, setScopeState] = useQueryStates({
+    companyCode: parseAsString,
+    businessUnitCode: parseAsString,
+  });
 
-  const companyCode = searchParams.get("companyCode") ?? "";
-  const businessUnitCode = searchParams.get("businessUnitCode") ?? "";
+  const companyCode = scope.companyCode ?? "";
+  const businessUnitCode = scope.businessUnitCode ?? "";
 
   const setScope = useCallback(
     (next: Pick<ProcessFilters, "companyCode" | "businessUnitCode">) => {
-      const params = new URLSearchParams(searchParams.toString());
-
-      if (next.companyCode) {
-        params.set("companyCode", next.companyCode);
-      } else {
-        params.delete("companyCode");
-      }
-
-      if (next.businessUnitCode) {
-        params.set("businessUnitCode", next.businessUnitCode);
-      } else {
-        params.delete("businessUnitCode");
-      }
-
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname);
+      void setScopeState({
+        companyCode: next.companyCode ?? null,
+        businessUnitCode: next.businessUnitCode ?? null,
+      });
     },
-    [pathname, router, searchParams],
+    [setScopeState],
+  );
+
+  const filters = useMemo(
+    () =>
+      ({
+        companyCode: companyCode || undefined,
+        businessUnitCode: businessUnitCode || undefined,
+      }) satisfies Pick<ProcessFilters, "companyCode" | "businessUnitCode">,
+    [businessUnitCode, companyCode],
   );
 
   return {
     companyCode,
     businessUnitCode,
     setScope,
-    filters: {
-      companyCode: companyCode || undefined,
-      businessUnitCode: businessUnitCode || undefined,
-    } satisfies Pick<ProcessFilters, "companyCode" | "businessUnitCode">,
+    filters,
   };
 };

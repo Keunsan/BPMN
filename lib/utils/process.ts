@@ -9,6 +9,11 @@ import {
   normalizeProcessScope,
 } from "@/lib/utils/process-scope";
 
+/** RSC → Client props 전달용 — Date 등 비직렬화 값을 JSON 호환 형태로 변환 */
+export const serializeProcessTreeForClient = (
+  tree: ProcessNodeTree[],
+): ProcessNodeTree[] => JSON.parse(JSON.stringify(tree)) as ProcessNodeTree[];
+
 /** flat 목록을 트리 구조로 변환 */
 export const buildProcessTree = (
   nodes: ProcessNodeTree[],

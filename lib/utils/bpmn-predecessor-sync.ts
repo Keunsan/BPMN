@@ -1,9 +1,35 @@
 import type { BpmnElementLinkDto } from "@/types/bpmn";
 
+/** BPMN sequence flow로 자동 등록된 task_predecessor.condition_desc 값(DB 동기화 식별용) */
+export const BPMN_PREDECESSOR_CONDITION_DESC = "BPMN sequence flow" as const;
+
+/** BPMN 자동 동기화로 설정된 선행 조건 설명인지 판별한다 */
+export const isBpmnPredecessorConditionDesc = (
+  conditionDesc: string | null | undefined,
+): boolean => conditionDesc === BPMN_PREDECESSOR_CONDITION_DESC;
+
+/** UI 표시용 선행 조건 설명 — BPMN 자동 값은 빈 문자열로 정규화한다 */
+export const normalizePredecessorConditionDescForDisplay = (
+  conditionDesc: string | null | undefined,
+): string | null =>
+  isBpmnPredecessorConditionDesc(conditionDesc) ? null : (conditionDesc ?? null);
+
 /** BPMN sequence flow에서 도출한 선행 관계 */
 export type BpmnFlowPredecessor = {
   nodeId: number;
   predecessorNodeId: number;
+};
+
+/** DB·클라이언트 혼용 nodeId를 양의 정수로 정규화한다 */
+export const normalizeBpmnLinkedNodeId = (
+  nodeId: number | string | null | undefined,
+): number | null => {
+  if (nodeId == null || nodeId === "") {
+    return null;
+  }
+
+  const normalized = Number(nodeId);
+  return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
 };
 
 /** XML 태그에서 속성 값을 읽는다 */
@@ -91,8 +117,9 @@ export const derivePredecessorsFromBpmn = (
   const linkedByBpmnId = new Map<string, number>();
 
   for (const element of elements) {
-    if (element.linkedNodeId) {
-      linkedByBpmnId.set(element.elementBpmnId, element.linkedNodeId);
+    const linkedNodeId = normalizeBpmnLinkedNodeId(element.linkedNodeId);
+    if (linkedNodeId != null) {
+      linkedByBpmnId.set(element.elementBpmnId, linkedNodeId);
     }
   }
 
@@ -122,4 +149,20 @@ export const derivePredecessorsFromBpmn = (
   }
 
   return result;
+};
+
+/** BPMN 요소 연결 목록에서 linkedNodeId를 수집한다 */
+export const collectLinkedNodeIds = (
+  elements: BpmnElementLinkDto[],
+): number[] => {
+  const ids = new Set<number>();
+
+  for (const element of elements) {
+    const linkedNodeId = normalizeBpmnLinkedNodeId(element.linkedNodeId);
+    if (linkedNodeId != null) {
+      ids.add(linkedNodeId);
+    }
+  }
+
+  return [...ids];
 };

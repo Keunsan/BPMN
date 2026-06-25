@@ -3,10 +3,9 @@ import "server-only";
 import { ApiError } from "@/lib/api/error-handler";
 import * as bpmnQueries from "@/lib/db/queries/bpmn";
 import * as e2eQueries from "@/lib/db/queries/e2e-process";
-import * as metadataQueries from "@/lib/db/queries/metadata";
 import { findProcessById } from "@/lib/db/queries/process";
 import { bumpVersion } from "@/lib/utils/process";
-import { derivePredecessorsFromBpmn } from "@/lib/utils/bpmn-predecessor-sync";
+import { syncBpmnTaskPredecessorsFromElements } from "@/lib/services/bpmn-predecessor-sync.service";
 import {
   isBpmnCallActivityType,
   isBpmnTaskElementType,
@@ -268,6 +267,40 @@ const mergeElements = (
   return merged;
 };
 
+/** BPMN 모델의 sequence flow를 task_predecessor에 저장한다 */
+export const syncBpmnModelTaskPredecessors = async (
+  modelId: number,
+  dto?: {
+    bpmnXml?: string | null;
+    elements?: BpmnElementLinkDto[];
+  },
+): Promise<void> => {
+  const existing = await bpmnQueries.findBpmnModelById(modelId);
+  if (!existing || existing.modelKind === "E2E") {
+    return;
+  }
+
+  const bpmnXml = dto?.bpmnXml ?? existing.bpmnXml;
+  const previousElements = await bpmnQueries.listBpmnElements(modelId);
+  const previousLinks: BpmnElementLinkDto[] = previousElements.map((element) => ({
+    elementBpmnId: element.elementBpmnId,
+    elementType: element.elementType,
+    elementName: element.elementName,
+    linkedNodeId: element.linkedNodeId,
+    properties: element.properties,
+  }));
+  const merged = dto?.elements
+    ? mergeElements(bpmnXml, dto.elements)
+    : previousLinks;
+
+  await syncBpmnTaskPredecessorsFromElements(
+    bpmnXml,
+    merged,
+    previousLinks,
+    existing.nodeId,
+  );
+};
+
 /** E2E BPMN 요소 검증 — L3_CALL만 허용, cross-L1 L3 허용, L4 Task 금지 */
 const validateE2eBpmnElements = async (
   elements: BpmnElementLinkDto[],
@@ -381,15 +414,6 @@ const validateBpmnElementLinks = async (
   }
 };
 
-/** BPMN sequence flow에서 task_predecessor를 병합 동기화한다 */
-const syncPredecessorsFromBpmnModel = async (
-  bpmnXml: string | null,
-  elements: BpmnElementLinkDto[],
-): Promise<void> => {
-  const pairs = derivePredecessorsFromBpmn(bpmnXml, elements);
-  await metadataQueries.mergeTaskPredecessorsFromBpmn(pairs);
-};
-
 /** BPMN 모델 수정 */
 export const updateBpmnModel = async (
   modelId: number,
@@ -425,9 +449,14 @@ export const updateBpmnModel = async (
     });
 
     if (existing.modelKind !== "E2E") {
-      await syncPredecessorsFromBpmnModel(
+      const previousElements = await bpmnQueries.listBpmnElements(
+        existing.modelId,
+      );
+      await syncBpmnTaskPredecessorsFromElements(
         dto.bpmnXml ?? existing.bpmnXml ?? null,
         merged,
+        previousElements,
+        existing.nodeId,
       );
     }
 
@@ -450,6 +479,8 @@ export const updateBpmnModel = async (
 
   const merged = mergeElements(dto.bpmnXml ?? existing.bpmnXml, dto.elements);
   if (dto.elements !== undefined || dto.bpmnXml !== undefined) {
+    const previousElements = await bpmnQueries.listBpmnElements(modelId);
+
     if (merged.length > 0) {
       await validateBpmnElementLinks(
         existing.modelKind,
@@ -459,9 +490,11 @@ export const updateBpmnModel = async (
     }
     await bpmnQueries.syncBpmnElements(modelId, merged);
     if (existing.modelKind !== "E2E") {
-      await syncPredecessorsFromBpmnModel(
+      await syncBpmnTaskPredecessorsFromElements(
         dto.bpmnXml ?? existing.bpmnXml ?? null,
         merged,
+        previousElements,
+        existing.nodeId,
       );
     }
   }

@@ -56,6 +56,10 @@ import {
   useUpdateTaskAttribute,
 } from "@/lib/query/hooks/useMetadata";
 import { cn } from "@/lib/utils";
+import {
+  isBpmnPredecessorConditionDesc,
+  normalizePredecessorConditionDescForDisplay,
+} from "@/lib/utils/bpmn-predecessor-sync";
 import type {
   FrequencyType,
   TaskAttributeDto,
@@ -101,7 +105,9 @@ type SectionId =
 
 type TaskAttributeFormProps = {
   nodeId: number;
-  autoPredecessor?: PredecessorSelection | null;
+  autoPredecessors?: PredecessorSelection[];
+  /** BPMN 저장 시 선행 프로세스를 task_predecessor에 동기화한다 */
+  syncBpmnPredecessors?: () => Promise<void>;
   variant?: "page" | "sheet";
   /** 목록 행 등에서 즉시 표시할 임시 데이터 */
   attributePlaceholder?: TaskAttributeDto | null;
@@ -127,7 +133,8 @@ type TaskAttributeEditorProps = {
   nodeId: number;
   process: ProcessNodeDto | null;
   attribute: TaskAttributeDto | null;
-  autoPredecessor?: PredecessorSelection | null;
+  autoPredecessors?: PredecessorSelection[];
+  syncBpmnPredecessors?: () => Promise<void>;
   variant: "page" | "sheet";
 };
 
@@ -390,23 +397,76 @@ const buildInitialScalar = (
   version: attribute?.version ?? "1.0.0",
 });
 
+/** BPMN 자동 동기화로 등록된 선행 프로세스인지 판별한다 */
+const isBpmnDerivedPredecessor = (item: PredecessorSelection): boolean =>
+  item.isBpmnDerived === true ||
+  isBpmnPredecessorConditionDesc(item.conditionDesc);
+
+/** 수동 선행과 BPMN 다이어그램 힌트를 합친다 */
+const mergePredecessorsWithAuto = (
+  current: PredecessorSelection[],
+  autoPredecessors?: PredecessorSelection[] | null,
+): PredecessorSelection[] => {
+  const manual = current.filter((item) => !isBpmnDerivedPredecessor(item));
+  const bpmnFromDb = current.filter((item) => isBpmnDerivedPredecessor(item));
+  const auto = (autoPredecessors ?? []).map((item) => ({
+    ...item,
+    conditionDesc: null,
+    isBpmnDerived: true,
+  }));
+  const bpmn = auto.length > 0 ? auto : bpmnFromDb;
+
+  const seen = new Set<number>();
+  const result: PredecessorSelection[] = [];
+
+  for (const item of [...bpmn, ...manual]) {
+    const predecessorNodeId = Number(item.predecessorNodeId);
+    if (!Number.isFinite(predecessorNodeId) || seen.has(predecessorNodeId)) {
+      continue;
+    }
+    seen.add(predecessorNodeId);
+    result.push({ ...item, predecessorNodeId });
+  }
+
+  return result;
+};
+
+const arePredecessorsEqual = (
+  left: PredecessorSelection[],
+  right: PredecessorSelection[],
+): boolean =>
+  left.length === right.length &&
+  left.every(
+    (item, index) =>
+      item.predecessorNodeId === right[index]?.predecessorNodeId &&
+      item.conditionDesc === right[index]?.conditionDesc &&
+      item.isMandatory === right[index]?.isMandatory,
+  );
+
 /** 조회된 선행 프로세스를 편집 가능한 선택 모델로 변환한다. */
 const buildInitialPredecessors = (
   attribute: TaskAttributeDto | null,
-  autoPredecessor?: PredecessorSelection | null,
-): PredecessorSelection[] =>
-  attribute?.predecessors.length
-    ? attribute.predecessors.map((item) => ({
+  autoPredecessors?: PredecessorSelection[] | null,
+): PredecessorSelection[] => {
+  const fromDb =
+    attribute?.predecessors.map((item) => {
+      const isBpmnDerived = isBpmnPredecessorConditionDesc(item.conditionDesc);
+
+      return {
         predecessorNodeId: item.predecessorNodeId,
         predecessorCode: item.predecessorCode,
         predecessorName: item.predecessorName,
         predecessorLevel: item.predecessorLevel,
-        conditionDesc: item.conditionDesc,
+        conditionDesc: normalizePredecessorConditionDescForDisplay(
+          item.conditionDesc,
+        ),
         isMandatory: item.isMandatory,
-      }))
-    : autoPredecessor
-      ? [autoPredecessor]
-      : [];
+        isBpmnDerived,
+      };
+    }) ?? [];
+
+  return mergePredecessorsWithAuto(fromDb, autoPredecessors);
+};
 
 /** 접기/펼치기를 지원하는 Task 속성 섹션 카드다. */
 const SectionCard = ({
@@ -444,7 +504,8 @@ const SectionCard = ({
 /** Task 속성 입력 폼 — 다국어 텍스트와 선행 프로세스를 저장한다. */
 export const TaskAttributeForm = ({
   nodeId,
-  autoPredecessor,
+  autoPredecessors,
+  syncBpmnPredecessors,
   variant = "page",
   attributePlaceholder,
 }: TaskAttributeFormProps) => {
@@ -487,7 +548,8 @@ export const TaskAttributeForm = ({
       nodeId={nodeId}
       process={process ?? null}
       attribute={attribute ?? null}
-      autoPredecessor={autoPredecessor}
+      autoPredecessors={autoPredecessors}
+      syncBpmnPredecessors={syncBpmnPredecessors}
       variant={variant}
     />
   );
@@ -498,19 +560,21 @@ const TaskAttributeEditor = ({
   nodeId,
   process,
   attribute,
-  autoPredecessor,
+  autoPredecessors,
+  syncBpmnPredecessors,
   variant,
 }: TaskAttributeEditorProps) => {
   const t = useTranslations("metadata");
   const createMutation = useCreateTaskAttribute();
   const updateMutation = useUpdateTaskAttribute(nodeId);
   const [dirty, setDirty] = useState(false);
+  const [predecessorsDirty, setPredecessorsDirty] = useState(false);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [i18n, setI18n] = useState<TaskAttributeI18nMap>(() =>
     buildInitialI18n(attribute),
   );
   const [predecessors, setPredecessors] = useState<PredecessorSelection[]>(() =>
-    buildInitialPredecessors(attribute, autoPredecessor),
+    buildInitialPredecessors(attribute, autoPredecessors),
   );
   const [scalar, setScalar] = useState<ScalarState>(() =>
     buildInitialScalar(attribute),
@@ -526,6 +590,28 @@ const TaskAttributeEditor = ({
         "remarks",
       ]),
   );
+  const autoPredecessorSynced = useRef(false);
+
+  useEffect(() => {
+    setPredecessors((prev) => {
+      const next = mergePredecessorsWithAuto(prev, autoPredecessors);
+      if (arePredecessorsEqual(prev, next)) {
+        return prev;
+      }
+
+      return next;
+    });
+    autoPredecessorSynced.current = true;
+  }, [autoPredecessors]);
+
+  useEffect(() => {
+    if (dirty) {
+      return;
+    }
+
+    setPredecessorsDirty(false);
+    setPredecessors(buildInitialPredecessors(attribute, autoPredecessors));
+  }, [attribute, autoPredecessors, dirty]);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -573,9 +659,22 @@ const TaskAttributeEditor = ({
   const updatePredecessors = useCallback(
     (value: PredecessorSelection[]) => {
       setPredecessors(value);
+      setPredecessorsDirty(true);
       markDirty();
     },
     [markDirty],
+  );
+
+  const manualPredecessors = useMemo(
+    () =>
+      predecessors
+        .filter((item) => !isBpmnDerivedPredecessor(item))
+        .map((item) => ({
+          predecessorNodeId: item.predecessorNodeId,
+          conditionDesc: item.conditionDesc ?? null,
+          isMandatory: item.isMandatory ?? true,
+        })),
+    [predecessors],
   );
 
   const payload = useMemo<UpsertTaskAttributeDto>(
@@ -597,13 +696,9 @@ const TaskAttributeEditor = ({
       remarks: i18n.ko?.remarks ?? null,
       version: scalar.version || "1.0.0",
       i18n,
-      predecessors: predecessors.map((item) => ({
-        predecessorNodeId: item.predecessorNodeId,
-        conditionDesc: item.conditionDesc ?? null,
-        isMandatory: item.isMandatory ?? true,
-      })),
+      ...(predecessorsDirty ? { predecessors: manualPredecessors } : {}),
     }),
-    [i18n, nodeId, predecessors, scalar],
+    [i18n, manualPredecessors, nodeId, predecessorsDirty, scalar],
   );
 
   const save = useCallback(
@@ -614,19 +709,24 @@ const TaskAttributeEditor = ({
       }
 
       try {
-        if (attribute) {
+        if (attribute?.attrId) {
           await updateMutation.mutateAsync(payload);
         } else {
           await createMutation.mutateAsync(payload);
         }
 
+        if (syncBpmnPredecessors) {
+          await syncBpmnPredecessors();
+        }
+
         setDirty(false);
+        setPredecessorsDirty(false);
         return true;
       } catch {
         return false;
       }
     },
-    [attribute, createMutation, payload, t, updateMutation],
+    [attribute, createMutation, payload, syncBpmnPredecessors, t, updateMutation],
   );
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
