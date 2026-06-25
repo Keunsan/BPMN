@@ -3,6 +3,9 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { findGlossaryByCode } from "@/lib/ontology/glossary";
+import { getCatalogByGraphEdge } from "@/lib/ontology/relationship-catalog";
+import { getNodeOntologyClass, getNodeOntologyUri } from "@/lib/ontology/uri";
 import { E2eBpmnViewerSheet } from "@/components/bpmn/E2eBpmnViewerSheet";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -55,6 +58,7 @@ type GraphInspectorPanelProps = {
 
 type RelatedEntry = {
   node: OperationsGraphNode;
+  edge: OperationsGraphEdge;
   edgeKind: OperationsGraphEdge["kind"];
   direction: "in" | "out";
 };
@@ -69,13 +73,13 @@ const findRelatedEntries = (
     if (edge.source === nodeId) {
       const node = graph.nodes.find((item) => item.id === edge.target);
       if (node) {
-        entries.push({ node, edgeKind: edge.kind, direction: "out" });
+        entries.push({ node, edge, edgeKind: edge.kind, direction: "out" });
       }
     }
     if (edge.target === nodeId) {
       const node = graph.nodes.find((item) => item.id === edge.source);
       if (node) {
-        entries.push({ node, edgeKind: edge.kind, direction: "in" });
+        entries.push({ node, edge, edgeKind: edge.kind, direction: "in" });
       }
     }
   }
@@ -117,6 +121,35 @@ const getRelationLabel = (
       : t("inspector.directionOut");
 
   return `${t(`edgeKindShort.${edgeKind}`)} · ${directionLabel}`;
+};
+
+const formatEdgeSemantics = (
+  edge: OperationsGraphEdge,
+  t: (key: string) => string,
+): string | null => {
+  const catalog = getCatalogByGraphEdge(edge.kind);
+  const semantics = edge.semantics;
+  const parts: string[] = [];
+
+  const property = semantics?.objectProperty ?? catalog?.property;
+  if (property) {
+    parts.push(property);
+  }
+
+  if (semantics?.conditionDesc) {
+    parts.push(semantics.conditionDesc);
+  }
+  if (semantics?.linkType) {
+    parts.push(`${t("ontology.linkType")}: ${semantics.linkType}`);
+  }
+  if (semantics?.crudType) {
+    parts.push(`${t("ontology.crudType")}: ${semantics.crudType}`);
+  }
+  if (semantics?.usageDescription) {
+    parts.push(semantics.usageDescription);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 };
 
 const countConnections = (graph: OperationsGraphResult, nodeId: string) => {
@@ -289,6 +322,18 @@ export const GraphInspectorPanel = ({
       : null;
   const inE2eFlow = Boolean(node.meta?.inE2eFlow);
   const l3NodeId = node.kind === "L3" ? Number(node.sourceId) : null;
+  const ontologyUri = getNodeOntologyUri(
+    node.kind as GraphNodeKind,
+    node.code,
+    node.meta,
+  );
+  const ontologyClass = getNodeOntologyClass(
+    node.kind as GraphNodeKind,
+    node.meta,
+  );
+  const variantOfId =
+    typeof node.meta?.variantOf === "number" ? node.meta.variantOf : null;
+  const glossaryTerms = node.code ? findGlossaryByCode(node.code) : [];
 
   const openE2eViewer = () => {
     if (!e2eViewerId || !Number.isFinite(e2eViewerId)) {
@@ -384,6 +429,57 @@ export const GraphInspectorPanel = ({
         </p>
       </InspectorSection>
 
+      <InspectorSection title={t("ontology.title")}>
+        <dl className="pams-graph-inspector__field-grid">
+          <div className="pams-graph-inspector__field-row">
+            <dt className="pams-graph-inspector__field-label">
+              {t("ontology.className")}
+            </dt>
+            <dd className="pams-graph-inspector__field-value font-mono text-sm">
+              {ontologyClass}
+            </dd>
+          </div>
+          {ontologyUri ? (
+            <div className="pams-graph-inspector__field-row">
+              <dt className="pams-graph-inspector__field-label">
+                {t("ontology.uri")}
+              </dt>
+              <dd className="pams-graph-inspector__field-value break-all font-mono text-sm">
+                {ontologyUri}
+              </dd>
+            </div>
+          ) : null}
+          {variantOfId != null ? (
+            <div className="pams-graph-inspector__field-row">
+              <dt className="pams-graph-inspector__field-label">
+                {t("ontology.variantOf")}
+              </dt>
+              <dd className="pams-graph-inspector__field-value text-sm">
+                {t("ontology.variantTarget", { id: variantOfId })}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+        {glossaryTerms.length > 0 ? (
+          <div className="mt-3">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">
+              {t("ontology.glossary")}
+            </p>
+            <ul className="space-y-2">
+              {glossaryTerms.map((term) => (
+                <li
+                  key={term.id}
+                  className="rounded-lg border border-border bg-muted/30 p-2"
+                >
+                  <p className="text-sm font-medium">{term.prefLabel}</p>
+                  <p className="text-sm text-muted-foreground">{term.definition}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </InspectorSection>
+
       <InspectorSection
         title={t("inspector.relatedNodes")}
         count={relatedEntries.length}
@@ -392,7 +488,9 @@ export const GraphInspectorPanel = ({
           <p className="pams-graph-inspector__empty">{t("inspector.noRelated")}</p>
         ) : (
           <ul className="pams-graph-inspector__related-list">
-            {relatedEntries.map(({ node: related, edgeKind, direction }) => (
+            {relatedEntries.map(({ node: related, edge, edgeKind, direction }) => {
+              const semanticsHint = formatEdgeSemantics(edge, t);
+              return (
               <li key={`${related.id}-${direction}-${edgeKind}`}>
                 <button
                   type="button"
@@ -416,10 +514,16 @@ export const GraphInspectorPanel = ({
                       {" · "}
                       {getRelationLabel(edgeKind, direction, t)}
                     </span>
+                    {semanticsHint ? (
+                      <span className="mt-0.5 block text-sm text-primary">
+                        {semanticsHint}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
       </InspectorSection>

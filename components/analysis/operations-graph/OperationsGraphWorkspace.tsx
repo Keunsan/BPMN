@@ -13,7 +13,9 @@ import {
 import { GraphCanvas } from "@/components/analysis/operations-graph/canvas/GraphCanvas";
 import { GraphExplorerPanel } from "@/components/analysis/operations-graph/explorer/GraphExplorerPanel";
 import { GraphInspectorPanel } from "@/components/analysis/operations-graph/inspector/GraphInspectorPanel";
+import { OntologyQaPanel } from "@/components/analysis/operations-graph/qa/OntologyQaPanel";
 import { GraphToolbar } from "@/components/analysis/operations-graph/GraphToolbar";
+import { Button } from "@/components/ui/button";
 import {
   CollapsibleSidePanel,
   PanelSplitter,
@@ -29,8 +31,15 @@ import type {
   OperationsGraphQuery,
 } from "@/types/operations-graph";
 import { GRAPH_NODE_KINDS } from "@/types/operations-graph";
+import { POC_ONTOLOGY_L3_IDS } from "@/types/ontology";
 
 import "./operations-graph.css";
+
+const POC_QUICK_LINKS = [
+  { nodeId: POC_ONTOLOGY_L3_IDS[0], labelKey: "demandVariant" },
+  { nodeId: POC_ONTOLOGY_L3_IDS[1], labelKey: "urgentDemand" },
+  { nodeId: POC_ONTOLOGY_L3_IDS[2], labelKey: "newInputCancel" },
+] as const;
 
 const DEFAULT_NODE_KINDS = Object.fromEntries(
   GRAPH_NODE_KINDS.map((kind) => [kind, true]),
@@ -192,6 +201,21 @@ export const OperationsGraphWorkspace = () => {
     [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId],
   );
 
+  const handlePocQuickLink = useCallback(
+    (nodeId: number) => {
+      void setCenterNodeId(nodeId);
+      void setCenterKind("L3");
+      void setCenterLevel("L3");
+      void setSelectedNodeId(null);
+      setNodeKinds((prev) => ({
+        ...prev,
+        L3: false,
+        TASK: true,
+      }));
+    },
+    [setCenterNodeId, setCenterKind, setCenterLevel, setSelectedNodeId],
+  );
+
   const handleExport = useCallback(async () => {
     await exportRef.current?.();
   }, []);
@@ -254,6 +278,22 @@ export const OperationsGraphWorkspace = () => {
           onExport={handleExport}
           exportDisabled={!graph || graph.nodes.length === 0}
         />
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          <span className="text-sm text-muted-foreground">
+            {t("pocQuickLinks.title")}
+          </span>
+          {POC_QUICK_LINKS.map((preset) => (
+            <Button
+              key={preset.nodeId}
+              type="button"
+              variant={centerNodeId === preset.nodeId ? "default" : "outline"}
+              size="sm"
+              onClick={() => handlePocQuickLink(preset.nodeId)}
+            >
+              {t(`pocQuickLinks.${preset.labelKey}`)}
+            </Button>
+          ))}
+        </div>
         <div className="pams-ops-graph-canvas-shell flex min-h-0 flex-1 flex-col">
           <GraphCanvas
             graph={graph}
@@ -285,15 +325,18 @@ export const OperationsGraphWorkspace = () => {
         onCollapsedChange={(value) => void setRightCollapsed(value)}
         width={rightPanel.width}
         title={t("panel.inspector")}
-        bodyClassName="p-0"
+        bodyClassName="p-0 flex min-h-0 flex-col"
         className="pams-ops-graph-side-panel"
       >
-        <GraphInspectorPanel
-          graph={graph}
-          centerNode={graph?.centerNode}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={(nodeId) => void setSelectedNodeId(nodeId)}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <GraphInspectorPanel
+            graph={graph}
+            centerNode={graph?.centerNode}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={(nodeId) => void setSelectedNodeId(nodeId)}
+          />
+          <OntologyQaPanel centerNodeId={centerNodeId} />
+        </div>
       </CollapsibleSidePanel>
     </div>
   );

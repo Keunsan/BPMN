@@ -1026,6 +1026,36 @@
       "READS_TABLE": "Read",
       "WRITES_TABLE": "Write",
       "INTERFACE": "IF"
+    },
+    "ontology": {
+      "title": "Ontology",
+      "uri": "URI",
+      "className": "Class",
+      "variantOf": "Variant of standard process",
+      "variantTarget": "variantOf → standard node_id {id}",
+      "glossary": "Related terms",
+      "objectProperty": "Object property",
+      "conditionDesc": "Precondition",
+      "linkType": "Link type",
+      "crudType": "CRUD",
+      "usageDescription": "Usage"
+    },
+    "pocQuickLinks": {
+      "title": "POC demo",
+      "demandVariant": "Demand (variant)",
+      "urgentDemand": "Urgent demand",
+      "newInputCancel": "New input cancel"
+    },
+    "qa": {
+      "title": "AI Q&A",
+      "description": "Ask about processes and relationships using ontology context.",
+      "placeholder": "e.g. Which tasks in urgent demand use ERP?",
+      "ask": "Ask",
+      "asking": "Generating answer…",
+      "answerLabel": "Answer",
+      "citations": "Cited codes",
+      "notConfiguredTitle": "AI service not configured",
+      "notConfiguredDescription": "Set BIZROUTER_API_KEY in .env.local to enable AI Q&A."
     }
   }
 }

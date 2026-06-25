@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node --use-system-ca ./node_modules/next/dist/bin/next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --use-system-ca ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:test": "tsx scripts/test-db.ts",
     "db:migrate": "tsx scripts/migrate.ts",
@@ -13,9 +13,11 @@
     "db:reset-operational": "tsx scripts/reset-operational-data.ts",
     "db:migrate-process-task": "tsx scripts/migrate-process-task.ts",
     "db:update-process-task": "tsx scripts/update-process-task-migration.ts",
-    "db:generate-bpmn-svg": "tsx scripts/generate-bpmn-svg.ts"
+    "db:generate-bpmn-svg": "tsx scripts/generate-bpmn-svg.ts",
+    "db:seed-ontology-poc": "tsx scripts/seed-ontology-poc-demand.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.74",
     "@base-ui/react": "^1.5.0",
     "@dagrejs/dagre": "^3.0.0",
     "@dnd-kit/core": "^6.3.1",
@@ -25,6 +27,7 @@
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.11.0",
+    "ai": "^6.0.209",
     "bpmn-js": "^18.17.1",
     "bpmn-js-properties-panel": "^5.58.0",
     "camunda-bpmn-moddle": "^7.0.1",
@@ -42,6 +45,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.77.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "shadcn": "^4.10.0",
     "sonner": "^2.0.7",

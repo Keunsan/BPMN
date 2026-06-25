@@ -619,7 +619,7 @@ const layoutE2eHierarchicalGraph = (
       isResourceKind(getNodeKind(node)) && !positions.has(node.id),
   );
 
-  let orphanResourceY =
+  const orphanResourceY =
     HIER_L3_LANE_Y +
     GRAPH_NODE_HEIGHT +
     HIER_L3_TO_TASK_GAP +

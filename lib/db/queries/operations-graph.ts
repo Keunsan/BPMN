@@ -35,6 +35,8 @@ type PredecessorRow = {
   predecessorCode: string;
   predecessorName: string;
   predecessorLevel: string;
+  conditionDesc: string | null;
+  isMandatory: boolean;
 };
 
 type SystemMappingRow = {
@@ -42,6 +44,7 @@ type SystemMappingRow = {
   systemId: number;
   systemCode: string;
   systemName: string;
+  usageDescription: string | null;
 };
 
 type TableLinkRow = {
@@ -52,6 +55,7 @@ type TableLinkRow = {
   schemaName: string | null;
   tableName: string;
   tableNameKor: string | null;
+  linkType: string;
   crudType: string | null;
   isCritical: boolean;
 };
@@ -118,7 +122,9 @@ export const listTaskPredecessors = async (
        tp.predecessor_node_id AS predecessorNodeId,
        pn.code AS predecessorCode,
        pn.name AS predecessorName,
-       pn.level AS predecessorLevel
+       pn.level AS predecessorLevel,
+       tp.condition_desc AS conditionDesc,
+       tp.is_mandatory AS isMandatory
      FROM task_predecessor tp
      INNER JOIN process_node pn ON pn.node_id = tp.predecessor_node_id
      WHERE tp.node_id = @nodeId
@@ -137,7 +143,8 @@ export const listTaskSystemMappings = async (
        tsl.node_id AS nodeId,
        s.system_id AS systemId,
        s.system_code AS systemCode,
-       s.system_name AS systemName
+       s.system_name AS systemName,
+       tsl.usage_description AS usageDescription
      FROM task_system_link tsl
      INNER JOIN application_system s ON s.system_id = tsl.system_id
      WHERE tsl.node_id = @nodeId
@@ -160,6 +167,7 @@ export const listTaskTableLinks = async (
        link.schema_name AS schemaName,
        link.table_name AS tableName,
        link.table_name_kor AS tableNameKor,
+       link.link_type AS linkType,
        link.crud_type AS crudType,
        link.is_critical AS isCritical
      FROM task_data_table_link link

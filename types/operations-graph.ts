@@ -27,12 +27,23 @@ export type OperationsGraphNode = {
   meta?: Record<string, unknown>;
 };
 
+export type GraphEdgeSemantics = {
+  objectProperty?: string;
+  conditionDesc?: string | null;
+  isMandatory?: boolean;
+  linkType?: "INPUT" | "OUTPUT" | "REFERENCE";
+  crudType?: string | null;
+  usageDescription?: string | null;
+};
+
 export type OperationsGraphEdge = {
   id: string;
   source: string;
   target: string;
   kind: GraphEdgeKind;
   label?: string;
+  /** 온톨로지 ObjectProperty·업무 주석 */
+  semantics?: GraphEdgeSemantics;
 };
 
 export type OperationsGraphSummary = {

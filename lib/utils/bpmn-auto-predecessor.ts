@@ -7,7 +7,9 @@ export const linksRecordToElementDtos = (
 ): BpmnElementLinkDto[] =>
   Object.entries(links).map(([elementBpmnId, link]) => ({
     elementBpmnId,
-    elementType: link.linkKind === "L3_CALL" ? "CALL_ACTIVITY" : "TASK",
+    elementType: (link.linkKind === "L3_CALL"
+      ? "CALL_ACTIVITY"
+      : "USER_TASK") as BpmnElementLinkDto["elementType"],
     elementName: link.name,
     linkedNodeId: link.nodeId,
     properties: null,

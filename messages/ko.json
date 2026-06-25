@@ -1025,6 +1025,36 @@
       "READS_TABLE": "조회",
       "WRITES_TABLE": "기록",
       "INTERFACE": "IF"
+    },
+    "ontology": {
+      "title": "온톨로지",
+      "uri": "URI",
+      "className": "클래스",
+      "variantOf": "표준 프로세스 변형",
+      "variantTarget": "variantOf → 표준 node_id {id}",
+      "glossary": "관련 용어",
+      "objectProperty": "관계 속성",
+      "conditionDesc": "선행 조건",
+      "linkType": "링크 유형",
+      "crudType": "CRUD",
+      "usageDescription": "사용 설명"
+    },
+    "pocQuickLinks": {
+      "title": "POC 시연",
+      "demandVariant": "수요관리 (변형)",
+      "urgentDemand": "긴급수요관리",
+      "newInputCancel": "신규투입 취소"
+    },
+    "qa": {
+      "title": "AI 질의",
+      "description": "온톨로지 context 기반으로 프로세스·관계를 질문합니다.",
+      "placeholder": "예: 긴급수요관리에서 ERP를 쓰는 Task는?",
+      "ask": "질문하기",
+      "asking": "답변 생성 중…",
+      "answerLabel": "답변",
+      "citations": "인용 코드",
+      "notConfiguredTitle": "AI 서비스 미설정",
+      "notConfiguredDescription": "BIZROUTER_API_KEY를 .env.local에 설정하면 AI 질의를 사용할 수 있습니다."
     }
   }
 }

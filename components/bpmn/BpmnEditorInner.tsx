@@ -214,11 +214,6 @@ export const BpmnEditorInner = ({
                     businessObject?: { name?: string; $type?: string };
                   };
                 };
-                element?: {
-                  id: string;
-                  type: string;
-                  businessObject?: { name?: string; $type?: string };
-                };
                 newElement?: {
                   id: string;
                   type: string;
@@ -247,11 +242,6 @@ export const BpmnEditorInner = ({
                 type: string;
                 businessObject?: { name?: string; $type?: string };
               };
-            };
-            element?: {
-              id: string;
-              type: string;
-              businessObject?: { name?: string; $type?: string };
             };
             newElement?: {
               id: string;

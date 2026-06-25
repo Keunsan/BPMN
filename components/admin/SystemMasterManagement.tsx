@@ -72,6 +72,9 @@ const SYSTEM_TYPES: SystemType[] = [
 
 const AUTH_TYPES: ApiAuthType[] = ["NONE", "BASIC", "OAUTH", "API_KEY"];
 
+const selectString = (value: unknown): string | null =>
+  typeof value === "string" && value.length > 0 ? value : null;
+
 const emptySystem: UpsertApplicationSystemDto = {
   systemCode: "",
   systemName: "",
@@ -430,7 +433,8 @@ const SystemForm = ({
       <Field label={t("systemCode")}>
         <Select
           value={value.systemCode}
-          onValueChange={(systemCode) => {
+          onValueChange={(nextCode) => {
+            const systemCode = selectString(nextCode);
             if (!systemCode) return;
             const selected = systemCodeOptions.find(
               (item) => item.code === systemCode,
@@ -471,9 +475,12 @@ const SystemForm = ({
       <Field label={t("companyCode")}>
         <Select
           value={value.companyCode ?? ""}
-          onValueChange={(companyCode) =>
-            companyCode && onChange({ ...value, companyCode })
-          }
+          onValueChange={(companyCode) => {
+            const code = selectString(companyCode);
+            if (code) {
+              onChange({ ...value, companyCode: code });
+            }
+          }}
         >
           <SelectTrigger variant="filter">
             <SelectValue placeholder={t("selectCompany")}>
@@ -495,9 +502,12 @@ const SystemForm = ({
       <Field label={t("businessUnitCode")}>
         <Select
           value={value.businessUnitCode ?? ""}
-          onValueChange={(businessUnitCode) =>
-            businessUnitCode && onChange({ ...value, businessUnitCode })
-          }
+          onValueChange={(businessUnitCode) => {
+            const code = selectString(businessUnitCode);
+            if (code) {
+              onChange({ ...value, businessUnitCode: code });
+            }
+          }}
         >
           <SelectTrigger variant="filter">
             <SelectValue placeholder={t("selectBusinessUnit")}>
@@ -522,9 +532,12 @@ const SystemForm = ({
       <Field label={t("systemType")}>
         <Select
           value={value.systemType}
-          onValueChange={(systemType) =>
-            systemType && onChange({ ...value, systemType: systemType as SystemType })
-          }
+          onValueChange={(systemType) => {
+            const type = selectString(systemType);
+            if (type) {
+              onChange({ ...value, systemType: type as SystemType });
+            }
+          }}
         >
           <SelectTrigger variant="filter">
             <SelectValue>{t(`systemTypes.${value.systemType}`)}</SelectValue>
@@ -541,13 +554,15 @@ const SystemForm = ({
       <Field label={t("authType")}>
         <Select
           value={value.tableApiAuthType ?? "NONE"}
-          onValueChange={(tableApiAuthType) =>
-            tableApiAuthType &&
-            onChange({
-              ...value,
-              tableApiAuthType: tableApiAuthType as ApiAuthType,
-            })
-          }
+          onValueChange={(tableApiAuthType) => {
+            const authType = selectString(tableApiAuthType);
+            if (authType) {
+              onChange({
+                ...value,
+                tableApiAuthType: authType as ApiAuthType,
+              });
+            }
+          }}
         >
           <SelectTrigger variant="filter">
             <SelectValue>

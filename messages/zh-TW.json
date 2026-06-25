@@ -1025,6 +1025,36 @@
       "READS_TABLE": "讀取",
       "WRITES_TABLE": "寫入",
       "INTERFACE": "IF"
+    },
+    "ontology": {
+      "title": "本體論",
+      "uri": "URI",
+      "className": "類別",
+      "variantOf": "標準流程變體",
+      "variantTarget": "variantOf → 標準 node_id {id}",
+      "glossary": "相關術語",
+      "objectProperty": "關係屬性",
+      "conditionDesc": "前置條件",
+      "linkType": "連結類型",
+      "crudType": "CRUD",
+      "usageDescription": "使用說明"
+    },
+    "pocQuickLinks": {
+      "title": "POC 示範",
+      "demandVariant": "需求管理（變體）",
+      "urgentDemand": "緊急需求管理",
+      "newInputCancel": "新投入取消"
+    },
+    "qa": {
+      "title": "AI 問答",
+      "description": "以本體論 context 為基礎詢問流程與關係。",
+      "placeholder": "例：緊急需求管理中哪些 Task 使用 ERP？",
+      "ask": "提問",
+      "asking": "產生回答中…",
+      "answerLabel": "回答",
+      "citations": "引用代碼",
+      "notConfiguredTitle": "AI 服務未設定",
+      "notConfiguredDescription": "在 .env.local 設定 BIZROUTER_API_KEY 後即可使用 AI 問答。"
     }
   }
 }

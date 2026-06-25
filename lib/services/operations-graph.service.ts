@@ -3,6 +3,10 @@ import "server-only";
 import { ApiError } from "@/lib/api/error-handler";
 import * as e2eQueries from "@/lib/db/queries/e2e-process";
 import * as graphQueries from "@/lib/db/queries/operations-graph";
+import {
+  enrichGraphEdgesWithSemantics,
+  enrichNodesWithVariantMeta,
+} from "@/lib/ontology/enrich-graph-semantics";
 import type {
   GraphEdgeKind,
   GraphNodeKind,
@@ -717,12 +721,18 @@ export const buildOperationsGraph = async (
     centerNodeId,
   );
 
+  const enrichedNodes = await enrichNodesWithVariantMeta(withoutCenter.nodes);
+  const enrichedEdges = await enrichGraphEdgesWithSemantics(
+    enrichedNodes,
+    withoutCenter.edges,
+  );
+
   return {
-    nodes: withoutCenter.nodes,
-    edges: withoutCenter.edges,
+    nodes: enrichedNodes,
+    edges: enrichedEdges,
     summary: buildSummary(
-      withoutCenter.nodes,
-      withoutCenter.edges,
+      enrichedNodes,
+      enrichedEdges,
       truncated,
     ),
     centerNodeId,

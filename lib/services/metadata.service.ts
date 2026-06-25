@@ -77,7 +77,9 @@ const mergeTaskAttributeDto = (
   }
 
   for (const field of TASK_ATTRIBUTE_SCALAR_FIELDS) {
-    merged[field] = pickTaskAttributeField(dto[field], existing[field]);
+    (
+      merged as Record<(typeof TASK_ATTRIBUTE_SCALAR_FIELDS)[number], unknown>
+    )[field] = pickTaskAttributeField(dto[field], existing[field]);
   }
 
   const mergedI18n: TaskAttributeI18nMap = {};

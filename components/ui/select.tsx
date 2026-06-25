@@ -45,8 +45,11 @@ const getSelectItemLabel = (
 
 function Select({
   items: itemsProp,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+}: Omit<React.ComponentProps<typeof SelectPrimitive.Root>, "onValueChange"> & {
+  onValueChange?: (value: string) => void;
+}) {
   const [contentItems, setContentItems] = React.useState<
     ReadonlyArray<SelectOption>
   >([])
@@ -60,9 +63,24 @@ function Select({
 
   const mergedItems = itemsProp ?? (contentItems.length > 0 ? contentItems : undefined)
 
+  const handleValueChange = React.useCallback(
+    (value: unknown) => {
+      if (typeof value === "string") {
+        onValueChange?.(value)
+      }
+    },
+    [onValueChange],
+  )
+
   return (
     <SelectItemsContext.Provider value={contextValue}>
-      <SelectPrimitive.Root items={mergedItems} {...props} />
+      <SelectPrimitive.Root
+        items={mergedItems}
+        onValueChange={handleValueChange as React.ComponentProps<
+          typeof SelectPrimitive.Root
+        >["onValueChange"]}
+        {...props}
+      />
     </SelectItemsContext.Provider>
   )
 }

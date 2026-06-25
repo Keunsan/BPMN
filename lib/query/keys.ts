@@ -103,6 +103,10 @@ export const analysisKeys = {
     [...analysisKeys.all, "impact", params] as const,
   operationsGraph: (params: Record<string, unknown>) =>
     [...analysisKeys.all, "operations-graph", params] as const,
+  ontologyExport: (params: Record<string, unknown>) =>
+    [...analysisKeys.all, "ontology-export", params] as const,
+  ontologyQa: (params: Record<string, unknown>) =>
+    [...analysisKeys.all, "ontology-qa", params] as const,
 };
 
 export const commonCodeKeys = {
