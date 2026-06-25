@@ -1,7 +1,6 @@
 import "server-only";
 
 import { ApiError } from "@/lib/api/error-handler";
-import * as organizationQueries from "@/lib/db/queries/organization";
 import * as processQueries from "@/lib/db/queries/process";
 import * as raciQueries from "@/lib/db/queries/raci";
 import * as roleQueries from "@/lib/db/queries/role";
@@ -48,39 +47,22 @@ const normalizeMappingDto = (
     );
   }
 
-  if (!dto.orgId && !dto.roleId) {
-    throw new ApiError(
-      "E001",
-      "Organization or role is required",
-      400,
-      undefined,
-      "orgId",
-    );
+  if (!dto.roleId) {
+    throw new ApiError("E001", "Role is required", 400, undefined, "roleId");
   }
 
   return {
     ...dto,
-    orgId: dto.orgId ?? null,
-    roleId: dto.roleId ?? null,
     description: dto.description?.trim() || null,
   };
 };
 
-const assertReferences = async (
+const assertRoleReference = async (
   dto: UpsertTaskRoleMappingDto,
 ): Promise<void> => {
-  if (dto.orgId) {
-    const org = await organizationQueries.findOrganizationById(dto.orgId);
-    if (!org || !org.isActive) {
-      throw new ApiError("E301", "Organization not found", 404, undefined, "orgId");
-    }
-  }
-
-  if (dto.roleId) {
-    const role = await roleQueries.findRoleById(dto.roleId);
-    if (!role || !role.isActive) {
-      throw new ApiError("E301", "Role not found", 404, undefined, "roleId");
-    }
+  const role = await roleQueries.findRoleById(dto.roleId);
+  if (!role || !role.isActive) {
+    throw new ApiError("E301", "Role not found", 404, undefined, "roleId");
   }
 };
 
@@ -99,7 +81,7 @@ export const createTaskRoleMapping = async (
 ): Promise<TaskRoleMappingDto> => {
   await assertTaskNode(dto.nodeId);
   const normalized = normalizeMappingDto(dto);
-  await assertReferences(normalized);
+  await assertRoleReference(normalized);
 
   return raciQueries.createTaskRoleMapping(normalized, userId);
 };
@@ -112,7 +94,7 @@ export const updateTaskRoleMapping = async (
 ): Promise<TaskRoleMappingDto> => {
   await assertTaskNode(dto.nodeId);
   const normalized = normalizeMappingDto(dto);
-  await assertReferences(normalized);
+  await assertRoleReference(normalized);
 
   const updated = await raciQueries.updateTaskRoleMapping(
     mappingId,

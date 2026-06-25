@@ -25,7 +25,15 @@ import {
 } from "@/components/metadata/PredecessorSelect";
 import { TaskLinkedResourcesSummary } from "@/components/metadata/TaskLinkedResourcesSummary";
 import { Button } from "@/components/ui/button";
-import { SheetClose } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Sheet } from "@/components/ui/sheet";
 import {
   Card,
   CardContent,
@@ -95,6 +103,8 @@ type TaskAttributeFormProps = {
   nodeId: number;
   autoPredecessor?: PredecessorSelection | null;
   variant?: "page" | "sheet";
+  /** 목록 행 등에서 즉시 표시할 임시 데이터 */
+  attributePlaceholder?: TaskAttributeDto | null;
 };
 
 type SectionCardProps = {
@@ -115,7 +125,7 @@ type ScalarState = {
 
 type TaskAttributeEditorProps = {
   nodeId: number;
-  process: ProcessNodeDto;
+  process: ProcessNodeDto | null;
   attribute: TaskAttributeDto | null;
   autoPredecessor?: PredecessorSelection | null;
   variant: "page" | "sheet";
@@ -124,13 +134,19 @@ type TaskAttributeEditorProps = {
 type TaskAttributeSheetToolbarState = {
   isSaving: boolean;
   dirty: boolean;
-  lastSavedAt: Date | null;
   onSave: () => void;
+};
+
+type TaskAttributeSheetToolbarRegistration = {
+  isSaving: boolean;
+  dirty: boolean;
+  onSave: () => Promise<boolean>;
 };
 
 type TaskAttributeSheetContextValue = {
   toolbar: TaskAttributeSheetToolbarState | null;
-  registerToolbar: (state: TaskAttributeSheetToolbarState | null) => void;
+  registerToolbar: (state: TaskAttributeSheetToolbarRegistration | null) => void;
+  attemptClose: () => void;
 };
 
 const TaskAttributeSheetContext =
@@ -139,27 +155,150 @@ const TaskAttributeSheetContext =
 /** 시트 상세 — 헤더 저장·닫기와 폼 상태를 연결한다. */
 export const TaskAttributeSheetProvider = ({
   children,
+  onClose,
 }: {
   children: ReactNode;
+  onClose: () => void;
 }) => {
+  const tb = useTranslations("bpmn");
   const [toolbar, setToolbar] = useState<TaskAttributeSheetToolbarState | null>(
     null,
   );
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const onSaveRef = useRef<() => Promise<boolean>>(async () => false);
+  const invokeSave = useCallback(() => {
+    void onSaveRef.current();
+  }, []);
+  const saveAndClose = useCallback(async () => onSaveRef.current(), []);
   const registerToolbar = useCallback(
-    (state: TaskAttributeSheetToolbarState | null) => {
-      setToolbar(state);
+    (state: TaskAttributeSheetToolbarRegistration | null) => {
+      if (!state) {
+        setToolbar(null);
+        return;
+      }
+
+      onSaveRef.current = state.onSave;
+      setToolbar((prev) => {
+        if (
+          prev &&
+          prev.isSaving === state.isSaving &&
+          prev.dirty === state.dirty
+        ) {
+          return prev;
+        }
+
+        return {
+          isSaving: state.isSaving,
+          dirty: state.dirty,
+          onSave: invokeSave,
+        };
+      });
     },
-    [],
+    [invokeSave],
   );
+  const attemptClose = useCallback(() => {
+    if (toolbar?.dirty) {
+      setLeaveDialogOpen(true);
+      return;
+    }
+    onClose();
+  }, [onClose, toolbar?.dirty]);
   const value = useMemo(
-    () => ({ toolbar, registerToolbar }),
-    [registerToolbar, toolbar],
+    () => ({ toolbar, registerToolbar, attemptClose }),
+    [attemptClose, registerToolbar, toolbar],
   );
+
+  const handleDiscardAndLeave = () => {
+    setLeaveDialogOpen(false);
+    onClose();
+  };
+
+  const handleSaveAndLeave = async () => {
+    setLeaveSaving(true);
+    try {
+      const saved = await saveAndClose();
+      if (saved) {
+        setLeaveDialogOpen(false);
+        onClose();
+      }
+    } finally {
+      setLeaveSaving(false);
+    }
+  };
 
   return (
     <TaskAttributeSheetContext.Provider value={value}>
       {children}
+      <Dialog
+        open={leaveDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLeaveDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tb("leaveConfirmTitle")}</DialogTitle>
+            <DialogDescription>{tb("leaveConfirmDesc")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={leaveSaving}
+              onClick={() => setLeaveDialogOpen(false)}
+            >
+              {tb("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={leaveSaving}
+              onClick={handleDiscardAndLeave}
+            >
+              {tb("leaveWithoutSave")}
+            </Button>
+            <Button
+              type="button"
+              disabled={leaveSaving}
+              onClick={() => void handleSaveAndLeave()}
+            >
+              {leaveSaving ? tb("saving") : tb("saveAndLeave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TaskAttributeSheetContext.Provider>
+  );
+};
+
+/** Provider 내부 — 미저장 시 시트 닫기를 가로챈다. */
+export const TaskAttributeSheetGuard = ({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
+}) => {
+  const attemptClose = useContext(TaskAttributeSheetContext)?.attemptClose;
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          onOpenChange(true);
+          return;
+        }
+        attemptClose?.();
+      }}
+    >
+      {children}
+    </Sheet>
   );
 };
 
@@ -169,6 +308,7 @@ export const TaskAttributeSheetHeaderActions = () => {
   const tc = useTranslations("common");
   const sheetContext = useContext(TaskAttributeSheetContext);
   const toolbar = sheetContext?.toolbar;
+  const attemptClose = sheetContext?.attemptClose;
 
   return (
     <div className="flex shrink-0 items-center gap-2">
@@ -184,9 +324,7 @@ export const TaskAttributeSheetHeaderActions = () => {
               ? t("saving")
               : toolbar.dirty
                 ? t("unsaved")
-                : toolbar.lastSavedAt
-                  ? t("autoSaved")
-                  : t("saved")}
+                : t("saved")}
           </span>
           <Button
             type="button"
@@ -199,18 +337,15 @@ export const TaskAttributeSheetHeaderActions = () => {
           </Button>
         </>
       ) : null}
-      <SheetClose
-        render={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="pams-page-action-outline"
-          />
-        }
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="pams-page-action-outline"
+        onClick={() => attemptClose?.()}
       >
         {tc("close")}
-      </SheetClose>
+      </Button>
     </div>
   );
 };
@@ -311,20 +446,22 @@ export const TaskAttributeForm = ({
   nodeId,
   autoPredecessor,
   variant = "page",
+  attributePlaceholder,
 }: TaskAttributeFormProps) => {
   const t = useTranslations("metadata");
+  const needsProcess = variant === "page";
   const {
     data: process,
     isLoading: processLoading,
     isError: processError,
-  } = useProcessDetail(nodeId);
+  } = useProcessDetail(nodeId, { enabled: needsProcess });
   const {
     data: attribute,
-    isLoading: attributeLoading,
+    isPending: attributePending,
     isError: attributeError,
-  } = useTaskAttribute(nodeId);
+  } = useTaskAttribute(nodeId, { placeholderData: attributePlaceholder });
 
-  const isLoading = processLoading || attributeLoading;
+  const isLoading = (needsProcess && processLoading) || attributePending;
 
   if (isLoading) {
     return (
@@ -335,7 +472,7 @@ export const TaskAttributeForm = ({
     );
   }
 
-  if (processError || attributeError || !process) {
+  if (attributeError || (needsProcess && (processError || !process))) {
     return (
       <EmptyState
         title={t("loadError")}
@@ -348,7 +485,7 @@ export const TaskAttributeForm = ({
     <TaskAttributeEditor
       key={`${nodeId}-${attribute?.attrId ?? "new"}`}
       nodeId={nodeId}
-      process={process}
+      process={process ?? null}
       attribute={attribute ?? null}
       autoPredecessor={autoPredecessor}
       variant={variant}
@@ -356,7 +493,7 @@ export const TaskAttributeForm = ({
   );
 };
 
-/** 조회 완료 후 마운트되어 입력 상태와 자동저장을 관리한다. */
+/** 조회 완료 후 마운트되어 입력 상태를 관리한다. */
 const TaskAttributeEditor = ({
   nodeId,
   process,
@@ -367,12 +504,8 @@ const TaskAttributeEditor = ({
   const t = useTranslations("metadata");
   const createMutation = useCreateTaskAttribute();
   const updateMutation = useUpdateTaskAttribute(nodeId);
-  const hydratedRef = useRef(true);
-  const shouldSaveAutoPredecessor =
-    Boolean(autoPredecessor) && (attribute?.predecessors.length ?? 0) === 0;
-  const [dirty, setDirty] = useState(shouldSaveAutoPredecessor);
+  const [dirty, setDirty] = useState(false);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [i18n, setI18n] = useState<TaskAttributeI18nMap>(() =>
     buildInitialI18n(attribute),
   );
@@ -474,67 +607,54 @@ const TaskAttributeEditor = ({
   );
 
   const save = useCallback(
-    async (validate = true) => {
+    async (validate = true): Promise<boolean> => {
       if (validate && !payload.i18n?.ko?.definition?.trim()) {
         setDefinitionError(t("definitionRequired"));
-        return;
+        return false;
       }
 
-      if (attribute) {
-        await updateMutation.mutateAsync(payload);
-      } else {
-        await createMutation.mutateAsync(payload);
-      }
+      try {
+        if (attribute) {
+          await updateMutation.mutateAsync(payload);
+        } else {
+          await createMutation.mutateAsync(payload);
+        }
 
-      setDirty(false);
-      setLastSavedAt(new Date());
+        setDirty(false);
+        return true;
+      } catch {
+        return false;
+      }
     },
     [attribute, createMutation, payload, t, updateMutation],
   );
 
-  useEffect(() => {
-    if (!hydratedRef.current || !dirty) return;
-    if (!payload.i18n?.ko?.definition?.trim()) return;
-
-    const timer = window.setTimeout(() => {
-      void save(false);
-    }, 1500);
-
-    return () => window.clearTimeout(timer);
-  }, [dirty, payload, save]);
-
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isSheet = variant === "sheet";
-  const sheetContext = useContext(TaskAttributeSheetContext);
+  const registerToolbar = useContext(TaskAttributeSheetContext)?.registerToolbar;
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  }, [save]);
   const frequencyLabel = scalar.frequency
     ? t(`frequencyOptions.${scalar.frequency}`)
     : undefined;
 
   useEffect(() => {
-    if (!isSheet || !sheetContext) {
+    if (!isSheet || !registerToolbar) {
       return;
     }
 
-    sheetContext.registerToolbar({
+    registerToolbar({
       isSaving,
       dirty,
-      lastSavedAt,
-      onSave: () => {
-        void save(true);
-      },
+      onSave: () => saveRef.current(true),
     });
 
     return () => {
-      sheetContext.registerToolbar(null);
+      registerToolbar(null);
     };
-  }, [
-    dirty,
-    isSaving,
-    isSheet,
-    lastSavedAt,
-    save,
-    sheetContext,
-  ]);
+  }, [dirty, isSaving, isSheet, registerToolbar]);
 
   return (
     <form
@@ -547,7 +667,7 @@ const TaskAttributeEditor = ({
         void save(true);
       }}
     >
-      {!isSheet && (
+      {!isSheet && process ? (
         <div className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-muted-foreground">{t("breadcrumb")}</p>
@@ -566,9 +686,7 @@ const TaskAttributeEditor = ({
                 ? t("saving")
                 : dirty
                   ? t("unsaved")
-                  : lastSavedAt
-                    ? t("autoSaved")
-                    : t("saved")}
+                  : t("saved")}
             </span>
             <Button type="submit" disabled={isSaving}>
               <Save className="size-4" />
@@ -576,7 +694,7 @@ const TaskAttributeEditor = ({
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
 
       <SectionCard
         id="definition"
@@ -688,7 +806,9 @@ const TaskAttributeEditor = ({
         open={openSections.has("system")}
         onToggle={toggleSection}
       >
-        <TaskLinkedResourcesSummary nodeId={nodeId} />
+        {openSections.has("system") ? (
+          <TaskLinkedResourcesSummary nodeId={nodeId} />
+        ) : null}
       </SectionCard>
 
       <SectionCard

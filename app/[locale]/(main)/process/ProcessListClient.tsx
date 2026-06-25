@@ -2,7 +2,8 @@
 
 import { Network } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   ContentPanel,
@@ -29,8 +30,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { ProcessNodeDto, ProcessNodeTree } from "@/types/process";
+import type { ProcessNodeDto, ProcessNodeTree, ProcessFilters } from "@/types/process";
 import type { E2eProcessDto } from "@/types/e2e-process";
+import { apiGet } from "@/lib/api/client";
+import { processKeys } from "@/lib/query/keys";
 
 type ProcessSheetState =
   | { type: "detail"; node: ProcessNodeTree | ProcessNodeDto }
@@ -43,7 +46,13 @@ type E2eSheetState =
   | { type: "edit"; process: E2eProcessDto };
 
 /** 프로세스 트리에서 선택한 노드를 오른쪽 상세 패널로 표시한다. */
-export const ProcessListClient = () => {
+export const ProcessListClient = ({
+  initialTree,
+  initialTreeFilters,
+}: {
+  initialTree?: ProcessNodeTree[];
+  initialTreeFilters?: ProcessFilters;
+}) => {
   const t = useTranslations("process");
   const tm = useTranslations("menu");
   const { companyCode, businessUnitCode, setScope, filters: scopeFilters } =
@@ -51,10 +60,22 @@ export const ProcessListClient = () => {
   const [sheetState, setSheetState] = useState<ProcessSheetState | null>(null);
   const [e2eSheet, setE2eSheet] = useState<E2eSheetState | null>(null);
   const [selectedE2eId, setSelectedE2eId] = useState<number | undefined>();
+  const queryClient = useQueryClient();
   const selectedNode =
     sheetState?.type === "detail" || sheetState?.type === "edit"
       ? sheetState.node
       : null;
+
+  const prefetchProcessDetail = useCallback(
+    (id: number) => {
+      void queryClient.prefetchQuery({
+        queryKey: processKeys.detail(id),
+        queryFn: () => apiGet<ProcessNodeDto>(`/api/process/${id}`),
+        staleTime: 30_000,
+      });
+    },
+    [queryClient],
+  );
 
   return (
     <ListPageLayout>
@@ -85,7 +106,10 @@ export const ProcessListClient = () => {
               <ProcessTree
                 selectedId={selectedNode?.nodeId}
                 scopeFilters={scopeFilters}
+                initialTree={initialTree}
+                initialTreeFilters={initialTreeFilters}
                 onSelect={(node) => {
+                  prefetchProcessDetail(node.nodeId);
                   setSelectedE2eId(undefined);
                   setE2eSheet(null);
                   setSheetState({ type: "detail", node });
@@ -138,6 +162,7 @@ export const ProcessListClient = () => {
             <ProcessDetail
               nodeId={selectedNode.nodeId}
               showTree={false}
+              nodePlaceholder={selectedNode}
               onEdit={(node) => setSheetState({ type: "edit", node })}
             />
           )}

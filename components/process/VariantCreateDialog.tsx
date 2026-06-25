@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +44,25 @@ export const VariantCreateDialog = ({
   const [copyMetadata, setCopyMetadata] = useState(false);
   const { data: companyOptions = [] } = useCommonCodeLookup("COMPANY_CD");
   const { data: businessUnitOptions = [] } = useCommonCodeLookup("BU_CD");
+
+  const companySelectItems = useMemo(
+    () =>
+      companyOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    [companyOptions],
+  );
+
+  const businessUnitSelectItems = useMemo(
+    () =>
+      businessUnitOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    [businessUnitOptions],
+  );
+
   const createVariant = useCreateProcessVariant(standardNode?.nodeId ?? 0);
   const isL3 = standardNode?.level === "L3";
 
@@ -102,10 +121,10 @@ export const VariantCreateDialog = ({
               <SelectTrigger>
                 <SelectValue placeholder={t("scope.selectCompany")} />
               </SelectTrigger>
-              <SelectContent>
-                {companyOptions.map((item) => (
-                  <SelectItem key={item.code} value={item.code}>
-                    {item.displayName}
+              <SelectContent items={companySelectItems}>
+                {companySelectItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -121,10 +140,10 @@ export const VariantCreateDialog = ({
               <SelectTrigger>
                 <SelectValue placeholder={t("scope.selectBusinessUnit")} />
               </SelectTrigger>
-              <SelectContent>
-                {businessUnitOptions.map((item) => (
-                  <SelectItem key={item.code} value={item.code}>
-                    {item.displayName}
+              <SelectContent items={businessUnitSelectItems}>
+                {businessUnitSelectItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

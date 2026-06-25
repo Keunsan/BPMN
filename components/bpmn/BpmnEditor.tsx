@@ -15,12 +15,18 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { useGuardedRouter } from "@/hooks/useGuardedRouter";
 import type { PredecessorSelection } from "@/components/metadata/PredecessorSelect";
-import { TaskAttributeForm } from "@/components/metadata/TaskAttributeForm";
+import {
+  TaskAttributeForm,
+  TaskAttributeSheetGuard,
+  TaskAttributeSheetHeaderActions,
+  TaskAttributeSheetProvider,
+} from "@/components/metadata/TaskAttributeForm";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,14 +37,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useLinkOrCreateBpmnTask } from "@/lib/query/hooks/useBpmn";
+import { prefetchTaskAttribute } from "@/lib/query/hooks/useMetadata";
 import { useProcessDetail } from "@/lib/query/hooks/useProcess";
+import { metadataKeys } from "@/lib/query/keys";
 import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
 import {
   isProcessLinkCompatible,
@@ -51,6 +58,7 @@ import type {
   BpmnModelDto,
   ProcessLinkInfo,
 } from "@/types/bpmn";
+import type { TaskAttributeDto } from "@/types/metadata";
 
 import type { BpmnEditorHandle } from "./BpmnEditorInner";
 import { ProcessLinkModal } from "./ProcessLinkModal";
@@ -110,6 +118,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   const [taskHover, setTaskHover] = useState<TaskHoverState | null>(null);
   const [diagramDirty, setDiagramDirty] = useState(false);
   const linkOrCreateMutation = useLinkOrCreateBpmnTask(model.modelId);
+  const queryClient = useQueryClient();
   const isE2eMode = model.modelKind === "E2E";
   const { data: ownerProcess } = useProcessDetail(model.nodeId ?? 0);
   const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(
@@ -187,6 +196,21 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
   }, [isResizingLinkSidebar]);
 
   const selectedLink = selectedElementId ? links[selectedElementId] : null;
+  const prefetchTaskAttributeForNode = useCallback(
+    (id: number) => {
+      prefetchTaskAttribute(queryClient, id);
+    },
+    [queryClient],
+  );
+  const cachedTaskAttribute = useMemo((): TaskAttributeDto | null | undefined => {
+    if (selectedLink?.linkKind !== "L4_TASK") {
+      return undefined;
+    }
+
+    return queryClient.getQueryData<TaskAttributeDto | null>(
+      metadataKeys.taskAttribute(selectedLink.nodeId),
+    );
+  }, [queryClient, selectedLink, metadataOpen]);
   const autoPredecessor = useMemo(
     () =>
       selectedElementId && selectedLink
@@ -199,6 +223,19 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         : null,
     [links, model.bpmnXml, selectedElementId, selectedLink],
   );
+
+  useEffect(() => {
+    if (selectedLink?.linkKind === "L4_TASK") {
+      prefetchTaskAttributeForNode(selectedLink.nodeId);
+    }
+  }, [prefetchTaskAttributeForNode, selectedLink]);
+
+  const openMetadataSheet = useCallback(() => {
+    if (selectedLink?.linkKind === "L4_TASK") {
+      prefetchTaskAttributeForNode(selectedLink.nodeId);
+    }
+    setMetadataOpen(true);
+  }, [prefetchTaskAttributeForNode, selectedLink]);
 
   const openLinkModal = useCallback(() => {
     apiRef.current?.dismissInteraction();
@@ -313,6 +350,9 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         if (elementId === selectedElementId) {
           setSelectedElementName(link.name);
         }
+        if (link.linkKind === "L4_TASK") {
+          prefetchTaskAttributeForNode(link.nodeId);
+        }
         toast.success(t("linkSuccess"));
       } else {
         apiRef.current?.updateElementName(elementId, "");
@@ -321,7 +361,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         }
       }
     },
-    [selectedElementId, selectedElementType, t],
+    [prefetchTaskAttributeForNode, selectedElementId, selectedElementType, t],
   );
 
   const handleLinkConfirm = (link: ProcessLinkInfo | null) => {
@@ -344,6 +384,24 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
     },
     [linkElementToProcess],
   );
+
+  const handleElementReplaced = useCallback((oldId: string, newId: string) => {
+    if (oldId === newId) {
+      return;
+    }
+
+    setLinks((prev) => {
+      const link = prev[oldId];
+      if (!link) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[oldId];
+      next[newId] = link;
+      return next;
+    });
+  }, []);
 
   const handleSidebarResizePointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
@@ -379,6 +437,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
     }));
     apiRef.current?.updateElementName(selectedElementId, link.name);
     setSelectedElementName(link.name);
+    prefetchTaskAttributeForNode(link.nodeId);
   };
 
   return (
@@ -455,7 +514,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
           variant="outline"
           size="sm"
           disabled={!selectedElementId || isE2eMode}
-          onClick={() => setMetadataOpen(true)}
+          onClick={openMetadataSheet}
         >
           <ClipboardList className="mr-1 size-4" />
           {t("taskMetadata")}
@@ -520,6 +579,7 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
             }}
             onTaskHoverChange={setTaskHover}
             onProcessLinkDrop={handleProcessLinkDrop}
+            onElementReplaced={handleElementReplaced}
             onCallActivityDblClick={(link) =>
               setDrilldownTarget({
                 l3NodeId: link.nodeId,
@@ -606,73 +666,87 @@ export const BpmnEditor = ({ model, onSave, saving }: BpmnEditorProps) => {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={metadataOpen} onOpenChange={setMetadataOpen}>
-        <SheetContent
-          data-pams-task-metadata-sheet="true"
-          className="!w-[min(768px,96vw)] !max-w-none overflow-y-auto sm:!max-w-none"
+      <TaskAttributeSheetProvider onClose={() => setMetadataOpen(false)}>
+        <TaskAttributeSheetGuard
+          open={metadataOpen}
+          onOpenChange={setMetadataOpen}
         >
-          <SheetHeader>
-            <SheetTitle>{t("taskMetadata")}</SheetTitle>
-            <SheetDescription>
-              {selectedElementName || selectedElementId
-                ? t("taskMetadataDesc", {
-                    name: selectedElementName ?? selectedElementId ?? "",
-                  })
-                : t("selectTaskFirst")}
-            </SheetDescription>
-          </SheetHeader>
+          <SheetContent
+            data-pams-task-metadata-sheet="true"
+            className="flex h-full !w-[min(768px,96vw)] !max-w-none flex-col gap-0 overflow-hidden p-0 sm:!max-w-none"
+            showCloseButton={false}
+          >
+            <SheetHeader className="shrink-0 gap-1 border-b px-6 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <SheetTitle className="min-w-0 flex-1 truncate text-base font-semibold">
+                  {selectedLink?.linkKind === "L4_TASK"
+                    ? `${selectedLink.code} — ${selectedLink.name}`
+                    : t("taskMetadata")}
+                </SheetTitle>
+                {selectedLink?.linkKind === "L4_TASK" ? (
+                  <TaskAttributeSheetHeaderActions />
+                ) : null}
+              </div>
+              <SheetDescription className="line-clamp-2">
+                {selectedElementName || selectedElementId
+                  ? t("taskMetadataDesc", {
+                      name: selectedElementName ?? selectedElementId ?? "",
+                    })
+                  : t("selectTaskFirst")}
+              </SheetDescription>
+            </SheetHeader>
 
-          {!selectedElementId ? (
-            <div className="px-4 text-sm text-muted-foreground">
-              {t("selectTaskFirst")}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+              {!selectedElementId ? (
+                <div className="text-sm text-muted-foreground">
+                  {t("selectTaskFirst")}
+                </div>
+              ) : selectedLink?.linkKind === "L4_TASK" ? (
+                <TaskAttributeForm
+                  key={selectedLink.nodeId}
+                  nodeId={selectedLink.nodeId}
+                  autoPredecessor={autoPredecessor}
+                  variant="sheet"
+                  attributePlaceholder={cachedTaskAttribute ?? undefined}
+                />
+              ) : selectedLink?.linkKind === "L3_CALL" ? (
+                <div className="space-y-3 rounded-md border bg-muted/40 p-4 text-sm">
+                  <p className="font-medium">
+                    {selectedLink.code} — {selectedLink.name}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {t("linkedCallActivityDesc")}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-md border bg-muted/40 p-4">
+                    <p className="font-medium">{t("unlinkedTask")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("unlinkedTaskDesc")}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      disabled={!selectedElementType || linkOrCreateMutation.isPending}
+                      onClick={() => void handleCreateTaskMetadata()}
+                    >
+                      {linkOrCreateMutation.isPending
+                        ? t("creatingTask")
+                        : t("createTaskAndEditMetadata")}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={openLinkModal}>
+                      <Link2 className="mr-1 size-4" />
+                      {t("linkExistingTask")}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : selectedLink?.linkKind === "L4_TASK" ? (
-            <div className="space-y-3">
-              <div className="mx-4 rounded-md border bg-muted/40 p-3 text-sm">
-                <p className="font-medium">
-                  {selectedLink.code} — {selectedLink.name}
-                </p>
-                <p className="text-muted-foreground">{t("linkedTaskDesc")}</p>
-              </div>
-              <TaskAttributeForm
-                nodeId={selectedLink.nodeId}
-                autoPredecessor={autoPredecessor}
-              />
-            </div>
-          ) : selectedLink?.linkKind === "L3_CALL" ? (
-            <div className="mx-4 space-y-3 rounded-md border bg-muted/40 p-4 text-sm">
-              <p className="font-medium">
-                {selectedLink.code} — {selectedLink.name}
-              </p>
-              <p className="text-muted-foreground">{t("linkedCallActivityDesc")}</p>
-            </div>
-          ) : (
-            <div className="space-y-4 px-4">
-              <div className="rounded-md border bg-muted/40 p-4">
-                <p className="font-medium">{t("unlinkedTask")}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("unlinkedTaskDesc")}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  disabled={!selectedElementType || linkOrCreateMutation.isPending}
-                  onClick={() => void handleCreateTaskMetadata()}
-                >
-                  {linkOrCreateMutation.isPending
-                    ? t("creatingTask")
-                    : t("createTaskAndEditMetadata")}
-                </Button>
-                <Button type="button" variant="outline" onClick={openLinkModal}>
-                  <Link2 className="mr-1 size-4" />
-                  {t("linkExistingTask")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+          </SheetContent>
+        </TaskAttributeSheetGuard>
+      </TaskAttributeSheetProvider>
     </div>
   );
 };

@@ -2,9 +2,20 @@ import { requireAuth } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/route-handler";
 import {
   deleteTaskSystemLink,
+  getTaskSystemLink,
   updateTaskSystemLink,
 } from "@/lib/services/system.service";
 import type { UpdateTaskSystemLinkDto } from "@/types/system";
+
+/** GET /api/metadata/tasks/[nodeId]/systems/[linkId] — Task 시스템 1차 연결 상세 */
+export const GET = withApiHandler(async ({ params, locale }) => {
+  const data = await getTaskSystemLink(
+    Number(params.nodeId),
+    Number(params.linkId),
+    locale,
+  );
+  return { data };
+});
 
 /** DELETE /api/metadata/tasks/[nodeId]/systems/[linkId] — Task 시스템 1차 연결 삭제 */
 export const DELETE = withApiHandler(async ({ params }) => {

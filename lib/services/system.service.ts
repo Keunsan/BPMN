@@ -287,9 +287,24 @@ export const listSystemHierarchy = async (
 export const listTaskSystemLinks = async (
   nodeId: number,
   locale: Locale = "ko",
+  options: { includeScreens?: boolean } = {},
 ): Promise<TaskSystemLinkDto[]> => {
   await assertTaskNode(nodeId);
-  return systemQueries.listTaskSystemLinks(nodeId, locale);
+  return systemQueries.listTaskSystemLinks(nodeId, locale, options);
+};
+
+/** Task-시스템 1차 연결 상세(화면 포함)를 조회한다. */
+export const getTaskSystemLink = async (
+  nodeId: number,
+  linkId: number,
+  locale: Locale = "ko",
+): Promise<TaskSystemLinkDto> => {
+  await assertTaskNode(nodeId);
+  const link = await systemQueries.findTaskSystemLinkById(nodeId, linkId, locale);
+  if (!link) {
+    throw new ApiError("E301", "System link not found", 404, undefined, "linkId");
+  }
+  return link;
 };
 
 /** Task-시스템 1차 연결을 생성한다. */

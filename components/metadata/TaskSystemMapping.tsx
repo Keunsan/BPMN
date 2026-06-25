@@ -30,6 +30,7 @@ import {
   useDeleteTaskSystemScreenLink,
   useScreenCatalogInfinite,
   useSystemCatalogInfinite,
+  useTaskSystemLinkDetail,
   useTaskSystemLinks,
 } from "@/lib/query/hooks/useSystems";
 import { formatSystemLabel } from "@/lib/utils/system-label";
@@ -71,13 +72,19 @@ export const TaskSystemMapping = () => {
 
   const { data: moduleOptions = [] } = useCommonCodeLookup("MODULE_CD");
   const { data: links, isLoading: linksLoading, refetch } =
-    useTaskSystemLinks(nodeId);
+    useTaskSystemLinks(nodeId, { includeScreens: false });
+  const { data: selectedLinkDetail, isLoading: selectedLinkDetailLoading } =
+    useTaskSystemLinkDetail(nodeId, linkId);
   const batchConnectSystems = useCreateTaskSystemLinksBatch(nodeId);
   const deleteLink = useDeleteTaskSystemLink(nodeId);
   const batchConnectScreens = useCreateTaskSystemScreenLinksBatch(nodeId, linkId);
   const deleteScreenLink = useDeleteTaskSystemScreenLink(nodeId, linkId);
 
-  const selectedLink = links?.find((link) => link.linkId === linkId);
+  const selectedLink =
+    linkId > 0
+      ? (selectedLinkDetail ??
+        links?.find((link) => link.linkId === linkId))
+      : undefined;
 
   const systemCatalogFilters = useMemo(
     () => ({
@@ -651,7 +658,16 @@ export const TaskSystemMapping = () => {
         <SelectTrigger variant="filter" className="h-8 w-[140px]">
           <SelectValue placeholder={t("selectModule")} />
         </SelectTrigger>
-        <SelectContent variant="filter">
+        <SelectContent
+          variant="filter"
+          items={[
+            { value: ALL_FILTER, label: t("allModules") },
+            ...moduleOptions.map((module) => ({
+              value: module.code,
+              label: module.displayName,
+            })),
+          ]}
+        >
           <SelectItem variant="filter" value={ALL_FILTER}>
             {t("allModules")}
           </SelectItem>
@@ -760,6 +776,11 @@ export const TaskSystemMapping = () => {
           rowKey={(screen) => screen.screenLinkId}
           storageKey="pams-task-system-linked-screens-grid"
           emptyMessage={t("emptyLinkedScreens")}
+          body={
+            selectedLinkDetailLoading ? (
+              <LoadingSpinner className="min-h-[120px]" />
+            ) : undefined
+          }
           fillHeight
         />
       </div>

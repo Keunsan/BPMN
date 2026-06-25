@@ -20,7 +20,10 @@ import type {
 } from "@/types/process";
 
 /** 프로세스 트리 조회 훅 */
-export const useProcessTree = (filters: ProcessFilters = {}) => {
+export const useProcessTree = (
+  filters: ProcessFilters = {},
+  options?: { initialData?: ProcessNodeTree[] },
+) => {
   return useQuery({
     queryKey: processKeys.tree(filters),
     queryFn: () =>
@@ -32,25 +35,36 @@ export const useProcessTree = (filters: ProcessFilters = {}) => {
           businessUnitCode: filters.businessUnitCode,
         },
       }),
+    initialData: options?.initialData,
+    initialDataUpdatedAt: options?.initialData ? Date.now() : undefined,
   });
 };
 
 /** 프로세스 상세 조회 훅 */
-export const useProcessDetail = (nodeId: number) => {
+export const useProcessDetail = (
+  nodeId: number,
+  options?: { enabled?: boolean; placeholderData?: ProcessNodeDto },
+) => {
   return useQuery({
     queryKey: processKeys.detail(nodeId),
     queryFn: () => apiGet<ProcessNodeDto>(`/api/process/${nodeId}`),
-    enabled: nodeId > 0,
+    enabled: (options?.enabled ?? true) && nodeId > 0,
+    placeholderData: options?.placeholderData,
+    staleTime: 30_000,
   });
 };
 
 /** 프로세스 이력 조회 훅 */
-export const useProcessHistory = (nodeId: number) => {
+export const useProcessHistory = (
+  nodeId: number,
+  options?: { enabled?: boolean },
+) => {
   return useQuery({
     queryKey: [...processKeys.detail(nodeId), "history"],
     queryFn: () =>
       apiGet<ProcessHistoryDto[]>(`/api/process/${nodeId}/history`),
-    enabled: nodeId > 0,
+    enabled: (options?.enabled ?? true) && nodeId > 0,
+    staleTime: 30_000,
   });
 };
 
@@ -141,6 +155,7 @@ export const useProcessVariants = (standardNodeId: number, enabled = true) => {
     queryFn: () =>
       apiGet<ProcessNodeDto[]>(`/api/process/${standardNodeId}/variants`),
     enabled: standardNodeId > 0 && enabled,
+    staleTime: 30_000,
   });
 };
 

@@ -6,7 +6,66 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/** Select value/label 쌍 — Base UI SelectValue가 닫힌 상태에서도 코드명을 표시하도록 전달 */
+export type SelectOption = {
+  value: string
+  label: React.ReactNode
+}
+
+type SelectItemsContextValue = {
+  setItems: (items: ReadonlyArray<SelectOption>) => void
+}
+
+const SelectItemsContext = React.createContext<SelectItemsContextValue | null>(
+  null,
+)
+
+const getSelectItemLabel = (
+  children: React.ReactNode,
+  labelProp?: string,
+): string | undefined => {
+  if (labelProp != null) {
+    return labelProp
+  }
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children)
+  }
+  if (Array.isArray(children)) {
+    const parts = children
+      .map((child) =>
+        typeof child === "string" || typeof child === "number"
+          ? String(child)
+          : null,
+      )
+      .filter((part): part is string => part != null)
+    return parts.length > 0 ? parts.join(" ") : undefined
+  }
+  return undefined
+}
+
+function Select({
+  items: itemsProp,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const [contentItems, setContentItems] = React.useState<
+    ReadonlyArray<SelectOption>
+  >([])
+
+  const contextValue = React.useMemo(
+    () => ({
+      setItems: setContentItems,
+    }),
+    [],
+  )
+
+  const mergedItems = itemsProp ?? (contentItems.length > 0 ? contentItems : undefined)
+
+  return (
+    <SelectItemsContext.Provider value={contextValue}>
+      <SelectPrimitive.Root items={mergedItems} {...props} />
+    </SelectItemsContext.Provider>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -81,6 +140,7 @@ function SelectContent({
   className,
   variant = "default",
   children,
+  items,
   side = "bottom",
   sideOffset = 4,
   align = "center",
@@ -93,7 +153,17 @@ function SelectContent({
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   > & {
     variant?: "default" | "filter"
+    items?: ReadonlyArray<SelectOption>
   }) {
+  const itemsContext = React.useContext(SelectItemsContext)
+
+  React.useLayoutEffect(() => {
+    if (!items || items.length === 0) {
+      return
+    }
+    itemsContext?.setItems(items)
+  }, [items, itemsContext])
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -143,14 +213,19 @@ function SelectItem({
   className,
   variant = "default",
   children,
+  label,
   ...props
 }: SelectPrimitive.Item.Props & {
   variant?: "default" | "filter"
+  label?: string
 }) {
+  const itemLabel = getSelectItemLabel(children, label)
+
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
       data-variant={variant}
+      label={itemLabel}
       className={cn(
         "relative flex w-full cursor-default items-center gap-1 outline-hidden select-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         variant === "filter"

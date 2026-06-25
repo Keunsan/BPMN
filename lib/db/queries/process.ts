@@ -12,6 +12,7 @@ import type {
   ProcessFilters,
   ProcessI18nMap,
   ProcessNode,
+  ProcessNodeTree,
   UpdateProcessInput,
 } from "@/types/process";
 
@@ -41,6 +42,43 @@ const mapProcessNode = (row: Record<string, unknown>): ProcessNode => ({
   updatedAt: row.updated_at ? new Date(row.updated_at as string) : null,
 });
 
+const IN_CLAUSE_BATCH_SIZE = 500;
+
+/** IN 절 placeholder·파라미터를 만든다 */
+const buildInClauseParams = (
+  values: number[],
+  prefix: string,
+): { placeholders: string; params: QueryParams } => {
+  const params: QueryParams = {};
+  const placeholders = values
+    .map((value, index) => {
+      const key = `${prefix}${index}`;
+      params[key] = value;
+      return `@${key}`;
+    })
+    .join(", ");
+  return { placeholders, params };
+};
+
+/** i18n 행 목록을 nodeId별 맵으로 변환한다 */
+const mapProcessI18nRows = (
+  rows: Array<{
+    node_id: number;
+    locale: string;
+    name: string;
+    description: string | null;
+  }>,
+): Map<number, ProcessI18nMap> => {
+  const result = new Map<number, ProcessI18nMap>();
+  for (const row of rows) {
+    const locale = row.locale as keyof ProcessI18nMap;
+    const map = result.get(row.node_id) ?? {};
+    map[locale] = { name: row.name, description: row.description };
+    result.set(row.node_id, map);
+  }
+  return result;
+};
+
 /** i18n 맵 조회 */
 export const findProcessI18n = async (
   nodeId: number,
@@ -56,6 +94,39 @@ export const findProcessI18n = async (
     map[locale] = { name: row.name, description: row.description };
   }
   return map;
+};
+
+/** 여러 노드의 i18n 맵을 한 번에 조회한다 */
+export const findProcessI18nByNodeIds = async (
+  nodeIds: number[],
+): Promise<Map<number, ProcessI18nMap>> => {
+  const uniqueIds = [...new Set(nodeIds)];
+  if (uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const result = new Map<number, ProcessI18nMap>();
+  for (let offset = 0; offset < uniqueIds.length; offset += IN_CLAUSE_BATCH_SIZE) {
+    const batch = uniqueIds.slice(offset, offset + IN_CLAUSE_BATCH_SIZE);
+    const { placeholders, params } = buildInClauseParams(batch, "nodeId");
+    const rows = await query<{
+      node_id: number;
+      locale: string;
+      name: string;
+      description: string | null;
+    }>(
+      `SELECT node_id, locale, name, description
+       FROM process_node_i18n
+       WHERE node_id IN (${placeholders})`,
+      params,
+    );
+
+    for (const [nodeId, i18n] of mapProcessI18nRows(rows)) {
+      result.set(nodeId, i18n);
+    }
+  }
+
+  return result;
 };
 
 /** locale 적용된 display name */
@@ -75,6 +146,15 @@ export const findProcessById = async (
     { nodeId },
   );
   return row ? mapProcessNode(row) : null;
+};
+
+/** 노드 존재 여부만 조회한다 */
+export const processNodeExists = async (nodeId: number): Promise<boolean> => {
+  const row = await queryOne<{ node_id: number }>(
+    `SELECT node_id FROM process_node WHERE node_id = @nodeId`,
+    { nodeId },
+  );
+  return row != null;
 };
 
 export const findProcessByCode = async (
@@ -127,15 +207,43 @@ export const findVariantByScope = async (
   return row ? mapProcessNode(row) : null;
 };
 
-/** 표준 노드에 연결된 변형 목록 */
+/** 표준 노드에 연결된 변형 목록 — locale 표시명을 단일 쿼리로 조회한다 */
 export const findVariantsByStandardId = async (
   standardNodeId: number,
+  locale: Locale = "ko",
 ): Promise<ProcessNode[]> => {
   const rows = await query<Record<string, unknown>>(
-    `SELECT * FROM process_node
-     WHERE variant_of = @standardNodeId
-     ORDER BY company_code, business_unit_code, code`,
-    { standardNodeId },
+    `SELECT
+       pn.node_id,
+       pn.parent_node_id,
+       pn.level,
+       pn.code,
+       COALESCE(i18n_loc.name, i18n_ko.name, pn.name) AS name,
+       pn.description,
+       pn.status,
+       pn.owner_org_id,
+       pn.version,
+       pn.valid_from,
+       pn.valid_to,
+       pn.is_standard,
+       pn.variant_of,
+       pn.company_code,
+       pn.business_unit_code,
+       pn.sort_order,
+       pn.created_by,
+       pn.created_at,
+       pn.updated_by,
+       pn.updated_at
+     FROM process_node pn
+     LEFT JOIN process_node_i18n i18n_loc
+       ON i18n_loc.node_id = pn.node_id
+      AND i18n_loc.locale = @locale
+     LEFT JOIN process_node_i18n i18n_ko
+       ON i18n_ko.node_id = pn.node_id
+      AND i18n_ko.locale = @koLocale
+     WHERE pn.variant_of = @standardNodeId
+     ORDER BY pn.company_code, pn.business_unit_code, pn.code`,
+    { standardNodeId, locale, koLocale: "ko" },
   );
   return rows.map(mapProcessNode);
 };
@@ -145,23 +253,27 @@ export const countVariantsByStandardIds = async (
   standardNodeIds: number[],
 ): Promise<Map<number, number>> => {
   const counts = new Map<number, number>();
-  if (standardNodeIds.length === 0) {
+  const uniqueIds = [...new Set(standardNodeIds)];
+  if (uniqueIds.length === 0) {
     return counts;
   }
 
-  const targetIds = new Set(standardNodeIds);
-  const rows = await query<{ variant_of: number; cnt: number }>(
-    `SELECT variant_of, COUNT(*) AS cnt
-     FROM process_node
-     WHERE variant_of IS NOT NULL
-     GROUP BY variant_of`,
-  );
+  for (let offset = 0; offset < uniqueIds.length; offset += IN_CLAUSE_BATCH_SIZE) {
+    const batch = uniqueIds.slice(offset, offset + IN_CLAUSE_BATCH_SIZE);
+    const { placeholders, params } = buildInClauseParams(batch, "standardId");
+    const rows = await query<{ variant_of: number; cnt: number }>(
+      `SELECT variant_of, COUNT(*) AS cnt
+       FROM process_node
+       WHERE variant_of IN (${placeholders})
+       GROUP BY variant_of`,
+      params,
+    );
 
-  for (const row of rows) {
-    if (targetIds.has(row.variant_of)) {
+    for (const row of rows) {
       counts.set(row.variant_of, row.cnt);
     }
   }
+
   return counts;
 };
 
@@ -174,19 +286,6 @@ export const countVariantsForStandard = async (
     { standardNodeId },
   );
   return row?.cnt ?? 0;
-};
-
-/** 표준 노드에 연결된 변형 목록 */
-export const listVariantsForStandard = async (
-  standardNodeId: number,
-): Promise<ProcessNode[]> => {
-  const rows = await query<Record<string, unknown>>(
-    `SELECT * FROM process_node
-     WHERE variant_of = @standardNodeId
-     ORDER BY company_code, business_unit_code, code`,
-    { standardNodeId },
-  );
-  return rows.map(mapProcessNode);
 };
 
 /** 하위 프로세스 전체(모든 깊이)를 조회한다 */
@@ -701,43 +800,68 @@ export const deleteProcess = async (
   });
 };
 
-export const listProcessNodes = async (
-  filters: ProcessFilters = {},
-): Promise<ProcessNode[]> => {
+/** process_node 필터 조건을 만든다 */
+const buildProcessNodeFilterClause = (
+  filters: ProcessFilters,
+  tableAlias = "",
+  options?: { searchI18n?: boolean },
+): { conditions: string[]; params: QueryParams } => {
+  const prefix = tableAlias ? `${tableAlias}.` : "";
   const conditions = ["1=1"];
   const params: QueryParams = {};
 
   if (!filters.includeVariants) {
-    conditions.push("variant_of IS NULL");
+    conditions.push(`${prefix}variant_of IS NULL`);
   }
   if (filters.companyCode) {
-    conditions.push("company_code = @companyCode");
+    conditions.push(`${prefix}company_code = @companyCode`);
     params.companyCode = filters.companyCode;
   }
   if (filters.businessUnitCode) {
-    conditions.push("business_unit_code = @businessUnitCode");
+    conditions.push(`${prefix}business_unit_code = @businessUnitCode`);
     params.businessUnitCode = filters.businessUnitCode;
   }
   if (filters.level) {
-    conditions.push("level = @level");
+    conditions.push(`${prefix}level = @level`);
     params.level = filters.level;
   }
   if (filters.status) {
-    conditions.push("status = @status");
+    conditions.push(`${prefix}status = @status`);
     params.status = filters.status;
   }
   if (filters.parentNodeId !== undefined) {
     if (filters.parentNodeId === null) {
-      conditions.push("parent_node_id IS NULL");
+      conditions.push(`${prefix}parent_node_id IS NULL`);
     } else {
-      conditions.push("parent_node_id = @parentNodeId");
+      conditions.push(`${prefix}parent_node_id = @parentNodeId`);
       params.parentNodeId = filters.parentNodeId;
     }
   }
   if (filters.search?.trim()) {
-    conditions.push("(code LIKE @search OR name LIKE @search)");
+    const searchExpr = options?.searchI18n
+      ? `(${prefix}code LIKE @search OR ${prefix}name LIKE @search OR i18n_loc.name LIKE @search OR i18n_ko.name LIKE @search)`
+      : `(code LIKE @search OR ${prefix}name LIKE @search)`;
+    conditions.push(searchExpr);
     params.search = `%${filters.search.trim()}%`;
   }
+
+  return { conditions, params };
+};
+
+/** DB 행을 트리용 노드로 변환한다 */
+const mapProcessTreeNode = (row: Record<string, unknown>): ProcessNodeTree => {
+  const variantCount = row.variant_count;
+  return {
+    ...mapProcessNode(row),
+    variantCount:
+      variantCount == null ? undefined : Number(variantCount as number),
+  };
+};
+
+export const listProcessNodes = async (
+  filters: ProcessFilters = {},
+): Promise<ProcessNode[]> => {
+  const { conditions, params } = buildProcessNodeFilterClause(filters);
 
   const rows = await query<Record<string, unknown>>(
     `SELECT * FROM process_node
@@ -748,17 +872,85 @@ export const listProcessNodes = async (
   return rows.map(mapProcessNode);
 };
 
+/** 트리 조회용 노드 목록 — locale 표시명·변형 개수를 단일 쿼리로 조회한다 */
+export const listProcessNodesForTree = async (
+  locale: Locale,
+  filters: ProcessFilters & { withVariantCounts?: boolean } = {},
+): Promise<ProcessNodeTree[]> => {
+  const withVariantCounts = filters.withVariantCounts ?? !filters.includeVariants;
+  const { conditions, params } = buildProcessNodeFilterClause(filters, "pn", {
+    searchI18n: true,
+  });
+  params.locale = locale;
+  params.koLocale = "ko";
+
+  const variantCountSelect = withVariantCounts
+    ? `CASE
+         WHEN pn.level IN ('L3', 'L4') THEN COALESCE(vc.cnt, 0)
+         ELSE NULL
+       END AS variant_count`
+    : "NULL AS variant_count";
+  const variantCountJoin = withVariantCounts
+    ? `LEFT JOIN (
+         SELECT variant_of, COUNT(*) AS cnt
+         FROM process_node
+         WHERE variant_of IS NOT NULL
+         GROUP BY variant_of
+       ) vc ON vc.variant_of = pn.node_id`
+    : "";
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       pn.node_id,
+       pn.parent_node_id,
+       pn.level,
+       pn.code,
+       COALESCE(i18n_loc.name, i18n_ko.name, pn.name) AS name,
+       pn.description,
+       pn.status,
+       pn.owner_org_id,
+       pn.version,
+       pn.valid_from,
+       pn.valid_to,
+       pn.is_standard,
+       pn.variant_of,
+       pn.company_code,
+       pn.business_unit_code,
+       pn.sort_order,
+       pn.created_by,
+       pn.created_at,
+       pn.updated_by,
+       pn.updated_at,
+       ${variantCountSelect}
+     FROM process_node pn
+     LEFT JOIN process_node_i18n i18n_loc
+       ON i18n_loc.node_id = pn.node_id
+      AND i18n_loc.locale = @locale
+     LEFT JOIN process_node_i18n i18n_ko
+       ON i18n_ko.node_id = pn.node_id
+      AND i18n_ko.locale = @koLocale
+     ${variantCountJoin}
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY pn.sort_order, pn.code`,
+    params,
+  );
+
+  return rows.map(mapProcessTreeNode);
+};
+
 /** scope에 해당하는 변형 노드 목록 */
 export const listVariantsByScope = async (
   companyCode: string,
   businessUnitCode: string,
   search?: string,
-): Promise<ProcessNode[]> => {
-  return listProcessNodes({
+  locale: Locale = "ko",
+): Promise<ProcessNodeTree[]> => {
+  return listProcessNodesForTree(locale, {
     includeVariants: true,
     companyCode,
     businessUnitCode,
     search,
+    withVariantCounts: false,
   });
 };
 

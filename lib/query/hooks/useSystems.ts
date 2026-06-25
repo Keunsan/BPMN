@@ -171,12 +171,34 @@ export const useDeactivateScreen = () => {
 };
 
 /** Task 시스템 1차 연결 목록 */
-export const useTaskSystemLinks = (nodeId: number) =>
+export const useTaskSystemLinks = (
+  nodeId: number,
+  options?: { includeScreens?: boolean },
+) =>
   useQuery({
-    queryKey: metadataKeys.systems(nodeId),
-    queryFn: () =>
-      apiGet<TaskSystemLinkDto[]>(`/api/metadata/tasks/${nodeId}/systems`),
+    queryKey: [
+      ...metadataKeys.systems(nodeId),
+      { includeScreens: options?.includeScreens ?? true },
+    ],
+    queryFn: () => {
+      const params =
+        options?.includeScreens === false ? "?includeScreens=false" : "";
+      return apiGet<TaskSystemLinkDto[]>(
+        `/api/metadata/tasks/${nodeId}/systems${params}`,
+      );
+    },
     enabled: nodeId > 0,
+  });
+
+/** Task 시스템 1차 연결 상세(화면 포함) */
+export const useTaskSystemLinkDetail = (nodeId: number, linkId: number) =>
+  useQuery({
+    queryKey: [...metadataKeys.systems(nodeId), "detail", linkId],
+    queryFn: () =>
+      apiGet<TaskSystemLinkDto>(
+        `/api/metadata/tasks/${nodeId}/systems/${linkId}`,
+      ),
+    enabled: nodeId > 0 && linkId > 0,
   });
 
 /** Task 시스템 1차 연결 일괄 생성 */

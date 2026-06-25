@@ -21,6 +21,7 @@ import type {
 import * as metadataQueries from "@/lib/db/queries/metadata";
 import * as processQueries from "@/lib/db/queries/process";
 import { updateProcess } from "@/lib/services/process.service";
+import { applyL4PredecessorOrderToList } from "@/lib/utils/process-l4-order";
 
 const TASK_ATTRIBUTE_TEXT_FIELDS = [
   "definition",
@@ -231,7 +232,19 @@ export const listTaskAttributes = async (
   locale: Locale,
   filters: TaskAttributeListFilters = {},
 ): Promise<TaskAttributeListItem[]> => {
-  return metadataQueries.listTaskAttributes(locale, filters);
+  const items = await metadataQueries.listTaskAttributes(locale, filters);
+  const l4NodeIds = items
+    .filter((item) => item.processLevel === "L4")
+    .map((item) => item.nodeId);
+
+  if (l4NodeIds.length <= 1) {
+    return items;
+  }
+
+  const predecessorRows =
+    await metadataQueries.listTaskPredecessorsByNodeIds(l4NodeIds);
+
+  return applyL4PredecessorOrderToList(items, predecessorRows);
 };
 
 /** Task 속성 상세를 조회한다. */
@@ -239,22 +252,40 @@ export const getTaskAttribute = async (
   nodeId: number,
   locale: Locale,
 ): Promise<TaskAttributeDto | null> => {
-  await assertTaskNode(nodeId);
+  const detail = await metadataQueries.findTaskAttributeDetailByNodeId(
+    nodeId,
+    locale,
+  );
 
-  const attribute = await metadataQueries.findTaskAttributeByNodeId(nodeId);
-  if (!attribute) {
+  if (!detail) {
+    throw new ApiError("E302", "Process not found", 404);
+  }
+
+  if (detail.nodeLevel !== "L3" && detail.nodeLevel !== "L4") {
+    throw new ApiError(
+      "E405",
+      "Task attributes can only be managed for L3/L4 nodes",
+      400,
+      undefined,
+      "nodeId",
+    );
+  }
+
+  if (!detail.attribute) {
     return null;
   }
 
-  const i18n = await metadataQueries.findTaskAttributeI18n(attribute.attrId);
-  const predecessors = await metadataQueries.listTaskPredecessors(nodeId, locale);
-  const resolved = metadataQueries.resolveTaskAttributeText(attribute, i18n, locale);
+  const resolved = metadataQueries.resolveTaskAttributeText(
+    detail.attribute,
+    detail.i18n,
+    locale,
+  );
 
   return {
-    ...attribute,
+    ...detail.attribute,
     ...resolved,
-    i18n,
-    predecessors,
+    i18n: detail.i18n,
+    predecessors: detail.predecessors,
   };
 };
 

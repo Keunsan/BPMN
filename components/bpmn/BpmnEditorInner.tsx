@@ -78,6 +78,8 @@ type BpmnEditorInnerProps = {
     elementType: BpmnElementType | null,
   ) => void;
   onCallActivityDblClick?: (link: ProcessLinkInfo) => void;
+  /** shape.replace 시 element id가 바뀌면 프로세스 연결 키를 이전한다 */
+  onElementReplaced?: (oldId: string, newId: string) => void;
   onReady?: (api: BpmnEditorHandle) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
@@ -92,6 +94,7 @@ export const BpmnEditorInner = ({
   onTaskHoverChange,
   onProcessLinkDrop,
   onCallActivityDblClick,
+  onElementReplaced,
   onReady,
   onDirtyChange,
 }: BpmnEditorInnerProps) => {
@@ -101,6 +104,8 @@ export const BpmnEditorInner = ({
   const linksRef = useRef(links);
   const onProcessLinkDropRef = useRef(onProcessLinkDrop);
   const onCallActivityDblClickRef = useRef(onCallActivityDblClick);
+  const onElementReplacedRef = useRef(onElementReplaced);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const onDirtyChangeRef = useRef(onDirtyChange);
   const dropHighlightRef = useRef<string | null>(null);
 
@@ -115,6 +120,14 @@ export const BpmnEditorInner = ({
   useEffect(() => {
     onCallActivityDblClickRef.current = onCallActivityDblClick;
   }, [onCallActivityDblClick]);
+
+  useEffect(() => {
+    onElementReplacedRef.current = onElementReplaced;
+  }, [onElementReplaced]);
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   useEffect(() => {
     linksRef.current = links;
@@ -170,7 +183,43 @@ export const BpmnEditorInner = ({
       const eventBus = modeler.get("eventBus") as {
         on: (
           event: string,
-          callback: (e: {
+          priorityOrCallback:
+            | number
+            | ((e: {
+                element?: {
+                  id: string;
+                  type: string;
+                  businessObject?: { name?: string; $type?: string };
+                };
+                newSelection?: Array<{
+                  id: string;
+                  type: string;
+                  businessObject?: { name?: string; $type?: string };
+                }>;
+                originalEvent?: MouseEvent;
+                context?: {
+                  oldShape: {
+                    id: string;
+                    type: string;
+                  };
+                  newShape: {
+                    id: string;
+                    type: string;
+                    businessObject?: { name?: string; $type?: string };
+                  };
+                };
+                element?: {
+                  id: string;
+                  type: string;
+                  businessObject?: { name?: string; $type?: string };
+                };
+                newElement?: {
+                  id: string;
+                  type: string;
+                  businessObject?: { name?: string; $type?: string };
+                };
+              }) => void),
+          callback?: (e: {
             element?: {
               id: string;
               type: string;
@@ -182,6 +231,27 @@ export const BpmnEditorInner = ({
               businessObject?: { name?: string; $type?: string };
             }>;
             originalEvent?: MouseEvent;
+            context?: {
+              oldShape: {
+                id: string;
+                type: string;
+              };
+              newShape: {
+                id: string;
+                type: string;
+                businessObject?: { name?: string; $type?: string };
+              };
+            };
+            element?: {
+              id: string;
+              type: string;
+              businessObject?: { name?: string; $type?: string };
+            };
+            newElement?: {
+              id: string;
+              type: string;
+              businessObject?: { name?: string; $type?: string };
+            };
           }) => void,
         ) => void;
       };
@@ -199,10 +269,26 @@ export const BpmnEditorInner = ({
         );
       });
 
+      let overlayRefreshPending = false;
+      const scheduleLinkOverlayRefresh = () => {
+        if (overlayRefreshPending) {
+          return;
+        }
+        overlayRefreshPending = true;
+        queueMicrotask(() => {
+          overlayRefreshPending = false;
+          refreshLinkOverlays(modeler, linksRef.current);
+        });
+      };
+
       eventBus.on("element.changed", (e) => {
         const element = e.element;
         if (!element?.id || !isLinkableType(element.type)) {
           return;
+        }
+
+        if (linksRef.current[element.id] && !syncingLinkLayout) {
+          scheduleLinkOverlayRefresh();
         }
 
         const selected = (
@@ -265,6 +351,26 @@ export const BpmnEditorInner = ({
         onDirtyChangeRef.current?.(stack.canUndo());
       });
       onDirtyChangeRef.current?.(false);
+
+      // replace.end는 shape.replace·id 복원(ReplaceElementBehaviour) 완료 후 발생한다
+      eventBus.on("replace.end", (event) => {
+        const oldShape = event.element;
+        const newShape = event.newElement;
+        if (!oldShape?.id || !newShape?.id) {
+          return;
+        }
+
+        queueMicrotask(() => {
+          syncAfterShapeReplace(
+            modeler,
+            oldShape,
+            newShape,
+            linksRef.current,
+            onSelectionChangeRef.current,
+            onElementReplacedRef.current,
+          );
+        });
+      });
 
       const canvasContainer = (
         modeler.get("canvas") as DiagramCanvas
@@ -916,34 +1022,206 @@ const setDropHighlight = (
   }
 };
 
+/** shape.replace 후 프로세스 연결 오버레이·선택·표시 이름을 복원한다 */
+const syncAfterShapeReplace = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  oldShape: { id: string },
+  newShape: {
+    id: string;
+    type: string;
+    businessObject?: { name?: string; $type?: string };
+  },
+  links: Record<string, ProcessLinkInfo>,
+  onSelectionChange?: BpmnEditorInnerProps["onSelectionChange"],
+  onElementReplaced?: (oldId: string, newId: string) => void,
+): void => {
+  if (!isLinkableType(newShape.type)) {
+    return;
+  }
+
+  const elementRegistry = modeler.get("elementRegistry") as {
+    get: (id: string) => typeof newShape | undefined;
+  };
+
+  const resolvedShape =
+    elementRegistry.get(newShape.id) ??
+    elementRegistry.get(oldShape.id) ??
+    newShape;
+  const finalId = resolvedShape.id;
+  let link = links[oldShape.id] ?? links[finalId];
+
+  if (!link) {
+    const orphanedEntry = Object.entries(links).find(([key, value]) => {
+      if (!value || key === finalId || key === oldShape.id) {
+        return false;
+      }
+      return !elementRegistry.get(key);
+    });
+    if (orphanedEntry) {
+      link = orphanedEntry[1];
+      onElementReplaced?.(orphanedEntry[0], finalId);
+    }
+  }
+
+  let activeLinks = links;
+  if (link && oldShape.id !== finalId) {
+    activeLinks = { ...links, [finalId]: link };
+    delete activeLinks[oldShape.id];
+    onElementReplaced?.(oldShape.id, finalId);
+  }
+
+  refreshLinkOverlays(modeler, activeLinks);
+
+  if (link && resolvedShape.businessObject?.name !== link.name) {
+    updateElementName(modeler, finalId, link.name);
+  }
+
+  const selection = modeler.get("selection") as {
+    select: (elements: object | object[]) => void;
+  };
+  selection.select(resolvedShape);
+
+  onSelectionChange?.(
+    finalId,
+    link?.name ?? resolvedShape.businessObject?.name ?? null,
+    mapBpmnJsType(resolvedShape.businessObject?.$type ?? resolvedShape.type),
+  );
+};
+
+let syncingLinkLayout = false;
+
+const LINK_BADGE_FONT = "600 12px system-ui, -apple-system, sans-serif";
+const LINK_BADGE_HEIGHT = 17;
+const LINK_BADGE_BOTTOM_INSET = 10;
+const LINK_BADGE_HORIZONTAL_PADDING = 8;
+const LINK_BADGE_TASK_SIDE_INSET = 10;
+const MIN_TASK_WIDTH = 100;
+
+type DiagramShape = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const getLinkBadgeLabel = (link: ProcessLinkInfo): string =>
+  link.linkKind === "L3_CALL" ? `L3:${link.code}` : link.code;
+
+const measureLinkBadgeWidth = (label: string): number => {
+  if (typeof document === "undefined") {
+    return label.length * 7 + LINK_BADGE_HORIZONTAL_PADDING;
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return label.length * 7 + LINK_BADGE_HORIZONTAL_PADDING;
+  }
+
+  context.font = LINK_BADGE_FONT;
+  return Math.ceil(context.measureText(label).width) + LINK_BADGE_HORIZONTAL_PADDING;
+};
+
+const computeRequiredTaskWidth = (badgeLabel: string): number =>
+  Math.max(
+    MIN_TASK_WIDTH,
+    measureLinkBadgeWidth(badgeLabel) + LINK_BADGE_TASK_SIDE_INSET * 2,
+  );
+
+/** 프로세스 코드가 태스크 안에 들어가도록 너비를 확장한다 */
+const ensureTaskWidthForLinkBadge = (
+  modeler: import("bpmn-js/lib/Modeler").default,
+  element: DiagramShape,
+  requiredWidth: number,
+): DiagramShape => {
+  if (requiredWidth <= element.width + 0.5) {
+    return element;
+  }
+
+  const modeling = modeler.get("modeling") as {
+    resizeShape: (
+      shape: object,
+      newBounds: DiagramShape,
+    ) => void;
+  };
+
+  const newBounds: DiagramShape = {
+    x: element.x,
+    y: element.y,
+    width: requiredWidth,
+    height: element.height,
+  };
+
+  try {
+    modeling.resizeShape(element, newBounds);
+  } catch {
+    return element;
+  }
+
+  return newBounds;
+};
+
 const refreshLinkOverlays = (
   modeler: import("bpmn-js/lib/Modeler").default,
   links: Record<string, ProcessLinkInfo>,
 ) => {
-  const overlays = modeler.get("overlays") as {
-    clear: () => void;
-    add: (
-      elementId: string,
-      overlayId: string,
-      options: { position: { bottom: number; right: number }; html: string },
-    ) => void;
-  };
+  syncingLinkLayout = true;
 
-  overlays.clear();
+  try {
+    const overlays = modeler.get("overlays") as {
+      clear: () => void;
+      add: (
+        elementId: string,
+        overlayId: string,
+        options: {
+          position: { top: number; left: number };
+          html: string;
+        },
+      ) => void;
+    };
+    const elementRegistry = modeler.get("elementRegistry") as {
+      get: (id: string) => (DiagramShape & object) | undefined;
+    };
 
-  for (const [elementId, link] of Object.entries(links)) {
-    if (!link) {
-      continue;
+    overlays.clear();
+
+    for (const [elementId, link] of Object.entries(links)) {
+      if (!link) {
+        continue;
+      }
+
+      const element = elementRegistry.get(elementId);
+      if (!element) {
+        continue;
+      }
+
+      const badgeLabel = getLinkBadgeLabel(link);
+      const requiredWidth = computeRequiredTaskWidth(badgeLabel);
+      const layout = ensureTaskWidthForLinkBadge(modeler, element, requiredWidth);
+      const elementWidth = layout.width;
+      const elementHeight = layout.height;
+      const badgeTop = Math.max(
+        elementHeight - LINK_BADGE_HEIGHT - LINK_BADGE_BOTTOM_INSET,
+        0,
+      );
+      const label = escapeHtml(badgeLabel);
+
+      try {
+        overlays.add(elementId, "pams-link", {
+          position: {
+            top: badgeTop,
+            left: elementWidth / 2,
+          },
+          html: `<div class="pams-bpmn-link-badge-wrap"><div class="pams-bpmn-link-badge ${link.linkKind === "L3_CALL" ? "pams-bpmn-link-badge-l3" : ""}" title="${escapeHtml(link.name)}">${label}</div></div>`,
+        });
+      } catch {
+        // 요소 미존재
+      }
     }
-
-    try {
-      overlays.add(elementId, "pams-link", {
-        position: { bottom: 14, right: 0 },
-        html: `<div class="pams-bpmn-link-badge ${link.linkKind === "L3_CALL" ? "pams-bpmn-link-badge-l3" : ""}" title="${escapeHtml(link.name)}">${escapeHtml(link.linkKind === "L3_CALL" ? `L3:${link.code}` : link.code)}</div>`,
-      });
-    } catch {
-      // 요소 미존재
-    }
+  } finally {
+    queueMicrotask(() => {
+      syncingLinkLayout = false;
+    });
   }
 };
 

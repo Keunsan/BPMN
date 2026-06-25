@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -74,6 +75,14 @@ export const GraphToolbar = ({
   exportDisabled,
 }: GraphToolbarProps) => {
   const t = useTranslations("operationsGraph");
+
+  const viewModeItems = useMemo(
+    () => [
+      { value: "hierarchical", label: t("toolbar.viewHierarchical") },
+      { value: "radial", label: t("toolbar.viewRadial") },
+    ],
+    [t],
+  );
 
   return (
     <div className={cn(panelTitleBarShellClass, "pams-graph-toolbar")}>
@@ -151,13 +160,12 @@ export const GraphToolbar = ({
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent variant="filter">
-              <SelectItem variant="filter" value="hierarchical">
-                {t("toolbar.viewHierarchical")}
-              </SelectItem>
-              <SelectItem variant="filter" value="radial">
-                {t("toolbar.viewRadial")}
-              </SelectItem>
+            <SelectContent variant="filter" items={viewModeItems}>
+              {viewModeItems.map((item) => (
+                <SelectItem variant="filter" key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -634,7 +634,10 @@ const listTaskSystemScreenLinks = async (
 export const listTaskSystemLinks = async (
   nodeId: number,
   locale: Locale = "ko",
+  options: { includeScreens?: boolean } = {},
 ): Promise<TaskSystemLinkDto[]> => {
+  const includeScreens = options.includeScreens ?? true;
+
   const rows = await query<Record<string, unknown>>(
     `SELECT
        tsl.*,
@@ -644,13 +647,14 @@ export const listTaskSystemLinks = async (
        s.business_unit_code,
        COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
        COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
-       (
-         SELECT COUNT(*)
-         FROM task_system_screen_link tssl
-         WHERE tssl.link_id = tsl.link_id
-       ) AS screen_count
+       COALESCE(screen_aggr.screen_count, 0) AS screen_count
      FROM task_system_link tsl
      INNER JOIN application_system s ON tsl.system_id = s.system_id
+     LEFT JOIN (
+       SELECT link_id, COUNT(*) AS screen_count
+       FROM task_system_screen_link
+       GROUP BY link_id
+     ) screen_aggr ON screen_aggr.link_id = tsl.link_id
      LEFT JOIN common_code company_code_cc
        ON company_code_cc.group_code = 'COMPANY_CD'
       AND company_code_cc.code = s.company_code
@@ -670,8 +674,12 @@ export const listTaskSystemLinks = async (
     { nodeId, locale },
   );
 
-  const linkIds = rows.map((row) => toNumber(row.link_id));
-  const screensByLink = await listTaskSystemScreenLinks(linkIds, locale);
+  const screensByLink = includeScreens
+    ? await listTaskSystemScreenLinks(
+        rows.map((row) => toNumber(row.link_id)),
+        locale,
+      )
+    : new Map<number, TaskSystemScreenLinkDto[]>();
 
   return rows.map((row) => {
     const linkId = toNumber(row.link_id);
@@ -759,13 +767,14 @@ export const findTaskSystemLinkById = async (
        s.business_unit_code,
        COALESCE(company_i18n.code_name, company_code_cc.code_name) AS company_name,
        COALESCE(bu_i18n.code_name, bu_code_cc.code_name) AS business_unit_name,
-       (
-         SELECT COUNT(*)
-         FROM task_system_screen_link tssl
-         WHERE tssl.link_id = tsl.link_id
-       ) AS screen_count
+       COALESCE(screen_aggr.screen_count, 0) AS screen_count
      FROM task_system_link tsl
      INNER JOIN application_system s ON tsl.system_id = s.system_id
+     LEFT JOIN (
+       SELECT link_id, COUNT(*) AS screen_count
+       FROM task_system_screen_link
+       GROUP BY link_id
+     ) screen_aggr ON screen_aggr.link_id = tsl.link_id
      LEFT JOIN common_code company_code_cc
        ON company_code_cc.group_code = 'COMPANY_CD'
       AND company_code_cc.code = s.company_code
@@ -1006,53 +1015,57 @@ export const listSystemCatalog = async (
     params.businessUnitCode = filters.businessUnitCode;
   }
   if (filters.excludeNodeId) {
-    conditions.push(`s.system_id NOT IN (
-      SELECT tsl.system_id
+    conditions.push(`NOT EXISTS (
+      SELECT 1
       FROM task_system_link tsl
       WHERE tsl.node_id = @excludeNodeId
+        AND tsl.system_id = s.system_id
     )`);
     params.excludeNodeId = filters.excludeNodeId;
   }
 
   const whereClause = conditions.join(" AND ");
 
-  const countRow = await queryOne<Record<string, unknown>>(
-    `SELECT COUNT(*) AS total
-     FROM application_system s
-     WHERE ${whereClause}`,
-    params,
-  );
-
-  const rows = await query<Record<string, unknown>>(
-    `SELECT
-       s.*,
-       COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
-       COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
-       (
-         SELECT COUNT(*)
-         FROM system_screen sc
-         WHERE sc.system_id = s.system_id AND sc.is_active = 1
-       ) AS screen_count
-     FROM application_system s
-     LEFT JOIN common_code company_code
-       ON company_code.group_code = 'COMPANY_CD'
-      AND company_code.code = s.company_code
-     LEFT JOIN common_code_i18n company_i18n
-       ON company_i18n.group_code = company_code.group_code
-      AND company_i18n.code = company_code.code
-      AND company_i18n.locale = @locale
-     LEFT JOIN common_code bu_code
-       ON bu_code.group_code = 'BU_CD'
-      AND bu_code.code = s.business_unit_code
-     LEFT JOIN common_code_i18n bu_i18n
-       ON bu_i18n.group_code = bu_code.group_code
-      AND bu_i18n.code = bu_code.code
-      AND bu_i18n.locale = @locale
-     WHERE ${whereClause}
-     ORDER BY s.system_code, s.company_code, s.business_unit_code
-     OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
-    params,
-  );
+  const [countRow, rows] = await Promise.all([
+    queryOne<Record<string, unknown>>(
+      `SELECT COUNT(*) AS total
+       FROM application_system s
+       WHERE ${whereClause}`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `SELECT
+         s.*,
+         COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
+         COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
+         COALESCE(sc_aggr.screen_count, 0) AS screen_count
+       FROM application_system s
+       LEFT JOIN (
+         SELECT system_id, COUNT(*) AS screen_count
+         FROM system_screen
+         WHERE is_active = 1
+         GROUP BY system_id
+       ) sc_aggr ON sc_aggr.system_id = s.system_id
+       LEFT JOIN common_code company_code
+         ON company_code.group_code = 'COMPANY_CD'
+        AND company_code.code = s.company_code
+       LEFT JOIN common_code_i18n company_i18n
+         ON company_i18n.group_code = company_code.group_code
+        AND company_i18n.code = company_code.code
+        AND company_i18n.locale = @locale
+       LEFT JOIN common_code bu_code
+         ON bu_code.group_code = 'BU_CD'
+        AND bu_code.code = s.business_unit_code
+       LEFT JOIN common_code_i18n bu_i18n
+         ON bu_i18n.group_code = bu_code.group_code
+        AND bu_i18n.code = bu_code.code
+        AND bu_i18n.locale = @locale
+       WHERE ${whereClause}
+       ORDER BY s.system_code, s.company_code, s.business_unit_code
+       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
+      params,
+    ),
+  ]);
 
   return {
     items: rows.map((row) => ({
@@ -1092,70 +1105,73 @@ export const listScreenCatalog = async (
     params.search = `%${filters.search.trim()}%`;
   }
   if (filters.excludeLinkId) {
-    conditions.push(`sc.screen_id NOT IN (
-      SELECT tssl.screen_id
+    conditions.push(`NOT EXISTS (
+      SELECT 1
       FROM task_system_screen_link tssl
       WHERE tssl.link_id = @excludeLinkId
+        AND tssl.screen_id = sc.screen_id
     )`);
     params.excludeLinkId = filters.excludeLinkId;
   } else if (filters.excludeNodeId) {
-    conditions.push(`sc.screen_id NOT IN (
-      SELECT tssl.screen_id
+    conditions.push(`NOT EXISTS (
+      SELECT 1
       FROM task_system_screen_link tssl
       INNER JOIN task_system_link tsl ON tsl.link_id = tssl.link_id
       WHERE tsl.node_id = @excludeNodeId
+        AND tssl.screen_id = sc.screen_id
     )`);
     params.excludeNodeId = filters.excludeNodeId;
   }
 
   const whereClause = conditions.join(" AND ");
 
-  const countRow = await queryOne<Record<string, unknown>>(
-    `SELECT COUNT(*) AS total
-     FROM system_screen sc
-     INNER JOIN application_system s ON sc.system_id = s.system_id
-     WHERE ${whereClause}`,
-    params,
-  );
-
-  const rows = await query<Record<string, unknown>>(
-    `SELECT
-       sc.*,
-       s.system_code,
-       s.system_name,
-       s.company_code,
-       s.business_unit_code,
-       COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
-       COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
-       COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
-     FROM system_screen sc
-     INNER JOIN application_system s ON sc.system_id = s.system_id
-     LEFT JOIN common_code company_code
-       ON company_code.group_code = 'COMPANY_CD'
-      AND company_code.code = s.company_code
-     LEFT JOIN common_code_i18n company_i18n
-       ON company_i18n.group_code = company_code.group_code
-      AND company_i18n.code = company_code.code
-      AND company_i18n.locale = @locale
-     LEFT JOIN common_code bu_code
-       ON bu_code.group_code = 'BU_CD'
-      AND bu_code.code = s.business_unit_code
-     LEFT JOIN common_code_i18n bu_i18n
-       ON bu_i18n.group_code = bu_code.group_code
-      AND bu_i18n.code = bu_code.code
-      AND bu_i18n.locale = @locale
-     LEFT JOIN common_code cc
-       ON cc.group_code = 'MODULE_CD'
-      AND cc.code = sc.module_code
-     LEFT JOIN common_code_i18n cci
-       ON cci.group_code = cc.group_code
-      AND cci.code = cc.code
-      AND cci.locale = @locale
-     WHERE ${whereClause}
-     ORDER BY s.system_code, s.company_code, s.business_unit_code, sc.module_code, sc.menu_id
-     OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
-    params,
-  );
+  const [countRow, rows] = await Promise.all([
+    queryOne<Record<string, unknown>>(
+      `SELECT COUNT(*) AS total
+       FROM system_screen sc
+       INNER JOIN application_system s ON sc.system_id = s.system_id
+       WHERE ${whereClause}`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `SELECT
+         sc.*,
+         s.system_code,
+         s.system_name,
+         s.company_code,
+         s.business_unit_code,
+         COALESCE(company_i18n.code_name, company_code.code_name) AS company_name,
+         COALESCE(bu_i18n.code_name, bu_code.code_name) AS business_unit_name,
+         COALESCE(cci.code_name, cc.code_name, sc.module_code) AS module_name
+       FROM system_screen sc
+       INNER JOIN application_system s ON sc.system_id = s.system_id
+       LEFT JOIN common_code company_code
+         ON company_code.group_code = 'COMPANY_CD'
+        AND company_code.code = s.company_code
+       LEFT JOIN common_code_i18n company_i18n
+         ON company_i18n.group_code = company_code.group_code
+        AND company_i18n.code = company_code.code
+        AND company_i18n.locale = @locale
+       LEFT JOIN common_code bu_code
+         ON bu_code.group_code = 'BU_CD'
+        AND bu_code.code = s.business_unit_code
+       LEFT JOIN common_code_i18n bu_i18n
+         ON bu_i18n.group_code = bu_code.group_code
+        AND bu_i18n.code = bu_code.code
+        AND bu_i18n.locale = @locale
+       LEFT JOIN common_code cc
+         ON cc.group_code = 'MODULE_CD'
+        AND cc.code = sc.module_code
+       LEFT JOIN common_code_i18n cci
+         ON cci.group_code = cc.group_code
+        AND cci.code = cc.code
+        AND cci.locale = @locale
+       WHERE ${whereClause}
+       ORDER BY s.system_code, s.company_code, s.business_unit_code, sc.module_code, sc.menu_id
+       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
+      params,
+    ),
+  ]);
 
   return {
     items: rows.map((row) => ({

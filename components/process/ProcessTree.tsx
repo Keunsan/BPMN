@@ -88,6 +88,10 @@ type ProcessTreeProps = {
   showSearch?: boolean;
   /** false면 새로고침 버튼 숨김 (상위에서 통합 새로고침 시) */
   showRefresh?: boolean;
+  /** 서버 프리페치 트리 — 최초 로딩 스피너를 생략한다 */
+  initialTree?: ProcessNodeTree[];
+  /** initialTree와 함께 전달 — scope·검색이 일치할 때만 사용 */
+  initialTreeFilters?: ProcessFilters;
 };
 
 type TreeNodeItemProps = {
@@ -302,6 +306,8 @@ export const ProcessTree = ({
   search: externalSearch,
   showSearch,
   showRefresh = true,
+  initialTree,
+  initialTreeFilters,
 }: ProcessTreeProps) => {
   const pickerMode = variant === "picker";
   const selectableLevelSet = useMemo(
@@ -326,8 +332,16 @@ export const ProcessTree = ({
     businessUnitCode: scopeFilters?.businessUnitCode,
   };
 
+  const canUseInitialTree =
+    Boolean(initialTree) &&
+    !debouncedSearch &&
+    initialTreeFilters?.companyCode === treeFilters.companyCode &&
+    initialTreeFilters?.businessUnitCode === treeFilters.businessUnitCode;
+
   const { data: tree, isLoading, isError, isFetching, refetch } =
-    useProcessTree(treeFilters);
+    useProcessTree(treeFilters, {
+      initialData: canUseInitialTree ? initialTree : undefined,
+    });
   const isRefreshing = isFetching && !isLoading;
 
   const handleRefresh = useCallback(() => {

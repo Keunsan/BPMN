@@ -3,6 +3,7 @@
 import { ClipboardList, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/pams/empty-state";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -14,6 +15,7 @@ import {
 } from "@/components/common/layout";
 import {
   TaskAttributeForm,
+  TaskAttributeSheetGuard,
   TaskAttributeSheetHeaderActions,
   TaskAttributeSheetProvider,
 } from "@/components/metadata/TaskAttributeForm";
@@ -30,7 +32,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -39,6 +40,7 @@ import {
 import { useNavigationGuardStore } from "@/lib/store/navigation-guard.store";
 import {
   useBatchSaveTaskAttributes,
+  prefetchTaskAttribute,
   useTaskAttributeList,
 } from "@/lib/query/hooks/useMetadata";
 import { useSystems } from "@/lib/query/hooks/useSystems";
@@ -47,7 +49,7 @@ import type {
   EditableGridSavePayload,
   TaskGridRow,
 } from "@/types/editable-data-grid";
-import type { TaskAttributeListItem } from "@/types/metadata";
+import type { TaskAttributeDto, TaskAttributeListItem } from "@/types/metadata";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import type { ProcessNodeTree } from "@/types/process";
 
@@ -75,6 +77,49 @@ const toTaskGridRow = (item: TaskAttributeListItem): TaskGridRow => ({
     : null,
 });
 
+/** 목록 행을 시트 즉시 표시용 Task 속성 placeholder로 변환한다. */
+const toAttributePlaceholder = (
+  item: TaskAttributeListItem,
+): TaskAttributeDto => ({
+  attrId: item.attrId,
+  nodeId: item.nodeId,
+  definition: item.definition,
+  purpose: item.purpose,
+  inputDeliverable: item.inputDeliverable,
+  inputDataDesc: item.inputDataDesc,
+  inputCondition: item.inputCondition,
+  outputDeliverable: item.outputDeliverable,
+  outputDataDesc: item.outputDataDesc,
+  outputCondition: item.outputCondition,
+  frequency: item.frequency,
+  triggerEvent: item.triggerEvent,
+  duration: item.duration,
+  issues: item.issues,
+  exceptions: item.exceptions,
+  remarks: item.remarks,
+  version: item.version,
+  createdBy: null,
+  createdAt: item.updatedAt ?? new Date(),
+  updatedBy: null,
+  updatedAt: item.updatedAt,
+  i18n: {
+    ko: {
+      definition: item.definition,
+      purpose: item.purpose,
+      inputDeliverable: item.inputDeliverable,
+      inputDataDesc: item.inputDataDesc,
+      inputCondition: item.inputCondition,
+      outputDeliverable: item.outputDeliverable,
+      outputDataDesc: item.outputDataDesc,
+      outputCondition: item.outputCondition,
+      issues: item.issues,
+      exceptions: item.exceptions,
+      remarks: item.remarks,
+    },
+  },
+  predecessors: [],
+});
+
 /** BPMN Task 속성 — 프로세스 트리 + 인라인 편집 그리드 */
 export const TaskAttributeList = () => {
   const t = useTranslations("metadata");
@@ -93,6 +138,7 @@ export const TaskAttributeList = () => {
   const [detailNodeId, setDetailNodeId] = useState<number | null>(null);
   const [gridDirty, setGridDirty] = useState(false);
   const sheetBodyRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: systems } = useSystems({ isActive: true });
   const batchSave = useBatchSaveTaskAttributes();
@@ -299,6 +345,18 @@ export const TaskAttributeList = () => {
     [detailNodeId, items],
   );
 
+  const attributePlaceholder = useMemo(
+    () => (selectedItem ? toAttributePlaceholder(selectedItem) : undefined),
+    [selectedItem],
+  );
+
+  const prefetchTaskAttributeForNode = useCallback(
+    (id: number) => {
+      prefetchTaskAttribute(queryClient, id);
+    },
+    [queryClient],
+  );
+
   const selectionLabel = useMemo(() => {
     if (!selection) {
       return null;
@@ -385,7 +443,10 @@ export const TaskAttributeList = () => {
         columns={columns}
         data={gridData}
         onSave={handleSave}
-        onRowExpand={(row) => setDetailNodeId(row.nodeId)}
+        onRowExpand={(row) => {
+          prefetchTaskAttributeForNode(row.nodeId);
+          setDetailNodeId(row.nodeId);
+        }}
         enableAddRow={false}
         toolbar={{
           globalSearch: true,
@@ -487,20 +548,20 @@ export const TaskAttributeList = () => {
         </DialogContent>
       </Dialog>
 
-      <Sheet
-        open={detailNodeId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailNodeId(null);
-            void refetch();
-          }
+      <TaskAttributeSheetProvider
+        onClose={() => {
+          setDetailNodeId(null);
+          void refetch();
         }}
       >
-        <SheetContent
-          className="flex h-full !w-[min(800px,96vw)] !max-w-none flex-col gap-0 overflow-hidden p-0 sm:!max-w-none"
-          showCloseButton={false}
+        <TaskAttributeSheetGuard
+          open={detailNodeId !== null}
+          onOpenChange={() => {}}
         >
-          <TaskAttributeSheetProvider>
+          <SheetContent
+            className="flex h-full !w-[min(800px,96vw)] !max-w-none flex-col gap-0 overflow-hidden p-0 sm:!max-w-none"
+            showCloseButton={false}
+          >
             <SheetHeader className="shrink-0 gap-1 border-b px-6 py-4">
               <div className="flex items-center justify-between gap-4">
                 <SheetTitle className="min-w-0 flex-1 truncate text-base font-semibold">
@@ -529,12 +590,13 @@ export const TaskAttributeList = () => {
                   key={detailNodeId}
                   nodeId={detailNodeId}
                   variant="sheet"
+                  attributePlaceholder={attributePlaceholder}
                 />
               )}
             </div>
-          </TaskAttributeSheetProvider>
-        </SheetContent>
-      </Sheet>
+          </SheetContent>
+        </TaskAttributeSheetGuard>
+      </TaskAttributeSheetProvider>
     </ListPageLayout>
   );
 };

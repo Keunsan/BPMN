@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -50,6 +51,24 @@ export const ProcessScopeFields = ({
   );
   const scopedBusinessUnitOptions = businessUnitOptions.filter(
     (item) => item.code !== ENTERPRISE_BUSINESS_UNIT_CODE,
+  );
+
+  const companySelectItems = useMemo(
+    () =>
+      scopedCompanyOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    [scopedCompanyOptions],
+  );
+
+  const businessUnitSelectItems = useMemo(
+    () =>
+      scopedBusinessUnitOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    [scopedBusinessUnitOptions],
   );
 
   if (mode === "create-l4") {
@@ -133,10 +152,10 @@ export const ProcessScopeFields = ({
               <SelectTrigger>
                 <SelectValue placeholder={t("scope.selectCompany")} />
               </SelectTrigger>
-              <SelectContent>
-                {scopedCompanyOptions.map((item) => (
-                  <SelectItem key={item.code} value={item.code}>
-                    {item.displayName}
+              <SelectContent items={companySelectItems}>
+                {companySelectItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -151,10 +170,10 @@ export const ProcessScopeFields = ({
               <SelectTrigger>
                 <SelectValue placeholder={t("scope.selectBusinessUnit")} />
               </SelectTrigger>
-              <SelectContent>
-                {scopedBusinessUnitOptions.map((item) => (
-                  <SelectItem key={item.code} value={item.code}>
-                    {item.displayName}
+              <SelectContent items={businessUnitSelectItems}>
+                {businessUnitSelectItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

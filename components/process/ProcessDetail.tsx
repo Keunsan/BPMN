@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -25,7 +25,7 @@ import { isEnterpriseScope } from "@/lib/utils/process-scope";
 import type { E2eProcessDto } from "@/types/e2e-process";
 import type { BpmnModelDto } from "@/types/bpmn";
 import type { TaskAttributeListItem } from "@/types/metadata";
-import type { ProcessHistoryDto, ProcessNodeDto } from "@/types/process";
+import type { ProcessHistoryDto, ProcessNodeDto, ProcessNodeTree } from "@/types/process";
 
 import { ProcessTree } from "./ProcessTree";
 import { VersionCompare } from "./VersionCompare";
@@ -34,7 +34,19 @@ type ProcessDetailProps = {
   nodeId: number;
   showTree?: boolean;
   onEdit?: (node: ProcessNodeDto) => void;
+  /** 트리 선택 등에서 즉시 표시할 임시 데이터 */
+  nodePlaceholder?: ProcessNodeDto | ProcessNodeTree;
 };
+
+/** 트리·목록 노드를 상세 placeholder DTO로 변환한다. */
+const toDetailPlaceholder = (
+  node: ProcessNodeDto | ProcessNodeTree,
+): ProcessNodeDto => ({
+  ...node,
+  displayName:
+    "displayName" in node && node.displayName ? node.displayName : node.name,
+  displayDescription: node.description,
+});
 
 type TaskMetadataDetailKey = keyof Pick<
   TaskAttributeListItem,
@@ -78,28 +90,57 @@ export const ProcessDetail = ({
   nodeId,
   showTree = true,
   onEdit,
+  nodePlaceholder,
 }: ProcessDetailProps) => {
   const t = useTranslations("process");
   const mt = useTranslations("metadata");
   const router = useRouter();
-  const { data: node, isLoading } = useProcessDetail(nodeId);
-  const { data: history } = useProcessHistory(nodeId);
-  const { data: variants } = useProcessVariants(
-    nodeId,
-    Boolean(node && !node.variantOf && (node.level === "L3" || node.level === "L4")),
+  const [activeTab, setActiveTab] = useState("info");
+  const detailPlaceholder = useMemo(
+    () => (nodePlaceholder ? toDetailPlaceholder(nodePlaceholder) : undefined),
+    [nodePlaceholder],
   );
-  const { data: bpmnModels, isLoading: isBpmnLoading } = useBpmnList({
-    nodeId: node?.level === "L4" ? undefined : nodeId,
-    linkedNodeId: node?.level === "L4" ? nodeId : undefined,
-    isCurrent: true,
-    sort: "updated",
-  }, {
-    enabled: Boolean(node),
+  const { data: node, isPending } = useProcessDetail(nodeId, {
+    placeholderData: detailPlaceholder,
   });
+  const { data: history } = useProcessHistory(nodeId, {
+    enabled: activeTab === "history" || activeTab === "compare",
+  });
+  const variantSource = node ?? detailPlaceholder;
+  const showVariants = useMemo(() => {
+    if (activeTab !== "info" || nodeId <= 0) {
+      return false;
+    }
+    if (variantSource) {
+      return (
+        !variantSource.variantOf &&
+        (variantSource.level === "L3" || variantSource.level === "L4")
+      );
+    }
+    // placeholder 없이 직접 진입 시 상세 API와 병렬 조회
+    return true;
+  }, [activeTab, nodeId, variantSource]);
+  const { data: variants } = useProcessVariants(nodeId, showVariants);
+  const { data: bpmnModels, isLoading: isBpmnLoading } = useBpmnList(
+    {
+      nodeId: node?.level === "L4" ? undefined : nodeId,
+      linkedNodeId: node?.level === "L4" ? nodeId : undefined,
+      isCurrent: true,
+      sort: "updated",
+    },
+    {
+      enabled: activeTab === "bpmn" && Boolean(node),
+    },
+  );
   const approvalMutation = useRequestApproval(nodeId);
   const [compareVersions, setCompareVersions] = useState<[string, string] | null>(
     null,
   );
+
+  useEffect(() => {
+    setActiveTab("info");
+    setCompareVersions(null);
+  }, [nodeId]);
 
   const taskMetadataFilters = useMemo(
     () => (node ? { nodeId } : {}),
@@ -107,11 +148,14 @@ export const ProcessDetail = ({
   );
 
   const { data: includedE2eProcesses, isLoading: isIncludedE2eLoading } =
-    useE2eProcessesByL3NodeId(nodeId, node?.level === "L3");
+    useE2eProcessesByL3NodeId(
+      nodeId,
+      node?.level === "L3" && activeTab === "includedE2e",
+    );
 
   const { data: taskMetadataItems, isLoading: isTaskMetadataLoading } =
     useTaskAttributeList(taskMetadataFilters, {
-      enabled: Boolean(node),
+      enabled: activeTab === "taskMetadata" && Boolean(node),
     });
 
   const includedE2eColumns: DataTableColumn<E2eProcessDto>[] = [
@@ -228,7 +272,7 @@ export const ProcessDetail = ({
     return item[key] || "-";
   };
 
-  if (isLoading) return <LoadingSpinner label={t("loading")} />;
+  if (isPending) return <LoadingSpinner label={t("loading")} />;
   if (!node) return <EmptyState title={t("notFound")} />;
 
   return (
@@ -281,7 +325,7 @@ export const ProcessDetail = ({
           </div>
         </div>
 
-        <Tabs defaultValue="info">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="info">{t("tabInfo")}</TabsTrigger>
             <TabsTrigger value="bpmn">{t("tabBpmnModels")}</TabsTrigger>

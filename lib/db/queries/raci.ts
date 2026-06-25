@@ -10,14 +10,7 @@ const mapTaskRoleMapping = (
 ): TaskRoleMappingDto => ({
   mappingId: Number(row.mapping_id),
   nodeId: Number(row.node_id),
-  orgId:
-    row.org_id === null || row.org_id === undefined ? null : Number(row.org_id),
-  orgCode: (row.org_code as string | null) ?? null,
-  orgName: (row.org_name as string | null) ?? null,
-  roleId:
-    row.role_id === null || row.role_id === undefined
-      ? null
-      : Number(row.role_id),
+  roleId: Number(row.role_id),
   roleCode: (row.role_code as string | null) ?? null,
   roleName: (row.role_name as string | null) ?? null,
   raciType: row.raci_type as RaciType,
@@ -37,13 +30,10 @@ const mapTaskRoleMapping = (
 const baseSelectSql = `
   SELECT
     trm.*,
-    o.org_code,
-    o.org_name,
     r.role_code,
     r.role_name
   FROM task_role_mapping trm
-  LEFT JOIN organization o ON trm.org_id = o.org_id
-  LEFT JOIN role r ON trm.role_id = r.role_id
+  INNER JOIN role r ON trm.role_id = r.role_id
 `;
 
 /** Task별 RACI 매핑 목록을 조회한다. */
@@ -53,7 +43,7 @@ export const listTaskRoleMappings = async (
   const rows = await query<Record<string, unknown>>(
     `${baseSelectSql}
      WHERE trm.node_id = @nodeId
-     ORDER BY trm.raci_type, o.org_name, r.role_name, trm.mapping_id`,
+     ORDER BY trm.raci_type, r.role_name, trm.mapping_id`,
     { nodeId },
   );
 
@@ -81,11 +71,11 @@ export const createTaskRoleMapping = async (
 ): Promise<TaskRoleMappingDto> => {
   const row = await queryOne<Record<string, unknown>>(
     `INSERT INTO task_role_mapping (
-       node_id, org_id, role_id, raci_type, description, created_by
+       node_id, role_id, raci_type, description, created_by
      )
      OUTPUT INSERTED.mapping_id
      VALUES (
-       @nodeId, @orgId, @roleId, @raciType, @description, @createdBy
+       @nodeId, @roleId, @raciType, @description, @createdBy
      )`,
     { ...mappingParams(input), createdBy: userId },
   );
@@ -111,8 +101,7 @@ export const updateTaskRoleMapping = async (
 ): Promise<TaskRoleMappingDto | null> => {
   await execute(
     `UPDATE task_role_mapping
-     SET org_id = @orgId,
-         role_id = @roleId,
+     SET role_id = @roleId,
          raci_type = @raciType,
          description = @description,
          updated_by = @updatedBy,
@@ -137,8 +126,7 @@ export const deleteTaskRoleMapping = async (
 
 const mappingParams = (input: UpsertTaskRoleMappingDto): QueryParams => ({
   nodeId: input.nodeId,
-  orgId: input.orgId ?? null,
-  roleId: input.roleId ?? null,
+  roleId: input.roleId,
   raciType: input.raciType,
   description: input.description?.trim() || null,
 });

@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import { TaskMappingSideLayout } from "@/components/metadata/TaskMappingSideLayout";
 import { useProcessScopeParams } from "@/components/process/ProcessScopeFilter";
-import { useOrganizations } from "@/lib/query/hooks/useOrganizations";
 import {
   useCreateTaskRoleMapping,
   useDeleteTaskRoleMapping,
@@ -39,14 +38,8 @@ const RACI_TYPES: RaciType[] = [
   "INFORMED",
 ];
 
-const formatMappingLabel = (mapping: TaskRoleMappingDto): string => {
-  const parts = [
-    mapping.orgName ?? mapping.orgCode,
-    mapping.roleName ?? mapping.roleCode,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" · ") : "-";
-};
+const formatMappingLabel = (mapping: TaskRoleMappingDto): string =>
+  mapping.roleName ?? mapping.roleCode ?? "-";
 
 /** Task RACI 매핑 — 좌측 태스크 트리 · 우측 R/A/C/I 매트릭스 */
 export const RaciMatrix = () => {
@@ -58,19 +51,11 @@ export const RaciMatrix = () => {
   const [nodeId, setNodeId] = useState(0);
   const [selectedTask, setSelectedTask] = useState<ProcessNodeTree | null>(null);
   const [raciType, setRaciType] = useState<RaciType>("RESPONSIBLE");
-  const [orgId, setOrgId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [description, setDescription] = useState("");
 
   const { data: mappings, isLoading, isError, refetch } =
     useTaskRoleMappings(nodeId);
-  const { data: organizations = [] } = useOrganizations(
-    {
-      buCd: businessUnitCode || undefined,
-      isActive: true,
-    },
-    { enabled: nodeId > 0 },
-  );
   const { data: roles = [] } = useRoles({ isActive: true });
   const createMapping = useCreateTaskRoleMapping(nodeId);
   const deleteMapping = useDeleteTaskRoleMapping(nodeId);
@@ -81,17 +66,15 @@ export const RaciMatrix = () => {
   };
 
   const handleAddMapping = async () => {
-    if (nodeId <= 0) return;
+    if (nodeId <= 0 || !roleId) return;
 
     await createMapping.mutateAsync({
       nodeId,
       raciType,
-      orgId: orgId ? Number(orgId) : null,
-      roleId: roleId ? Number(roleId) : null,
+      roleId: Number(roleId),
       description: description.trim() || null,
     });
 
-    setOrgId("");
     setRoleId("");
     setDescription("");
   };
@@ -111,6 +94,24 @@ export const RaciMatrix = () => {
     return grouped;
   }, [mappings]);
 
+  const roleSelectItems = useMemo(
+    () =>
+      roles.map((role) => ({
+        value: String(role.roleId),
+        label: role.roleName,
+      })),
+    [roles],
+  );
+
+  const raciTypeItems = useMemo(
+    () =>
+      RACI_TYPES.map((type) => ({
+        value: type,
+        label: t(`types.${type}`),
+      })),
+    [t],
+  );
+
   const columns = useMemo<DataGridColumn<TaskRoleMappingDto>[]>(
     () => [
       {
@@ -122,14 +123,6 @@ export const RaciMatrix = () => {
         cell: (row) => (
           <Badge variant="outline">{t(`types.${row.raciType}`)}</Badge>
         ),
-      },
-      {
-        key: "organization",
-        header: t("organization"),
-        sortable: true,
-        filter: "text",
-        value: (row) => row.orgName ?? row.orgCode ?? "",
-        cell: (row) => row.orgName ?? row.orgCode ?? "-",
       },
       {
         key: "role",
@@ -217,7 +210,7 @@ export const RaciMatrix = () => {
 
             <div className="rounded-lg border border-border bg-background p-4 shadow-sm">
               <p className="mb-3 text-sm font-medium">{t("addMapping")}</p>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="grid gap-2">
                   <Label>{t("raciType")}</Label>
                   <Select
@@ -227,28 +220,10 @@ export const RaciMatrix = () => {
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      {RACI_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {t(`types.${type}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>{t("organization")}</Label>
-                  <Select
-                    value={orgId}
-                    onValueChange={(value) => setOrgId(value ?? "")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("selectOrganization")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {organizations.map((org) => (
-                        <SelectItem key={org.orgId} value={String(org.orgId)}>
-                          {org.orgName}
+                    <SelectContent items={raciTypeItems}>
+                      {raciTypeItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -263,10 +238,10 @@ export const RaciMatrix = () => {
                     <SelectTrigger>
                       <SelectValue placeholder={t("selectRole")} />
                     </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.roleId} value={String(role.roleId)}>
-                          {role.roleName}
+                    <SelectContent items={roleSelectItems}>
+                      {roleSelectItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -284,10 +259,7 @@ export const RaciMatrix = () => {
                   <Button
                     type="button"
                     className="w-full"
-                    disabled={
-                      createMapping.isPending ||
-                      (!orgId && !roleId)
-                    }
+                    disabled={createMapping.isPending || !roleId}
                     onClick={() => void handleAddMapping()}
                   >
                     <Plus className="size-4" />

@@ -3,10 +3,7 @@ import type { RaciType } from "@/types/metadata";
 export interface TaskRoleMappingDto {
   mappingId: number;
   nodeId: number;
-  orgId: number | null;
-  orgCode: string | null;
-  orgName: string | null;
-  roleId: number | null;
+  roleId: number;
   roleCode: string | null;
   roleName: string | null;
   raciType: RaciType;
@@ -19,8 +16,7 @@ export interface TaskRoleMappingDto {
 
 export interface UpsertTaskRoleMappingDto {
   nodeId: number;
-  orgId?: number | null;
-  roleId?: number | null;
+  roleId: number;
   raciType: RaciType;
   description?: string | null;
 }

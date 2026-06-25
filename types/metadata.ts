@@ -186,8 +186,7 @@ export interface TaskDataTableLink {
 export interface TaskRoleMapping {
   mappingId: number;
   nodeId: number;
-  orgId: number | null;
-  roleId: number | null;
+  roleId: number;
   raciType: RaciType;
   description: string | null;
   createdBy: number | null;

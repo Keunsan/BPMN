@@ -78,6 +78,15 @@ export const RoleMasterManagement = () => {
   const updateRole = useUpdateRole(editingRoleId ?? 0);
   const deactivateRole = useDeactivateRole();
 
+  const categorySelectItems = useMemo(
+    () =>
+      ROLE_CATEGORIES.map((category) => ({
+        value: category,
+        label: t(`categories.${category}`),
+      })),
+    [t],
+  );
+
   const openCreateDialog = () => {
     setEditingRoleId(null);
     setRoleForm(emptyRole);
@@ -280,10 +289,10 @@ export const RoleMasterManagement = () => {
                 <SelectTrigger id="roleCategory">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  {ROLE_CATEGORIES.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {t(`categories.${category}`)}
+                <SelectContent items={categorySelectItems}>
+                  {categorySelectItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

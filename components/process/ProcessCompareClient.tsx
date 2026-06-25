@@ -61,6 +61,15 @@ export const ProcessCompareClient = () => {
     [tree],
   );
 
+  const standardSelectItems = useMemo(
+    () =>
+      standardOptions.map((node) => ({
+        value: String(node.nodeId),
+        label: `${node.code} ${node.name}`,
+      })),
+    [standardOptions],
+  );
+
   const { data: compareData, isLoading: isCompareLoading } =
     useStandardVariantCompare(
       standardNodeId,
@@ -102,14 +111,14 @@ export const ProcessCompareClient = () => {
                     <SelectTrigger variant="filter">
                       <SelectValue placeholder={t("variant.selectStandard")} />
                     </SelectTrigger>
-                    <SelectContent variant="filter">
-                      {standardOptions.map((node) => (
+                    <SelectContent variant="filter" items={standardSelectItems}>
+                      {standardSelectItems.map((item) => (
                         <SelectItem
                           variant="filter"
-                          key={node.nodeId}
-                          value={String(node.nodeId)}
+                          key={item.value}
+                          value={item.value}
                         >
-                          {node.code} {node.name}
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

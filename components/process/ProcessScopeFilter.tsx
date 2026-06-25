@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { FilterField, FilterPanel } from "@/components/common/layout";
 import {
@@ -39,6 +39,28 @@ export const ProcessScopeFilter = ({
   const { data: companyOptions = [] } = useCommonCodeLookup("COMPANY_CD");
   const { data: businessUnitOptions = [] } = useCommonCodeLookup("BU_CD");
 
+  const companySelectItems = useMemo(
+    () => [
+      { value: "ALL", label: t("scope.allCompanies") },
+      ...companyOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    ],
+    [companyOptions, t],
+  );
+
+  const businessUnitSelectItems = useMemo(
+    () => [
+      { value: "ALL", label: t("scope.allBusinessUnits") },
+      ...businessUnitOptions.map((item) => ({
+        value: item.code,
+        label: item.displayName,
+      })),
+    ],
+    [businessUnitOptions, t],
+  );
+
   const fields = (
     <>
       <FilterField label={t("scope.companyCode")}>
@@ -54,13 +76,10 @@ export const ProcessScopeFilter = ({
           <SelectTrigger variant="filter">
             <SelectValue placeholder={t("scope.selectCompany")} />
           </SelectTrigger>
-          <SelectContent variant="filter">
-            <SelectItem variant="filter" value="ALL">
-              {t("scope.allCompanies")}
-            </SelectItem>
-            {companyOptions.map((item) => (
-              <SelectItem variant="filter" key={item.code} value={item.code}>
-                {item.displayName}
+          <SelectContent variant="filter" items={companySelectItems}>
+            {companySelectItems.map((item) => (
+              <SelectItem variant="filter" key={item.value} value={item.value}>
+                {item.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -80,13 +99,10 @@ export const ProcessScopeFilter = ({
           <SelectTrigger variant="filter">
             <SelectValue placeholder={t("scope.selectBusinessUnit")} />
           </SelectTrigger>
-          <SelectContent variant="filter">
-            <SelectItem variant="filter" value="ALL">
-              {t("scope.allBusinessUnits")}
-            </SelectItem>
-            {businessUnitOptions.map((item) => (
-              <SelectItem variant="filter" key={item.code} value={item.code}>
-                {item.displayName}
+          <SelectContent variant="filter" items={businessUnitSelectItems}>
+            {businessUnitSelectItems.map((item) => (
+              <SelectItem variant="filter" key={item.value} value={item.value}>
+                {item.label}
               </SelectItem>
             ))}
           </SelectContent>

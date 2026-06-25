@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { showErrorToast } from "@/components/common/ErrorToast";
 import { ApiError } from "@/lib/api/error-handler";
@@ -16,6 +21,25 @@ import type {
   TaskAttributeListItem,
   UpsertTaskAttributeDto,
 } from "@/types/metadata";
+
+const TASK_ATTRIBUTE_STALE_MS = 30_000;
+
+/** Task 속성 상세를 미리 조회한다. */
+export const prefetchTaskAttribute = (
+  queryClient: QueryClient,
+  nodeId: number,
+) => {
+  if (nodeId <= 0) {
+    return;
+  }
+
+  void queryClient.prefetchQuery({
+    queryKey: metadataKeys.taskAttribute(nodeId),
+    queryFn: () =>
+      apiGet<TaskAttributeDto | null>(`/api/metadata/task-attribute/${nodeId}`),
+    staleTime: TASK_ATTRIBUTE_STALE_MS,
+  });
+};
 
 /** Task 속성 목록 조회 훅 */
 export const useTaskAttributeList = (
@@ -52,12 +76,20 @@ export const useTaskAttributeList = (
 };
 
 /** Task 속성 상세 조회 훅 */
-export const useTaskAttribute = (nodeId: number) => {
+export const useTaskAttribute = (
+  nodeId: number,
+  options?: {
+    enabled?: boolean;
+    placeholderData?: TaskAttributeDto | null;
+  },
+) => {
   return useQuery({
     queryKey: metadataKeys.taskAttribute(nodeId),
     queryFn: () =>
       apiGet<TaskAttributeDto | null>(`/api/metadata/task-attribute/${nodeId}`),
-    enabled: nodeId > 0,
+    enabled: (options?.enabled ?? true) && nodeId > 0,
+    placeholderData: options?.placeholderData,
+    staleTime: TASK_ATTRIBUTE_STALE_MS,
   });
 };
 

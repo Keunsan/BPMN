@@ -11,7 +11,7 @@ import type {
   UpsertTaskAttributeDto,
   UpsertTaskPredecessorDto,
 } from "@/types/metadata";
-import type { ProcessStatus } from "@/types/process";
+import type { ProcessLevel, ProcessStatus } from "@/types/process";
 
 import { query, queryOne, transaction, type QueryParams } from "../pool";
 
@@ -285,6 +285,52 @@ export const findTaskAttributeByNodeId = async (
   );
 
   return row ? mapTaskAttribute(row) : null;
+};
+
+export type TaskAttributeDetailBundle = {
+  nodeLevel: ProcessLevel;
+  attribute: TaskAttribute | null;
+  i18n: TaskAttributeI18nMap;
+  predecessors: TaskPredecessorDto[];
+};
+
+/** 노드 검증·속성·i18n·선행 프로세스를 최소 왕복으로 조회한다. */
+export const findTaskAttributeDetailByNodeId = async (
+  nodeId: number,
+  locale: Locale,
+): Promise<TaskAttributeDetailBundle | null> => {
+  const [nodeRow, attribute] = await Promise.all([
+    queryOne<{ level: ProcessLevel }>(
+      `SELECT level FROM process_node WHERE node_id = @nodeId`,
+      { nodeId },
+    ),
+    findTaskAttributeByNodeId(nodeId),
+  ]);
+
+  if (!nodeRow) {
+    return null;
+  }
+
+  if (!attribute) {
+    return {
+      nodeLevel: nodeRow.level,
+      attribute: null,
+      i18n: {},
+      predecessors: [],
+    };
+  }
+
+  const [i18n, predecessors] = await Promise.all([
+    findTaskAttributeI18n(attribute.attrId),
+    listTaskPredecessors(nodeId, locale),
+  ]);
+
+  return {
+    nodeLevel: nodeRow.level,
+    attribute,
+    i18n,
+    predecessors,
+  };
 };
 
 /** Task 속성 i18n 맵을 조회한다. */
@@ -563,4 +609,57 @@ export const resolveTaskAttributeText = (
     exceptions: localized.exceptions ?? attribute.exceptions,
     remarks: localized.remarks ?? attribute.remarks,
   };
+};
+
+const IN_CLAUSE_BATCH_SIZE = 500;
+
+const buildInClauseParams = (
+  values: number[],
+  prefix: string,
+): { placeholders: string; params: QueryParams } => {
+  const params: QueryParams = {};
+  const placeholders = values
+    .map((value, index) => {
+      const key = `${prefix}${index}`;
+      params[key] = value;
+      return `@${key}`;
+    })
+    .join(", ");
+  return { placeholders, params };
+};
+
+/** 여러 L4 노드의 task_predecessor 관계를 predecessor_id 순으로 조회한다 */
+export const listTaskPredecessorsByNodeIds = async (
+  nodeIds: number[],
+): Promise<Array<{ nodeId: number; predecessorNodeId: number }>> => {
+  const uniqueIds = [...new Set(nodeIds)];
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const rows: Array<{ nodeId: number; predecessorNodeId: number }> = [];
+
+  for (let offset = 0; offset < uniqueIds.length; offset += IN_CLAUSE_BATCH_SIZE) {
+    const batch = uniqueIds.slice(offset, offset + IN_CLAUSE_BATCH_SIZE);
+    const { placeholders, params } = buildInClauseParams(batch, "nodeId");
+    const batchRows = await query<{
+      node_id: number;
+      predecessor_node_id: number;
+    }>(
+      `SELECT node_id, predecessor_node_id
+       FROM task_predecessor
+       WHERE node_id IN (${placeholders})
+       ORDER BY node_id, predecessor_id`,
+      params,
+    );
+
+    for (const row of batchRows) {
+      rows.push({
+        nodeId: row.node_id,
+        predecessorNodeId: row.predecessor_node_id,
+      });
+    }
+  }
+
+  return rows;
 };

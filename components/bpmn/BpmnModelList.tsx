@@ -498,10 +498,14 @@ const CreateBpmnDialog = ({
   const [nodeId, setNodeId] = useState<number | null>(null);
 
   const l3Nodes = useMemo(() => flattenL3Nodes(tree ?? []), [tree]);
-  const selectedNode = useMemo(
+
+  const processSelectItems = useMemo(
     () =>
-      l3Nodes.find((node) => String(node.nodeId) === String(nodeId)) ?? null,
-    [l3Nodes, nodeId],
+      l3Nodes.map((node) => ({
+        value: String(node.nodeId),
+        label: `${node.code} — ${node.name}`,
+      })),
+    [l3Nodes],
   );
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -546,18 +550,12 @@ const CreateBpmnDialog = ({
               }}
             >
               <SelectTrigger variant="filter">
-                {selectedNode ? (
-                  <span data-slot="select-value" className="flex flex-1 text-left">
-                    {selectedNode.name}
-                  </span>
-                ) : (
-                  <SelectValue placeholder={t("selectProcess")} />
-                )}
+                <SelectValue placeholder={t("selectProcess")} />
               </SelectTrigger>
-              <SelectContent variant="filter">
-                {l3Nodes.map((node) => (
-                  <SelectItem variant="filter" key={node.nodeId} value={String(node.nodeId)}>
-                    {node.code} — {node.name}
+              <SelectContent variant="filter" items={processSelectItems}>
+                {processSelectItems.map((item) => (
+                  <SelectItem variant="filter" key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

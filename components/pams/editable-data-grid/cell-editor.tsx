@@ -130,6 +130,11 @@ const TextareaCellEditor = ({
   };
 
   if (column.editor === "select") {
+    const selectItems = options.map((opt) => ({
+      value: opt.value,
+      label: opt.label,
+    }));
+
     return (
       <Select value={String(draft ?? "")} onValueChange={onCommit}>
         <SelectTrigger
@@ -138,8 +143,8 @@ const TextareaCellEditor = ({
         >
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
-          {options.map((opt) => (
+        <SelectContent items={selectItems}>
+          {selectItems.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
