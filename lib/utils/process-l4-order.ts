@@ -250,19 +250,36 @@ export const applyL4PredecessorOrderToTree = (
         return { ...node, children };
       }
 
+      const parentKey = toNodeId(node.nodeId);
+      const standardParentKey =
+        node.isOverlayVariant && node.variantOf != null
+          ? toNodeId(node.variantOf)
+          : null;
+      const dbSiblings =
+        fullSiblingNodesByParent.get(parentKey) ??
+        (standardParentKey != null
+          ? fullSiblingNodesByParent.get(standardParentKey)
+          : undefined);
       const fullSiblingNodes =
-        fullSiblingNodesByParent.get(node.nodeId) ??
-        l4Children.map((child) => ({ nodeId: child.nodeId }));
+        dbSiblings != null && dbSiblings.length > 0
+          ? dbSiblings
+          : l4Children.map((child) => ({ nodeId: toNodeId(child.nodeId) }));
       const sortedIds = computeSortedL4NodeIds(fullSiblingNodes, rows);
-      const childById = new Map(l4Children.map((child) => [child.nodeId, child]));
+      const childById = new Map(
+        l4Children.map((child) => [toNodeId(child.nodeId), child]),
+      );
       const sortedL4 = sortedIds
-        .map((nodeId) => childById.get(nodeId))
+        .map((nodeId) => childById.get(toNodeId(nodeId)))
         .filter((child): child is ProcessNodeTree => child != null);
+      const sortedIdSet = new Set(sortedL4.map((child) => toNodeId(child.nodeId)));
+      const missingL4 = l4Children.filter(
+        (child) => !sortedIdSet.has(toNodeId(child.nodeId)),
+      );
       const nonL4Children = children.filter((child) => child.level !== "L4");
 
       return {
         ...node,
-        children: [...sortedL4, ...nonL4Children],
+        children: [...sortedL4, ...missingL4, ...nonL4Children],
       };
     });
 
@@ -276,7 +293,10 @@ export const collectL3NodeIdsFromTree = (tree: ProcessNodeTree[]): number[] => {
   const walk = (nodes: ProcessNodeTree[]) => {
     for (const node of nodes) {
       if (node.level === "L3") {
-        ids.push(node.nodeId);
+        ids.push(toNodeId(node.nodeId));
+        if (node.isOverlayVariant && node.variantOf != null) {
+          ids.push(toNodeId(node.variantOf));
+        }
       }
       if (node.children?.length) {
         walk(node.children);

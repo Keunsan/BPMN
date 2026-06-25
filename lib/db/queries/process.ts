@@ -134,12 +134,8 @@ export const findProcessI18nByNodeIds = async (
 export const listL4SortNodesByParentNodeIds = async (
   parentNodeIds: number[],
 ): Promise<Map<number, L4SortNode[]>> => {
-  const uniqueParents = [...new Set(parentNodeIds)];
+  const uniqueParents = [...new Set(parentNodeIds.map((parentId) => Number(parentId)))];
   const result = new Map<number, L4SortNode[]>();
-
-  for (const parentId of uniqueParents) {
-    result.set(parentId, []);
-  }
 
   if (uniqueParents.length === 0) {
     return result;
